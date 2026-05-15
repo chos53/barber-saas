@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
+  const [companyName, setCompanyName] = useState('')
 
   useEffect(() => {
     async function loadUser() {
@@ -19,6 +20,22 @@ export default function DashboardPage() {
       }
 
       setEmail(user.email || '')
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select(`
+          company_id,
+          companies (
+            name
+          )
+        `)
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.companies) {
+        setCompanyName(profile.companies.name)
+      }
+
       setLoading(false)
     }
 
@@ -44,7 +61,10 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-4xl font-bold">Dashboard</h1>
 
-          <p className="mt-2 text-zinc-400">{email}</p>
+          <div className="mt-2 space-y-1">
+            <p className="text-zinc-400">{email}</p>
+            <p className="text-zinc-500">{companyName}</p>
+          </div>
         </div>
 
         <button
