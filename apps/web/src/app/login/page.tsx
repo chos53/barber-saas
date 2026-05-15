@@ -29,7 +29,8 @@ export default function LoginPage() {
         return
       }
 
-      alert('Login realizado com sucesso!')
+      window.location.href = '/dashboard'
+    
     } 
     // Se não, faz o signUp (Cadastro)
     else {
