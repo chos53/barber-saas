@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 export default function DashboardPage() {
@@ -57,7 +58,6 @@ export default function DashboardPage() {
 
   return (
     <main className="flex min-h-screen bg-black text-white">
-      {/* SIDEBAR */}
       <aside className="flex w-72 flex-col border-r border-zinc-800 bg-zinc-950 p-6">
         <div>
           <h1 className="text-2xl font-bold">
@@ -70,25 +70,37 @@ export default function DashboardPage() {
         </div>
 
         <nav className="mt-10 space-y-2">
-          <button className="w-full rounded-lg bg-white p-3 text-left font-semibold text-black">
+          <Link
+            href="/dashboard"
+            className="block w-full rounded-lg bg-white p-3 text-left font-semibold text-black"
+          >
             Dashboard
-          </button>
+          </Link>
 
-          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+          <Link
+            href="/dashboard/agenda"
+            className="block w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+          >
             Agenda
-          </button>
+          </Link>
 
-          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+          <Link
+            href="/dashboard/clientes"
+            className="block w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+          >
             Clientes
-          </button>
+          </Link>
 
-          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+          <Link
+            href="/dashboard/servicos"
+            className="block w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+          >
             Serviços
-          </button>
+          </Link>
 
-          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+          <div className="w-full rounded-lg p-3 text-left text-zinc-600">
             Profissionais
-          </button>
+          </div>
         </nav>
 
         <div className="mt-auto">
@@ -107,7 +119,6 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* CONTEÚDO */}
       <section className="flex-1 p-10">
         <div className="rounded-2xl bg-zinc-900 p-8">
           <h2 className="text-3xl font-bold">
