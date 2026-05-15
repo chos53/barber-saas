@@ -56,24 +56,69 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black p-10 text-white">
-      <div className="flex items-center justify-between">
+    <main className="flex min-h-screen bg-black text-white">
+      {/* SIDEBAR */}
+      <aside className="flex w-72 flex-col border-r border-zinc-800 bg-zinc-950 p-6">
         <div>
-          <h1 className="text-4xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-bold">
+            Barber SaaS
+          </h1>
 
-          <div className="mt-2 space-y-1">
-            <p className="text-zinc-400">{email}</p>
-            <p className="text-zinc-500">{companyName}</p>
-          </div>
+          <p className="mt-1 text-sm text-zinc-500">
+            {companyName}
+          </p>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="rounded-lg bg-white px-4 py-2 font-bold text-black"
-        >
-          Sair
-        </button>
-      </div>
+        <nav className="mt-10 space-y-2">
+          <button className="w-full rounded-lg bg-white p-3 text-left font-semibold text-black">
+            Dashboard
+          </button>
+
+          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+            Agenda
+          </button>
+
+          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+            Clientes
+          </button>
+
+          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+            Serviços
+          </button>
+
+          <button className="w-full rounded-lg p-3 text-left text-zinc-400 transition hover:bg-zinc-900 hover:text-white">
+            Profissionais
+          </button>
+        </nav>
+
+        <div className="mt-auto">
+          <div className="mb-4 rounded-lg bg-zinc-900 p-4">
+            <p className="text-sm text-zinc-400">
+              {email}
+            </p>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full rounded-lg bg-white p-3 font-bold text-black"
+          >
+            Sair
+          </button>
+        </div>
+      </aside>
+
+      {/* CONTEÚDO */}
+      <section className="flex-1 p-10">
+        <div className="rounded-2xl bg-zinc-900 p-8">
+          <h2 className="text-3xl font-bold">
+            Dashboard
+          </h2>
+
+          <p className="mt-2 text-zinc-400">
+            Bem-vindo ao sistema.
+          </p>
+        </div>
+      </section>
     </main>
   )
 }
