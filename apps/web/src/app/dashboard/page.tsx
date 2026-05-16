@@ -17,11 +17,27 @@ export default function DashboardPage() {
   const [servicesCount, setServicesCount] = useState(0)
   const [professionalsCount, setProfessionalsCount] = useState(0)
   const [appointmentsCount, setAppointmentsCount] = useState(0)
+  const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [todayAppointments, setTodayAppointments] = useState<TodayAppointment[]>([])
 
   useEffect(() => {
     loadDashboard()
   }, [])
+
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case 'scheduled':
+        return 'Agendado'
+      case 'completed':
+        return 'Concluído'
+      case 'cancelled':
+        return 'Cancelado'
+      case 'no_show':
+        return 'Não compareceu'
+      default:
+        return status
+    }
+  }
 
   async function loadDashboard() {
     const {
@@ -64,6 +80,15 @@ export default function DashboardPage() {
       .select('*', { count: 'exact', head: true })
       .eq('company_id', companyId)
 
+    const { data: revenueData } = await supabase
+      .from('appointment_financial_summary')
+      .select('price')
+      .eq('company_id', companyId)
+      .neq('status', 'cancelled')
+
+    const totalRevenue =
+      revenueData?.reduce((sum, item) => sum + Number(item.price), 0) || 0
+
     const { data: todayData } = await supabase
       .from('appointments')
       .select(`
@@ -82,6 +107,7 @@ export default function DashboardPage() {
     setServicesCount(services || 0)
     setProfessionalsCount(professionals || 0)
     setAppointmentsCount(appointments || 0)
+    setExpectedRevenue(totalRevenue)
     setTodayAppointments((todayData || []) as TodayAppointment[])
   }
 
@@ -93,7 +119,7 @@ export default function DashboardPage() {
         Resumo geral da empresa.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-5">
         <div className="rounded-2xl bg-zinc-900 p-6">
           <p className="text-sm text-zinc-400">Clientes</p>
           <strong className="mt-2 block text-4xl">{clientsCount}</strong>
@@ -112,6 +138,13 @@ export default function DashboardPage() {
         <div className="rounded-2xl bg-zinc-900 p-6">
           <p className="text-sm text-zinc-400">Agendamentos</p>
           <strong className="mt-2 block text-4xl">{appointmentsCount}</strong>
+        </div>
+
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">Faturamento previsto</p>
+          <strong className="mt-2 block text-4xl">
+            R$ {expectedRevenue.toFixed(2)}
+          </strong>
         </div>
       </div>
 
@@ -139,20 +172,20 @@ export default function DashboardPage() {
               </p>
 
               <p className="text-zinc-500">
-              Status:{' '}
-<span
-  className={
-    appointment.status === 'completed'
-      ? 'text-green-400'
-      : appointment.status === 'cancelled'
-        ? 'text-red-400'
-        : appointment.status === 'no_show'
-          ? 'text-yellow-400'
-          : 'text-blue-400'
-  }
->
-  {appointment.status}
-</span>
+                Status:{' '}
+                <span
+                  className={
+                    appointment.status === 'completed'
+                      ? 'text-green-400'
+                      : appointment.status === 'cancelled'
+                        ? 'text-red-400'
+                        : appointment.status === 'no_show'
+                          ? 'text-yellow-400'
+                          : 'text-blue-400'
+                  }
+                >
+                  {getStatusLabel(appointment.status)}
+                </span>
               </p>
             </div>
           ))}
