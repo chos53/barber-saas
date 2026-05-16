@@ -119,20 +119,38 @@ export default function AgendaPage() {
     })
 
     if (error) {
-        if (error.code === '23505') {
-          alert('Este profissional já possui um agendamento neste dia e horário.')
-          return
-        }
-      
-        alert(error.message)
+      if (error.code === '23505') {
+        alert('Este profissional já possui um agendamento neste dia e horário.')
         return
       }
+
+      alert(error.message)
+      return
+    }
 
     setClientId('')
     setServiceId('')
     setProfessionalId('')
     setDate('')
     setTime('')
+
+    loadData()
+  }
+
+  async function updateAppointmentStatus(
+    appointmentId: string,
+    status: string
+  ) {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status })
+      .eq('id', appointmentId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
     loadData()
   }
 
@@ -147,6 +165,7 @@ export default function AgendaPage() {
           onChange={(e) => setClientId(e.target.value)}
         >
           <option value="">Selecione um cliente</option>
+
           {clients.map((client) => (
             <option key={client.id} value={client.id}>
               {client.name}
@@ -160,6 +179,7 @@ export default function AgendaPage() {
           onChange={(e) => setServiceId(e.target.value)}
         >
           <option value="">Selecione um serviço</option>
+
           {services.map((service) => (
             <option key={service.id} value={service.id}>
               {service.name}
@@ -173,6 +193,7 @@ export default function AgendaPage() {
           onChange={(e) => setProfessionalId(e.target.value)}
         >
           <option value="">Selecione um profissional</option>
+
           {professionals.map((professional) => (
             <option key={professional.id} value={professional.id}>
               {professional.name}
@@ -220,6 +241,35 @@ export default function AgendaPage() {
             <p className="text-zinc-500">
               Status: {appointment.status}
             </p>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() =>
+                  updateAppointmentStatus(appointment.id, 'completed')
+                }
+                className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
+              >
+                Concluído
+              </button>
+
+              <button
+                onClick={() =>
+                  updateAppointmentStatus(appointment.id, 'cancelled')
+                }
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={() =>
+                  updateAppointmentStatus(appointment.id, 'no_show')
+                }
+                className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
+              >
+                Não compareceu
+              </button>
+            </div>
           </div>
         ))}
       </div>
