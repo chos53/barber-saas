@@ -139,7 +139,20 @@ export default function DashboardPage() {
               </p>
 
               <p className="text-zinc-500">
-                Status: {appointment.status}
+              Status:{' '}
+<span
+  className={
+    appointment.status === 'completed'
+      ? 'text-green-400'
+      : appointment.status === 'cancelled'
+        ? 'text-red-400'
+        : appointment.status === 'no_show'
+          ? 'text-yellow-400'
+          : 'text-blue-400'
+  }
+>
+  {appointment.status}
+</span>
               </p>
             </div>
           ))}
