@@ -17,8 +17,13 @@ export default function DashboardPage() {
   const [servicesCount, setServicesCount] = useState(0)
   const [professionalsCount, setProfessionalsCount] = useState(0)
   const [appointmentsCount, setAppointmentsCount] = useState(0)
+
   const [expectedRevenue, setExpectedRevenue] = useState(0)
-  const [todayAppointments, setTodayAppointments] = useState<TodayAppointment[]>([])
+  const [realizedRevenue, setRealizedRevenue] = useState(0)
+
+  const [todayAppointments, setTodayAppointments] = useState<
+    TodayAppointment[]
+  >([])
 
   useEffect(() => {
     loadDashboard()
@@ -28,12 +33,16 @@ export default function DashboardPage() {
     switch (status) {
       case 'scheduled':
         return 'Agendado'
+
       case 'completed':
         return 'Concluído'
+
       case 'cancelled':
         return 'Cancelado'
+
       case 'no_show':
         return 'Não compareceu'
+
       default:
         return status
     }
@@ -58,6 +67,7 @@ export default function DashboardPage() {
     if (!profile?.company_id) return
 
     const companyId = profile.company_id
+
     const today = new Date().toISOString().split('T')[0]
 
     const { count: clients } = await supabase
@@ -87,7 +97,22 @@ export default function DashboardPage() {
       .neq('status', 'cancelled')
 
     const totalRevenue =
-      revenueData?.reduce((sum, item) => sum + Number(item.price), 0) || 0
+      revenueData?.reduce(
+        (sum, item) => sum + Number(item.price),
+        0
+      ) || 0
+
+    const { data: realizedRevenueData } = await supabase
+      .from('appointment_financial_summary')
+      .select('price')
+      .eq('company_id', companyId)
+      .eq('status', 'completed')
+
+    const totalRealizedRevenue =
+      realizedRevenueData?.reduce(
+        (sum, item) => sum + Number(item.price),
+        0
+      ) || 0
 
     const { data: todayData } = await supabase
       .from('appointments')
@@ -107,49 +132,89 @@ export default function DashboardPage() {
     setServicesCount(services || 0)
     setProfessionalsCount(professionals || 0)
     setAppointmentsCount(appointments || 0)
+
     setExpectedRevenue(totalRevenue)
+    setRealizedRevenue(totalRealizedRevenue)
+
     setTodayAppointments((todayData || []) as TodayAppointment[])
   }
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">Dashboard</h1>
+      <h1 className="text-4xl font-bold">
+        Dashboard
+      </h1>
 
       <p className="mt-2 text-zinc-400">
         Resumo geral da empresa.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-5">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-6">
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Clientes</p>
-          <strong className="mt-2 block text-4xl">{clientsCount}</strong>
+          <p className="text-sm text-zinc-400">
+            Clientes
+          </p>
+
+          <strong className="mt-2 block text-4xl">
+            {clientsCount}
+          </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Serviços</p>
-          <strong className="mt-2 block text-4xl">{servicesCount}</strong>
+          <p className="text-sm text-zinc-400">
+            Serviços
+          </p>
+
+          <strong className="mt-2 block text-4xl">
+            {servicesCount}
+          </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Profissionais</p>
-          <strong className="mt-2 block text-4xl">{professionalsCount}</strong>
+          <p className="text-sm text-zinc-400">
+            Profissionais
+          </p>
+
+          <strong className="mt-2 block text-4xl">
+            {professionalsCount}
+          </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Agendamentos</p>
-          <strong className="mt-2 block text-4xl">{appointmentsCount}</strong>
+          <p className="text-sm text-zinc-400">
+            Agendamentos
+          </p>
+
+          <strong className="mt-2 block text-4xl">
+            {appointmentsCount}
+          </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Faturamento previsto</p>
+          <p className="text-sm text-zinc-400">
+            Faturamento previsto
+          </p>
+
           <strong className="mt-2 block text-4xl">
             R$ {expectedRevenue.toFixed(2)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Faturamento realizado
+          </p>
+
+          <strong className="mt-2 block text-4xl">
+            R$ {realizedRevenue.toFixed(2)}
           </strong>
         </div>
       </div>
 
       <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
-        <h2 className="text-2xl font-bold">Agenda de hoje</h2>
+        <h2 className="text-2xl font-bold">
+          Agenda de hoje
+        </h2>
 
         <div className="mt-4 space-y-3">
           {todayAppointments.length === 0 && (
@@ -164,11 +229,13 @@ export default function DashboardPage() {
               className="rounded-xl bg-zinc-800 p-4"
             >
               <p className="font-bold">
-                {appointment.appointment_time} — {appointment.clients?.name}
+                {appointment.appointment_time} —{' '}
+                {appointment.clients?.name}
               </p>
 
               <p className="text-zinc-400">
-                {appointment.services?.name} com {appointment.professionals?.name}
+                {appointment.services?.name} com{' '}
+                {appointment.professionals?.name}
               </p>
 
               <p className="text-zinc-500">
