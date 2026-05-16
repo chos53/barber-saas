@@ -17,41 +17,27 @@ export default function DashboardPage() {
   const [servicesCount, setServicesCount] = useState(0)
   const [professionalsCount, setProfessionalsCount] = useState(0)
   const [appointmentsCount, setAppointmentsCount] = useState(0)
-
   const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [realizedRevenue, setRealizedRevenue] = useState(0)
-
-  const [todayAppointments, setTodayAppointments] = useState<
-    TodayAppointment[]
-  >([])
+  const [period, setPeriod] = useState('30')
+  const [todayAppointments, setTodayAppointments] = useState<TodayAppointment[]>([])
 
   useEffect(() => {
     loadDashboard()
-  }, [])
+  }, [period])
 
   function getStatusLabel(status: string) {
     switch (status) {
-      case 'scheduled':
-        return 'Agendado'
-
-      case 'completed':
-        return 'Concluído'
-
-      case 'cancelled':
-        return 'Cancelado'
-
-      case 'no_show':
-        return 'Não compareceu'
-
-      default:
-        return status
+      case 'scheduled': return 'Agendado'
+      case 'completed': return 'Concluído'
+      case 'cancelled': return 'Cancelado'
+      case 'no_show': return 'Não compareceu'
+      default: return status
     }
   }
 
   async function loadDashboard() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       window.location.href = '/login'
@@ -67,8 +53,11 @@ export default function DashboardPage() {
     if (!profile?.company_id) return
 
     const companyId = profile.company_id
-
     const today = new Date().toISOString().split('T')[0]
+
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - Number(period))
+    const formattedStartDate = startDate.toISOString().split('T')[0]
 
     const { count: clients } = await supabase
       .from('clients')
@@ -89,30 +78,27 @@ export default function DashboardPage() {
       .from('appointments')
       .select('*', { count: 'exact', head: true })
       .eq('company_id', companyId)
+      .gte('appointment_date', formattedStartDate)
 
     const { data: revenueData } = await supabase
       .from('appointment_financial_summary')
       .select('price')
       .eq('company_id', companyId)
       .neq('status', 'cancelled')
-
-    const totalRevenue =
-      revenueData?.reduce(
-        (sum, item) => sum + Number(item.price),
-        0
-      ) || 0
+      .gte('appointment_date', formattedStartDate)
 
     const { data: realizedRevenueData } = await supabase
       .from('appointment_financial_summary')
       .select('price')
       .eq('company_id', companyId)
       .eq('status', 'completed')
+      .gte('appointment_date', formattedStartDate)
+
+    const totalRevenue =
+      revenueData?.reduce((sum, item) => sum + Number(item.price), 0) || 0
 
     const totalRealizedRevenue =
-      realizedRevenueData?.reduce(
-        (sum, item) => sum + Number(item.price),
-        0
-      ) || 0
+      realizedRevenueData?.reduce((sum, item) => sum + Number(item.price), 0) || 0
 
     const { data: todayData } = await supabase
       .from('appointments')
@@ -132,79 +118,61 @@ export default function DashboardPage() {
     setServicesCount(services || 0)
     setProfessionalsCount(professionals || 0)
     setAppointmentsCount(appointments || 0)
-
     setExpectedRevenue(totalRevenue)
     setRealizedRevenue(totalRealizedRevenue)
-
     setTodayAppointments((todayData || []) as TodayAppointment[])
   }
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">
-        Dashboard
-      </h1>
+      <h1 className="text-4xl font-bold">Dashboard</h1>
 
-      <p className="mt-2 text-zinc-400">
-        Resumo geral da empresa.
-      </p>
+      <p className="mt-2 text-zinc-400">Resumo geral da empresa.</p>
+
+      <div className="mt-4 flex gap-2">
+        {['1', '7', '30'].map((value) => (
+          <button
+            key={value}
+            onClick={() => setPeriod(value)}
+            className={`rounded-lg px-4 py-2 ${
+              period === value ? 'bg-white text-black' : 'bg-zinc-800'
+            }`}
+          >
+            {value === '1' ? 'Hoje' : `${value} dias`}
+          </button>
+        ))}
+      </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-6">
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Clientes
-          </p>
-
-          <strong className="mt-2 block text-4xl">
-            {clientsCount}
-          </strong>
+          <p className="text-sm text-zinc-400">Clientes</p>
+          <strong className="mt-2 block text-4xl">{clientsCount}</strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Serviços
-          </p>
-
-          <strong className="mt-2 block text-4xl">
-            {servicesCount}
-          </strong>
+          <p className="text-sm text-zinc-400">Serviços</p>
+          <strong className="mt-2 block text-4xl">{servicesCount}</strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Profissionais
-          </p>
-
-          <strong className="mt-2 block text-4xl">
-            {professionalsCount}
-          </strong>
+          <p className="text-sm text-zinc-400">Profissionais</p>
+          <strong className="mt-2 block text-4xl">{professionalsCount}</strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Agendamentos
-          </p>
-
-          <strong className="mt-2 block text-4xl">
-            {appointmentsCount}
-          </strong>
+          <p className="text-sm text-zinc-400">Agendamentos</p>
+          <strong className="mt-2 block text-4xl">{appointmentsCount}</strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Faturamento previsto
-          </p>
-
+          <p className="text-sm text-zinc-400">Faturamento previsto</p>
           <strong className="mt-2 block text-4xl">
             R$ {expectedRevenue.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Faturamento realizado
-          </p>
-
+          <p className="text-sm text-zinc-400">Faturamento realizado</p>
           <strong className="mt-2 block text-4xl">
             R$ {realizedRevenue.toFixed(2)}
           </strong>
@@ -212,30 +180,21 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
-        <h2 className="text-2xl font-bold">
-          Agenda de hoje
-        </h2>
+        <h2 className="text-2xl font-bold">Agenda de hoje</h2>
 
         <div className="mt-4 space-y-3">
           {todayAppointments.length === 0 && (
-            <p className="text-zinc-500">
-              Nenhum agendamento para hoje.
-            </p>
+            <p className="text-zinc-500">Nenhum agendamento para hoje.</p>
           )}
 
           {todayAppointments.map((appointment) => (
-            <div
-              key={appointment.id}
-              className="rounded-xl bg-zinc-800 p-4"
-            >
+            <div key={appointment.id} className="rounded-xl bg-zinc-800 p-4">
               <p className="font-bold">
-                {appointment.appointment_time} —{' '}
-                {appointment.clients?.name}
+                {appointment.appointment_time} — {appointment.clients?.name}
               </p>
 
               <p className="text-zinc-400">
-                {appointment.services?.name} com{' '}
-                {appointment.professionals?.name}
+                {appointment.services?.name} com {appointment.professionals?.name}
               </p>
 
               <p className="text-zinc-500">
