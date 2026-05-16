@@ -13,27 +13,31 @@ type Service = {
   name: string
 }
 
+type Professional = {
+  id: string
+  name: string
+}
+
 type Appointment = {
   id: string
   appointment_date: string
   appointment_time: string
   status: string
-  clients: {
-    name: string
-  } | null
-  services: {
-    name: string
-  } | null
+  clients: { name: string } | null
+  services: { name: string } | null
+  professionals: { name: string } | null
 }
 
 export default function AgendaPage() {
   const [companyId, setCompanyId] = useState('')
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [professionals, setProfessionals] = useState<Professional[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
 
   const [clientId, setClientId] = useState('')
   const [serviceId, setServiceId] = useState('')
+  const [professionalId, setProfessionalId] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
 
@@ -71,6 +75,12 @@ export default function AgendaPage() {
       .select('id, name')
       .eq('company_id', profile.company_id)
 
+    const { data: professionalsData } = await supabase
+      .from('professionals')
+      .select('id, name')
+      .eq('company_id', profile.company_id)
+      .eq('active', true)
+
     const { data: appointmentsData } = await supabase
       .from('appointments')
       .select(`
@@ -78,12 +88,9 @@ export default function AgendaPage() {
         appointment_date,
         appointment_time,
         status,
-        clients (
-          name
-        ),
-        services (
-          name
-        )
+        clients ( name ),
+        services ( name ),
+        professionals ( name )
       `)
       .eq('company_id', profile.company_id)
       .order('appointment_date', { ascending: true })
@@ -91,12 +98,13 @@ export default function AgendaPage() {
 
     setClients(clientsData || [])
     setServices(servicesData || [])
+    setProfessionals(professionalsData || [])
     setAppointments((appointmentsData || []) as Appointment[])
   }
 
   async function createAppointment() {
-    if (!clientId || !serviceId || !date || !time) {
-      alert('Preencha cliente, serviço, data e horário.')
+    if (!clientId || !serviceId || !professionalId || !date || !time) {
+      alert('Preencha cliente, serviço, profissional, data e horário.')
       return
     }
 
@@ -104,6 +112,7 @@ export default function AgendaPage() {
       company_id: companyId,
       client_id: clientId,
       service_id: serviceId,
+      professional_id: professionalId,
       appointment_date: date,
       appointment_time: time,
       status: 'scheduled',
@@ -116,13 +125,14 @@ export default function AgendaPage() {
 
     setClientId('')
     setServiceId('')
+    setProfessionalId('')
     setDate('')
     setTime('')
     loadData()
   }
 
   return (
-    <main className="min-h-screen bg-black p-10 text-white">
+    <div>
       <h1 className="text-4xl font-bold">Agenda</h1>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
@@ -148,6 +158,19 @@ export default function AgendaPage() {
           {services.map((service) => (
             <option key={service.id} value={service.id}>
               {service.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="rounded-lg bg-zinc-800 p-3"
+          value={professionalId}
+          onChange={(e) => setProfessionalId(e.target.value)}
+        >
+          <option value="">Selecione um profissional</option>
+          {professionals.map((professional) => (
+            <option key={professional.id} value={professional.id}>
+              {professional.name}
             </option>
           ))}
         </select>
@@ -182,6 +205,10 @@ export default function AgendaPage() {
             </p>
 
             <p className="text-zinc-400">
+              Profissional: {appointment.professionals?.name}
+            </p>
+
+            <p className="text-zinc-400">
               {appointment.appointment_date} às {appointment.appointment_time}
             </p>
 
@@ -191,6 +218,6 @@ export default function AgendaPage() {
           </div>
         ))}
       </div>
-    </main>
+    </div>
   )
 }
