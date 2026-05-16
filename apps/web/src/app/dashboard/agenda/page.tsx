@@ -119,9 +119,14 @@ export default function AgendaPage() {
     })
 
     if (error) {
-      alert(error.message)
-      return
-    }
+        if (error.code === '23505') {
+          alert('Este profissional já possui um agendamento neste dia e horário.')
+          return
+        }
+      
+        alert(error.message)
+        return
+      }
 
     setClientId('')
     setServiceId('')
