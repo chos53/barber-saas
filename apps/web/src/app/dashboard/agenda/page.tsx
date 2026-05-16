@@ -153,7 +153,24 @@ export default function AgendaPage() {
 
     loadData()
   }
-
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case 'scheduled':
+        return 'Agendado'
+  
+      case 'completed':
+        return 'Concluído'
+  
+      case 'cancelled':
+        return 'Cancelado'
+  
+      case 'no_show':
+        return 'Não compareceu'
+  
+      default:
+        return status
+    }
+  }
   return (
     <div>
       <h1 className="text-4xl font-bold">Agenda</h1>
@@ -239,7 +256,20 @@ export default function AgendaPage() {
             </p>
 
             <p className="text-zinc-500">
-              Status: {appointment.status}
+            Status:{' '}
+<span
+  className={
+    appointment.status === 'completed'
+      ? 'text-green-400'
+      : appointment.status === 'cancelled'
+        ? 'text-red-400'
+        : appointment.status === 'no_show'
+          ? 'text-yellow-400'
+          : 'text-blue-400'
+  }
+>
+{getStatusLabel(appointment.status)}
+</span>
             </p>
 
             <div className="mt-4 flex gap-2">
