@@ -120,28 +120,6 @@ export default function ServicesPage() {
     loadData()
   }
 
-  async function deleteService(serviceId: string) {
-    const confirmed = confirm(
-      'Tem certeza que deseja excluir este serviço?'
-    )
-
-    if (!confirmed) {
-      return
-    }
-
-    const { error } = await supabase
-      .from('services')
-      .delete()
-      .eq('id', serviceId)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    loadData()
-  }
-
   async function toggleServiceActive(
     serviceId: string,
     active: boolean
@@ -276,13 +254,6 @@ export default function ServicesPage() {
                       className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
                     >
                       {service.active ? 'Inativar' : 'Ativar'}
-                    </button>
-
-                    <button
-                      onClick={() => deleteService(service.id)}
-                      className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
-                    >
-                      Excluir
                     </button>
                   </div>
                 </>
