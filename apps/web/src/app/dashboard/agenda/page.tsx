@@ -41,9 +41,28 @@ export default function AgendaPage() {
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
 
+  const [filterDate, setFilterDate] = useState(
+    new Date().toISOString().split('T')[0]
+  )
+
   useEffect(() => {
     loadData()
-  }, [])
+  }, [filterDate])
+
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case 'scheduled':
+        return 'Agendado'
+      case 'completed':
+        return 'Concluído'
+      case 'cancelled':
+        return 'Cancelado'
+      case 'no_show':
+        return 'Não compareceu'
+      default:
+        return status
+    }
+  }
 
   async function loadData() {
     const {
@@ -93,7 +112,7 @@ export default function AgendaPage() {
         professionals ( name )
       `)
       .eq('company_id', profile.company_id)
-      .order('appointment_date', { ascending: true })
+      .eq('appointment_date', filterDate)
       .order('appointment_time', { ascending: true })
 
     setClients(clientsData || [])
@@ -134,6 +153,8 @@ export default function AgendaPage() {
     setDate('')
     setTime('')
 
+    setFilterDate(date)
+
     loadData()
   }
 
@@ -153,27 +174,23 @@ export default function AgendaPage() {
 
     loadData()
   }
-  function getStatusLabel(status: string) {
-    switch (status) {
-      case 'scheduled':
-        return 'Agendado'
-  
-      case 'completed':
-        return 'Concluído'
-  
-      case 'cancelled':
-        return 'Cancelado'
-  
-      case 'no_show':
-        return 'Não compareceu'
-  
-      default:
-        return status
-    }
-  }
+
   return (
     <div>
       <h1 className="text-4xl font-bold">Agenda</h1>
+
+      <div className="mt-6 rounded-2xl bg-zinc-900 p-6">
+        <label className="text-sm text-zinc-400">
+          Filtrar por data
+        </label>
+
+        <input
+          type="date"
+          className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
+          value={filterDate}
+          onChange={(e) => setFilterDate(e.target.value)}
+        />
+      </div>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
         <select
@@ -241,6 +258,12 @@ export default function AgendaPage() {
       </div>
 
       <div className="mt-8 space-y-3">
+        {appointments.length === 0 && (
+          <p className="rounded-xl bg-zinc-900 p-4 text-zinc-500">
+            Nenhum agendamento para esta data.
+          </p>
+        )}
+
         {appointments.map((appointment) => (
           <div key={appointment.id} className="rounded-xl bg-zinc-900 p-4">
             <p className="font-bold">
@@ -256,20 +279,20 @@ export default function AgendaPage() {
             </p>
 
             <p className="text-zinc-500">
-            Status:{' '}
-<span
-  className={
-    appointment.status === 'completed'
-      ? 'text-green-400'
-      : appointment.status === 'cancelled'
-        ? 'text-red-400'
-        : appointment.status === 'no_show'
-          ? 'text-yellow-400'
-          : 'text-blue-400'
-  }
->
-{getStatusLabel(appointment.status)}
-</span>
+              Status:{' '}
+              <span
+                className={
+                  appointment.status === 'completed'
+                    ? 'text-green-400'
+                    : appointment.status === 'cancelled'
+                      ? 'text-red-400'
+                      : appointment.status === 'no_show'
+                        ? 'text-yellow-400'
+                        : 'text-blue-400'
+                }
+              >
+                {getStatusLabel(appointment.status)}
+              </span>
             </p>
 
             <div className="mt-4 flex gap-2">
