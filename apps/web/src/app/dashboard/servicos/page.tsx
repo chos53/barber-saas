@@ -233,7 +233,12 @@ export default function ServicesPage() {
 
                   <p className="mt-2 text-sm text-zinc-500">
                     Status:{' '}
-                    {service.active ? 'Ativo' : 'Inativo'}
+                    <span
+                      className={service.active ? 'text-green-400' : 'text-yellow-400'}
+                    >
+                      {service.active ? 'Ativo' : 'Inativo'}
+                    </span>
+               
                   </p>
 
                   <div className="mt-4 flex gap-2">
