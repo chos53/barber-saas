@@ -76,6 +76,7 @@ export default function ClientsPage() {
     setName('')
     setPhone('')
     setEmail('')
+
     loadData()
   }
 
@@ -114,6 +115,28 @@ export default function ClientsPage() {
     }
 
     cancelEditing()
+    loadData()
+  }
+
+  async function deleteClient(clientId: string) {
+    const confirmed = confirm(
+      'Tem certeza que deseja excluir este cliente?'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    const { error } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', clientId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
     loadData()
   }
 
@@ -196,15 +219,30 @@ export default function ClientsPage() {
               ) : (
                 <>
                   <p className="font-bold">{client.name}</p>
-                  <p className="text-zinc-400">{client.phone}</p>
-                  <p className="text-zinc-500">{client.email}</p>
 
-                  <button
-                    onClick={() => startEditing(client)}
-                    className="mt-4 rounded-lg bg-white px-4 py-2 font-bold text-black"
-                  >
-                    Editar
-                  </button>
+                  <p className="text-zinc-400">
+                    {client.phone}
+                  </p>
+
+                  <p className="text-zinc-500">
+                    {client.email}
+                  </p>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => startEditing(client)}
+                      className="rounded-lg bg-white px-4 py-2 font-bold text-black"
+                    >
+                      Editar
+                    </button>
+
+                    <button
+                      onClick={() => deleteClient(client.id)}
+                      className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
+                    >
+                      Excluir
+                    </button>
+                  </div>
                 </>
               )}
             </div>
