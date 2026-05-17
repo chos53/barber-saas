@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Client = {
@@ -13,6 +13,8 @@ type Client = {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
+  const [search, setSearch] = useState('')
+
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -26,6 +28,14 @@ export default function ClientsPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  const filteredClients = useMemo(() => {
+    return clients.filter((client) =>
+      client.name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    )
+  }, [clients, search])
 
   async function loadData() {
     const {
@@ -173,8 +183,17 @@ export default function ClientsPage() {
         </button>
       </div>
 
+      <div className="mt-8">
+        <input
+          placeholder="Pesquisar cliente..."
+          className="w-full rounded-xl bg-zinc-900 p-4"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="mt-8 space-y-3">
-        {clients.map((client) => {
+        {filteredClients.map((client) => {
           const isEditing = editingClientId === client.id
 
           return (
@@ -230,11 +249,14 @@ export default function ClientsPage() {
                   <p className="mt-2 text-sm text-zinc-500">
                     Status:{' '}
                     <span
-                      className={client.active ? 'text-green-400' : 'text-yellow-400'}
+                      className={
+                        client.active
+                          ? 'text-green-400'
+                          : 'text-yellow-400'
+                      }
                     >
                       {client.active ? 'Ativo' : 'Inativo'}
                     </span>
-               
                   </p>
 
                   <div className="mt-4 flex gap-2">
