@@ -23,6 +23,7 @@ type Appointment = {
   appointment_date: string
   appointment_time: string
   status: string
+  notes: string | null
   clients: { name: string } | null
   services: { name: string } | null
   professionals: { name: string } | null
@@ -40,6 +41,7 @@ export default function AgendaPage() {
   const [professionalId, setProfessionalId] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
+  const [notes, setNotes] = useState('')
 
   const [filterDate, setFilterDate] = useState(
     new Date().toISOString().split('T')[0]
@@ -107,6 +109,7 @@ export default function AgendaPage() {
         appointment_date,
         appointment_time,
         status,
+        notes,
         clients ( name ),
         services ( name ),
         professionals ( name )
@@ -134,6 +137,7 @@ export default function AgendaPage() {
       professional_id: professionalId,
       appointment_date: date,
       appointment_time: time,
+      notes,
       status: 'scheduled',
     })
 
@@ -152,6 +156,7 @@ export default function AgendaPage() {
     setProfessionalId('')
     setDate('')
     setTime('')
+    setNotes('')
 
     setFilterDate(date)
 
@@ -249,6 +254,13 @@ export default function AgendaPage() {
           onChange={(e) => setTime(e.target.value)}
         />
 
+        <textarea
+          placeholder="Observações do agendamento"
+          className="rounded-lg bg-zinc-800 p-3"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+
         <button
           onClick={createAppointment}
           className="rounded-lg bg-white p-3 font-bold text-black"
@@ -278,7 +290,13 @@ export default function AgendaPage() {
               {appointment.appointment_date} às {appointment.appointment_time}
             </p>
 
-            <p className="text-zinc-500">
+            {appointment.notes && (
+              <p className="mt-2 text-sm text-zinc-500">
+                Obs: {appointment.notes}
+              </p>
+            )}
+
+            <p className="mt-2 text-zinc-500">
               Status:{' '}
               <span
                 className={
