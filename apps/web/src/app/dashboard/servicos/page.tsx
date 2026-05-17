@@ -8,6 +8,7 @@ type Service = {
   name: string
   duration_minutes: number
   price: number
+  active: boolean
 }
 
 export default function ServicesPage() {
@@ -48,7 +49,7 @@ export default function ServicesPage() {
 
     const { data } = await supabase
       .from('services')
-      .select('id, name, duration_minutes, price')
+      .select('id, name, duration_minutes, price, active')
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
@@ -66,6 +67,7 @@ export default function ServicesPage() {
       name: name.trim(),
       duration_minutes: Number(duration),
       price: Number(price),
+      active: true,
     })
 
     if (error) {
@@ -130,6 +132,25 @@ export default function ServicesPage() {
     const { error } = await supabase
       .from('services')
       .delete()
+      .eq('id', serviceId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    loadData()
+  }
+
+  async function toggleServiceActive(
+    serviceId: string,
+    active: boolean
+  ) {
+    const { error } = await supabase
+      .from('services')
+      .update({
+        active: !active,
+      })
       .eq('id', serviceId)
 
     if (error) {
@@ -232,12 +253,29 @@ export default function ServicesPage() {
                     R$ {Number(service.price).toFixed(2)}
                   </p>
 
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Status:{' '}
+                    {service.active ? 'Ativo' : 'Inativo'}
+                  </p>
+
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={() => startEditing(service)}
                       className="rounded-lg bg-white px-4 py-2 font-bold text-black"
                     >
                       Editar
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        toggleServiceActive(
+                          service.id,
+                          service.active
+                        )
+                      }
+                      className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
+                    >
+                      {service.active ? 'Inativar' : 'Ativar'}
                     </button>
 
                     <button
