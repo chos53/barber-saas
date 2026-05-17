@@ -128,35 +128,15 @@ export default function ProfessionalsPage() {
     loadData()
   }
 
-  async function deleteProfessional(professionalId: string) {
-    const confirmed = confirm(
-      'Tem certeza que deseja excluir este profissional?'
-    )
-
-    if (!confirmed) {
-      return
-    }
-
-    const { error } = await supabase
-      .from('professionals')
-      .delete()
-      .eq('id', professionalId)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    loadData()
-  }
-
   async function toggleProfessionalActive(
     professionalId: string,
     active: boolean
   ) {
     const { error } = await supabase
       .from('professionals')
-      .update({ active: !active })
+      .update({
+        active: !active,
+      })
       .eq('id', professionalId)
 
     if (error) {
@@ -298,13 +278,6 @@ export default function ProfessionalsPage() {
                       className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
                     >
                       {professional.active ? 'Inativar' : 'Ativar'}
-                    </button>
-
-                    <button
-                      onClick={() => deleteProfessional(professional.id)}
-                      className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
-                    >
-                      Excluir
                     </button>
                   </div>
                 </>
