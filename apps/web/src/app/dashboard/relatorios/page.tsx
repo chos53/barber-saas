@@ -1,7 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { supabase } from '@/lib/supabase'
+
+type RevenueItem = {
+  appointment_date: string
+  previsto: number
+  realizado: number
+}
 
 export default function ReportsPage() {
   const [expectedRevenue, setExpectedRevenue] = useState(0)
@@ -10,6 +25,7 @@ export default function ReportsPage() {
   const [completedCount, setCompletedCount] = useState(0)
   const [cancelledCount, setCancelledCount] = useState(0)
   const [period, setPeriod] = useState('30')
+  const [chartData, setChartData] = useState<RevenueItem[]>([])
 
   useEffect(() => {
     loadData()
@@ -52,6 +68,30 @@ export default function ReportsPage() {
       revenueData
         ?.filter((item) => item.status === 'completed')
         .reduce((sum, item) => sum + Number(item.price), 0) || 0
+
+    const groupedRevenue: Record<string, RevenueItem> = {}
+
+    revenueData?.forEach((item) => {
+      const date = item.appointment_date
+
+      if (!groupedRevenue[date]) {
+        groupedRevenue[date] = {
+          appointment_date: date,
+          previsto: 0,
+          realizado: 0,
+        }
+      }
+
+      if (item.status !== 'cancelled') {
+        groupedRevenue[date].previsto += Number(item.price)
+      }
+
+      if (item.status === 'completed') {
+        groupedRevenue[date].realizado += Number(item.price)
+      }
+    })
+
+    setChartData(Object.values(groupedRevenue))
 
     setExpectedRevenue(totalExpected)
     setRealizedRevenue(totalRealized)
@@ -107,53 +147,57 @@ export default function ReportsPage() {
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-5">
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Faturamento previsto
-          </p>
-
+          <p className="text-sm text-zinc-400">Faturamento previsto</p>
           <strong className="mt-2 block text-4xl">
             R$ {expectedRevenue.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Faturamento realizado
-          </p>
-
+          <p className="text-sm text-zinc-400">Faturamento realizado</p>
           <strong className="mt-2 block text-4xl text-green-400">
             R$ {realizedRevenue.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Agendamentos
-          </p>
-
+          <p className="text-sm text-zinc-400">Agendamentos</p>
           <strong className="mt-2 block text-4xl">
             {appointmentsCount}
           </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Concluídos
-          </p>
-
+          <p className="text-sm text-zinc-400">Concluídos</p>
           <strong className="mt-2 block text-4xl text-green-400">
             {completedCount}
           </strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Cancelados
-          </p>
-
+          <p className="text-sm text-zinc-400">Cancelados</p>
           <strong className="mt-2 block text-4xl text-red-400">
             {cancelledCount}
           </strong>
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-2xl font-bold">
+          Faturamento por dia
+        </h2>
+
+        <div className="mt-6 h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="appointment_date" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="previsto" name="Previsto" />
+              <Bar dataKey="realizado" name="Realizado" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
