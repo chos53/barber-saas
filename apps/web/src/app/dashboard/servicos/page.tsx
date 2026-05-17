@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Service = {
@@ -13,6 +13,8 @@ type Service = {
 
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
+  const [search, setSearch] = useState('')
+
   const [companyId, setCompanyId] = useState('')
   const [name, setName] = useState('')
   const [duration, setDuration] = useState('30')
@@ -26,6 +28,14 @@ export default function ServicesPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  const filteredServices = useMemo(() => {
+    return services.filter((service) =>
+      service.name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    )
+  }, [services, search])
 
   async function loadData() {
     const {
@@ -175,8 +185,17 @@ export default function ServicesPage() {
         </button>
       </div>
 
+      <div className="mt-8">
+        <input
+          placeholder="Pesquisar serviço..."
+          className="w-full rounded-xl bg-zinc-900 p-4"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="mt-8 space-y-3">
-        {services.map((service) => {
+        {filteredServices.map((service) => {
           const isEditing = editingServiceId === service.id
 
           return (
@@ -234,11 +253,14 @@ export default function ServicesPage() {
                   <p className="mt-2 text-sm text-zinc-500">
                     Status:{' '}
                     <span
-                      className={service.active ? 'text-green-400' : 'text-yellow-400'}
+                      className={
+                        service.active
+                          ? 'text-green-400'
+                          : 'text-yellow-400'
+                      }
                     >
                       {service.active ? 'Ativo' : 'Inativo'}
                     </span>
-               
                   </p>
 
                   <div className="mt-4 flex gap-2">
