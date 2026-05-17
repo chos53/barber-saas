@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Client = {
@@ -36,6 +36,8 @@ export default function AgendaPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
 
+  const [search, setSearch] = useState('')
+
   const [clientId, setClientId] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [professionalId, setProfessionalId] = useState('')
@@ -50,6 +52,21 @@ export default function AgendaPage() {
   useEffect(() => {
     loadData()
   }, [filterDate])
+
+  const filteredAppointments = useMemo(() => {
+    return appointments.filter((appointment) => {
+      const clientName =
+        appointment.clients?.name?.toLowerCase() || ''
+
+      const professionalName =
+        appointment.professionals?.name?.toLowerCase() || ''
+
+      return (
+        clientName.includes(search.toLowerCase()) ||
+        professionalName.includes(search.toLowerCase())
+      )
+    })
+  }, [appointments, search])
 
   function getStatusLabel(status: string) {
     switch (status) {
@@ -87,12 +104,12 @@ export default function AgendaPage() {
     setCompanyId(profile.company_id)
 
     const { data: clientsData } = await supabase
-  .from('clients')
-  .select('id, name')
-  .eq('company_id', profile.company_id)
-  .eq('active', true)
+      .from('clients')
+      .select('id, name')
+      .eq('company_id', profile.company_id)
+      .eq('active', true)
 
-      const { data: servicesData } = await supabase
+    const { data: servicesData } = await supabase
       .from('services')
       .select('id, name')
       .eq('company_id', profile.company_id)
@@ -145,7 +162,9 @@ export default function AgendaPage() {
 
     if (error) {
       if (error.code === '23505') {
-        alert('Este profissional já possui um agendamento neste dia e horário.')
+        alert(
+          'Este profissional já possui um agendamento neste dia e horário.'
+        )
         return
       }
 
@@ -196,6 +215,15 @@ export default function AgendaPage() {
           className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
           value={filterDate}
           onChange={(e) => setFilterDate(e.target.value)}
+        />
+      </div>
+
+      <div className="mt-4">
+        <input
+          placeholder="Pesquisar cliente ou profissional..."
+          className="w-full rounded-xl bg-zinc-900 p-4"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
@@ -272,24 +300,27 @@ export default function AgendaPage() {
       </div>
 
       <div className="mt-8 space-y-3">
-        {appointments.length === 0 && (
+        {filteredAppointments.length === 0 && (
           <p className="rounded-xl bg-zinc-900 p-4 text-zinc-500">
-            Nenhum agendamento para esta data.
+            Nenhum agendamento encontrado.
           </p>
         )}
 
-        {appointments.map((appointment) => (
+        {filteredAppointments.map((appointment) => (
           <div key={appointment.id} className="rounded-xl bg-zinc-900 p-4">
             <p className="font-bold">
-              {appointment.clients?.name} — {appointment.services?.name}
+              {appointment.clients?.name} —{' '}
+              {appointment.services?.name}
             </p>
 
             <p className="text-zinc-400">
-              Profissional: {appointment.professionals?.name}
+              Profissional:{' '}
+              {appointment.professionals?.name}
             </p>
 
             <p className="text-zinc-400">
-              {appointment.appointment_date} às {appointment.appointment_time}
+              {appointment.appointment_date} às{' '}
+              {appointment.appointment_time}
             </p>
 
             {appointment.notes && (
@@ -318,7 +349,10 @@ export default function AgendaPage() {
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() =>
-                  updateAppointmentStatus(appointment.id, 'completed')
+                  updateAppointmentStatus(
+                    appointment.id,
+                    'completed'
+                  )
                 }
                 className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
               >
@@ -327,7 +361,10 @@ export default function AgendaPage() {
 
               <button
                 onClick={() =>
-                  updateAppointmentStatus(appointment.id, 'cancelled')
+                  updateAppointmentStatus(
+                    appointment.id,
+                    'cancelled'
+                  )
                 }
                 className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
               >
@@ -336,7 +373,10 @@ export default function AgendaPage() {
 
               <button
                 onClick={() =>
-                  updateAppointmentStatus(appointment.id, 'no_show')
+                  updateAppointmentStatus(
+                    appointment.id,
+                    'no_show'
+                  )
                 }
                 className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
               >
