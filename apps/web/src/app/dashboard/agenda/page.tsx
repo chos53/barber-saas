@@ -87,9 +87,10 @@ export default function AgendaPage() {
     setCompanyId(profile.company_id)
 
     const { data: clientsData } = await supabase
-      .from('clients')
-      .select('id, name')
-      .eq('company_id', profile.company_id)
+  .from('clients')
+  .select('id, name')
+  .eq('company_id', profile.company_id)
+  .eq('active', true)
 
       const { data: servicesData } = await supabase
       .from('services')
