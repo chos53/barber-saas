@@ -44,6 +44,12 @@ export default function DashboardLayout({
           <Link href="/dashboard/profissionais" className="block rounded-lg p-3 text-zinc-400 hover:bg-zinc-900 hover:text-white">
             Profissionais
           </Link>
+          <Link
+  href="/dashboard/relatorios"
+  className="block rounded-lg p-3 text-zinc-400 hover:bg-zinc-900 hover:text-white"
+>
+  Relatórios
+</Link>  
         </nav>
 
         <button
