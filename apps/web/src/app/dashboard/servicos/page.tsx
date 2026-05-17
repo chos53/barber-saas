@@ -17,6 +17,11 @@ export default function ServicesPage() {
   const [duration, setDuration] = useState('30')
   const [price, setPrice] = useState('0')
 
+  const [editingServiceId, setEditingServiceId] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editDuration, setEditDuration] = useState('30')
+  const [editPrice, setEditPrice] = useState('0')
+
   useEffect(() => {
     loadData()
   }, [])
@@ -71,11 +76,72 @@ export default function ServicesPage() {
     setName('')
     setDuration('30')
     setPrice('0')
+
+    loadData()
+  }
+
+  function startEditing(service: Service) {
+    setEditingServiceId(service.id)
+    setEditName(service.name)
+    setEditDuration(String(service.duration_minutes))
+    setEditPrice(String(service.price))
+  }
+
+  function cancelEditing() {
+    setEditingServiceId('')
+    setEditName('')
+    setEditDuration('30')
+    setEditPrice('0')
+  }
+
+  async function updateService(serviceId: string) {
+    if (!editName.trim()) {
+      alert('Digite o nome do serviço.')
+      return
+    }
+
+    const { error } = await supabase
+      .from('services')
+      .update({
+        name: editName.trim(),
+        duration_minutes: Number(editDuration),
+        price: Number(editPrice),
+      })
+      .eq('id', serviceId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    cancelEditing()
+    loadData()
+  }
+
+  async function deleteService(serviceId: string) {
+    const confirmed = confirm(
+      'Tem certeza que deseja excluir este serviço?'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    const { error } = await supabase
+      .from('services')
+      .delete()
+      .eq('id', serviceId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
     loadData()
   }
 
   return (
-    <main className="min-h-screen bg-black p-10 text-white">
+    <div>
       <h1 className="text-4xl font-bold">Serviços</h1>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
@@ -111,14 +177,82 @@ export default function ServicesPage() {
       </div>
 
       <div className="mt-8 space-y-3">
-        {services.map((service) => (
-          <div key={service.id} className="rounded-xl bg-zinc-900 p-4">
-            <p className="font-bold">{service.name}</p>
-            <p className="text-zinc-400">{service.duration_minutes} minutos</p>
-            <p className="text-zinc-500">R$ {service.price}</p>
-          </div>
-        ))}
+        {services.map((service) => {
+          const isEditing = editingServiceId === service.id
+
+          return (
+            <div key={service.id} className="rounded-xl bg-zinc-900 p-4">
+              {isEditing ? (
+                <div className="grid gap-3">
+                  <input
+                    className="rounded-lg bg-zinc-800 p-3"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+
+                  <input
+                    type="number"
+                    className="rounded-lg bg-zinc-800 p-3"
+                    value={editDuration}
+                    onChange={(e) => setEditDuration(e.target.value)}
+                  />
+
+                  <input
+                    type="number"
+                    className="rounded-lg bg-zinc-800 p-3"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                  />
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateService(service.id)}
+                      className="rounded-lg bg-green-600 px-4 py-2 font-bold"
+                    >
+                      Salvar
+                    </button>
+
+                    <button
+                      onClick={cancelEditing}
+                      className="rounded-lg bg-zinc-700 px-4 py-2 font-bold"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="font-bold">{service.name}</p>
+
+                  <p className="text-zinc-400">
+                    {service.duration_minutes} minutos
+                  </p>
+
+                  <p className="text-zinc-500">
+                    R$ {Number(service.price).toFixed(2)}
+                  </p>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => startEditing(service)}
+                      className="rounded-lg bg-white px-4 py-2 font-bold text-black"
+                    >
+                      Editar
+                    </button>
+
+                    <button
+                      onClick={() => deleteService(service.id)}
+                      className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
-    </main>
+    </div>
   )
 }
