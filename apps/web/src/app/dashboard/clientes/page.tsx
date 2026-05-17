@@ -17,6 +17,11 @@ export default function ClientsPage() {
   const [email, setEmail] = useState('')
   const [companyId, setCompanyId] = useState('')
 
+  const [editingClientId, setEditingClientId] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+
   useEffect(() => {
     loadData()
   }, [])
@@ -74,8 +79,46 @@ export default function ClientsPage() {
     loadData()
   }
 
+  function startEditing(client: Client) {
+    setEditingClientId(client.id)
+    setEditName(client.name)
+    setEditPhone(client.phone || '')
+    setEditEmail(client.email || '')
+  }
+
+  function cancelEditing() {
+    setEditingClientId('')
+    setEditName('')
+    setEditPhone('')
+    setEditEmail('')
+  }
+
+  async function updateClient(clientId: string) {
+    if (!editName.trim()) {
+      alert('Digite o nome do cliente.')
+      return
+    }
+
+    const { error } = await supabase
+      .from('clients')
+      .update({
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        email: editEmail.trim(),
+      })
+      .eq('id', clientId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    cancelEditing()
+    loadData()
+  }
+
   return (
-    <main className="min-h-screen bg-black p-10 text-white">
+    <div>
       <h1 className="text-4xl font-bold">Clientes</h1>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
@@ -109,14 +152,65 @@ export default function ClientsPage() {
       </div>
 
       <div className="mt-8 space-y-3">
-        {clients.map((client) => (
-          <div key={client.id} className="rounded-xl bg-zinc-900 p-4">
-            <p className="font-bold">{client.name}</p>
-            <p className="text-zinc-400">{client.phone}</p>
-            <p className="text-zinc-500">{client.email}</p>
-          </div>
-        ))}
+        {clients.map((client) => {
+          const isEditing = editingClientId === client.id
+
+          return (
+            <div key={client.id} className="rounded-xl bg-zinc-900 p-4">
+              {isEditing ? (
+                <div className="grid gap-3">
+                  <input
+                    className="rounded-lg bg-zinc-800 p-3"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+
+                  <input
+                    className="rounded-lg bg-zinc-800 p-3"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                  />
+
+                  <input
+                    className="rounded-lg bg-zinc-800 p-3"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                  />
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateClient(client.id)}
+                      className="rounded-lg bg-green-600 px-4 py-2 font-bold"
+                    >
+                      Salvar
+                    </button>
+
+                    <button
+                      onClick={cancelEditing}
+                      className="rounded-lg bg-zinc-700 px-4 py-2 font-bold"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="font-bold">{client.name}</p>
+                  <p className="text-zinc-400">{client.phone}</p>
+                  <p className="text-zinc-500">{client.email}</p>
+
+                  <button
+                    onClick={() => startEditing(client)}
+                    className="mt-4 rounded-lg bg-white px-4 py-2 font-bold text-black"
+                  >
+                    Editar
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
-    </main>
+    </div>
   )
 }
