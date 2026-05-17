@@ -91,10 +91,11 @@ export default function AgendaPage() {
       .select('id, name')
       .eq('company_id', profile.company_id)
 
-    const { data: servicesData } = await supabase
+      const { data: servicesData } = await supabase
       .from('services')
       .select('id, name')
       .eq('company_id', profile.company_id)
+      .eq('active', true)
 
     const { data: professionalsData } = await supabase
       .from('professionals')
