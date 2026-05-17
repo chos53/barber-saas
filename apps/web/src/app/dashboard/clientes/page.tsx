@@ -139,28 +139,6 @@ export default function ClientsPage() {
     loadData()
   }
 
-  async function deleteClient(clientId: string) {
-    const confirmed = confirm(
-      'Tem certeza que deseja excluir este cliente?'
-    )
-
-    if (!confirmed) {
-      return
-    }
-
-    const { error } = await supabase
-      .from('clients')
-      .delete()
-      .eq('id', clientId)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    loadData()
-  }
-
   return (
     <div>
       <h1 className="text-4xl font-bold">Clientes</h1>
@@ -272,13 +250,6 @@ export default function ClientsPage() {
                       className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
                     >
                       {client.active ? 'Inativar' : 'Ativar'}
-                    </button>
-
-                    <button
-                      onClick={() => deleteClient(client.id)}
-                      className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white"
-                    >
-                      Excluir
                     </button>
                   </div>
                 </>
