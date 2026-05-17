@@ -257,7 +257,12 @@ export default function ProfessionalsPage() {
 
                   <p className="mt-2 text-sm text-zinc-500">
                     Status:{' '}
-                    {professional.active ? 'Ativo' : 'Inativo'}
+                    <span
+                      className={professional.active ? 'text-green-400' : 'text-yellow-400'}
+                    >
+                      {professional.active ? 'Ativo' : 'Inativo'}
+                    </span>
+               
                   </p>
 
                   <div className="mt-4 flex gap-2">
