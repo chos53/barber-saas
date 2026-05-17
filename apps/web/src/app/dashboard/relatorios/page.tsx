@@ -193,7 +193,18 @@ export default function ReportsPage() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="appointment_date" />
               <YAxis />
-              <Tooltip />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#18181b',
+                  border: '1px solid #3f3f46',
+                  borderRadius: '12px',
+                  color: '#ffffff',
+                }}
+                labelStyle={{
+                  color: '#ffffff',
+                }}
+              />
+        
               <Bar dataKey="previsto" name="Previsto" />
               <Bar dataKey="realizado" name="Realizado" />
             </BarChart>
