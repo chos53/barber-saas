@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Professional = {
@@ -14,6 +14,8 @@ type Professional = {
 
 export default function ProfessionalsPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [search, setSearch] = useState('')
+
   const [companyId, setCompanyId] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -29,6 +31,14 @@ export default function ProfessionalsPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  const filteredProfessionals = useMemo(() => {
+    return professionals.filter((professional) =>
+      professional.name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    )
+  }, [professionals, search])
 
   async function loadData() {
     const {
@@ -188,8 +198,17 @@ export default function ProfessionalsPage() {
         </button>
       </div>
 
+      <div className="mt-8">
+        <input
+          placeholder="Pesquisar profissional..."
+          className="w-full rounded-xl bg-zinc-900 p-4"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="mt-8 space-y-3">
-        {professionals.map((professional) => {
+        {filteredProfessionals.map((professional) => {
           const isEditing = editingProfessionalId === professional.id
 
           return (
@@ -258,11 +277,16 @@ export default function ProfessionalsPage() {
                   <p className="mt-2 text-sm text-zinc-500">
                     Status:{' '}
                     <span
-                      className={professional.active ? 'text-green-400' : 'text-yellow-400'}
+                      className={
+                        professional.active
+                          ? 'text-green-400'
+                          : 'text-yellow-400'
+                      }
                     >
-                      {professional.active ? 'Ativo' : 'Inativo'}
+                      {professional.active
+                        ? 'Ativo'
+                        : 'Inativo'}
                     </span>
-               
                   </p>
 
                   <div className="mt-4 flex gap-2">
@@ -282,7 +306,9 @@ export default function ProfessionalsPage() {
                       }
                       className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
                     >
-                      {professional.active ? 'Inativar' : 'Ativar'}
+                      {professional.active
+                        ? 'Inativar'
+                        : 'Ativar'}
                     </button>
                   </div>
                 </>
