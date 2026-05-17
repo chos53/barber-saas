@@ -8,6 +8,7 @@ type Client = {
   name: string
   phone: string | null
   email: string | null
+  active: boolean
 }
 
 export default function ClientsPage() {
@@ -48,7 +49,7 @@ export default function ClientsPage() {
 
     const { data } = await supabase
       .from('clients')
-      .select('id, name, phone, email')
+      .select('id, name, phone, email, active')
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
@@ -66,6 +67,7 @@ export default function ClientsPage() {
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      active: true,
     })
 
     if (error) {
@@ -115,6 +117,25 @@ export default function ClientsPage() {
     }
 
     cancelEditing()
+    loadData()
+  }
+
+  async function toggleClientActive(
+    clientId: string,
+    active: boolean
+  ) {
+    const { error } = await supabase
+      .from('clients')
+      .update({
+        active: !active,
+      })
+      .eq('id', clientId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
     loadData()
   }
 
@@ -228,12 +249,29 @@ export default function ClientsPage() {
                     {client.email}
                   </p>
 
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Status:{' '}
+                    {client.active ? 'Ativo' : 'Inativo'}
+                  </p>
+
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={() => startEditing(client)}
                       className="rounded-lg bg-white px-4 py-2 font-bold text-black"
                     >
                       Editar
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        toggleClientActive(
+                          client.id,
+                          client.active
+                        )
+                      }
+                      className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
+                    >
+                      {client.active ? 'Inativar' : 'Ativar'}
                     </button>
 
                     <button
