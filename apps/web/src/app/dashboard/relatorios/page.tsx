@@ -187,9 +187,19 @@ export default function ReportsPage() {
           Faturamento por dia
         </h2>
 
-        <div className="mt-6 h-80">
+        <div className="mt-6 h-[350px] w-full overflow-hidden">
+   
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
+            <BarChart
+              data={chartData}
+              margin={{
+                top: 10,
+                right: 10,
+                left: -20,
+                bottom: 0,
+              }}
+            >
+       
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="appointment_date" />
               <YAxis />
