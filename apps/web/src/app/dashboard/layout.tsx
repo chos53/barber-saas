@@ -11,6 +11,7 @@ const menuItems = [
   { label: 'Serviços', href: '/dashboard/servicos' },
   { label: 'Profissionais', href: '/dashboard/profissionais' },
   { label: 'Relatórios', href: '/dashboard/relatorios' },
+  { label: 'Configurações', href: '/dashboard/configuracoes' },
 ]
 
 export default function DashboardLayout({
