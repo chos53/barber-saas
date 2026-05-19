@@ -28,16 +28,23 @@ export default function DashboardPage() {
 
   function getStatusLabel(status: string) {
     switch (status) {
-      case 'scheduled': return 'Agendado'
-      case 'completed': return 'Concluído'
-      case 'cancelled': return 'Cancelado'
-      case 'no_show': return 'Não compareceu'
-      default: return status
+      case 'scheduled':
+        return 'Agendado'
+      case 'completed':
+        return 'Concluído'
+      case 'cancelled':
+        return 'Cancelado'
+      case 'no_show':
+        return 'Não compareceu'
+      default:
+        return status
     }
   }
 
   async function loadDashboard() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
       window.location.href = '/login'
@@ -57,7 +64,10 @@ export default function DashboardPage() {
 
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - Number(period))
-    const formattedStartDate = startDate.toISOString().split('T')[0]
+
+    const formattedStartDate = startDate
+      .toISOString()
+      .split('T')[0]
 
     const { count: clients } = await supabase
       .from('clients')
@@ -95,10 +105,16 @@ export default function DashboardPage() {
       .gte('appointment_date', formattedStartDate)
 
     const totalRevenue =
-      revenueData?.reduce((sum, item) => sum + Number(item.price), 0) || 0
+      revenueData?.reduce(
+        (sum, item) => sum + Number(item.price),
+        0
+      ) || 0
 
     const totalRealizedRevenue =
-      realizedRevenueData?.reduce((sum, item) => sum + Number(item.price), 0) || 0
+      realizedRevenueData?.reduce(
+        (sum, item) => sum + Number(item.price),
+        0
+      ) || 0
 
     const { data: todayData } = await supabase
       .from('appointments')
@@ -125,94 +141,148 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold">
+            Dashboard
+          </h1>
 
-      <p className="mt-2 text-zinc-400">Resumo geral da empresa.</p>
+          <p className="mt-2 text-zinc-400">
+            Resumo geral da empresa.
+          </p>
+        </div>
 
-      <div className="mt-4 flex gap-2">
-        {['1', '7', '30'].map((value) => (
-          <button
-            key={value}
-            onClick={() => setPeriod(value)}
-            className={`rounded-lg px-4 py-2 ${
-              period === value ? 'bg-white text-black' : 'bg-zinc-800'
-            }`}
-          >
-            {value === '1' ? 'Hoje' : `${value} dias`}
-          </button>
-        ))}
+        <div className="flex gap-2">
+          {['1', '7', '30'].map((value) => (
+            <button
+              key={value}
+              onClick={() => setPeriod(value)}
+              className={`rounded-xl px-4 py-2 transition ${
+                period === value
+                  ? 'bg-white text-black'
+                  : 'bg-zinc-800 hover:bg-zinc-700'
+              }`}
+            >
+              {value === '1'
+                ? 'Hoje'
+                : `${value} dias`}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-6">
-        <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Clientes</p>
-          <strong className="mt-2 block text-4xl">{clientsCount}</strong>
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Clientes
+          </p>
+
+          <strong className="mt-3 block text-5xl">
+            {clientsCount}
+          </strong>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Serviços</p>
-          <strong className="mt-2 block text-4xl">{servicesCount}</strong>
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Serviços
+          </p>
+
+          <strong className="mt-3 block text-5xl">
+            {servicesCount}
+          </strong>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Profissionais</p>
-          <strong className="mt-2 block text-4xl">{professionalsCount}</strong>
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Profissionais
+          </p>
+
+          <strong className="mt-3 block text-5xl">
+            {professionalsCount}
+          </strong>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Agendamentos</p>
-          <strong className="mt-2 block text-4xl">{appointmentsCount}</strong>
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Agendamentos
+          </p>
+
+          <strong className="mt-3 block text-5xl">
+            {appointmentsCount}
+          </strong>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Faturamento previsto</p>
-          <strong className="mt-2 block text-4xl">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Faturamento previsto
+          </p>
+
+          <strong className="mt-3 block text-5xl">
             R$ {expectedRevenue.toFixed(2)}
           </strong>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">Faturamento realizado</p>
-          <strong className="mt-2 block text-4xl">
+        <div className="rounded-2xl border border-green-900 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Faturamento realizado
+          </p>
+
+          <strong className="mt-3 block text-5xl text-green-400">
             R$ {realizedRevenue.toFixed(2)}
           </strong>
         </div>
       </div>
 
-      <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
-        <h2 className="text-2xl font-bold">Agenda de hoje</h2>
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">
+            Agenda de hoje
+          </h2>
 
-        <div className="mt-4 space-y-3">
+          <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">
+            {todayAppointments.length} agendamento(s)
+          </span>
+        </div>
+
+        <div className="mt-6 space-y-3">
           {todayAppointments.length === 0 && (
-            <p className="text-zinc-500">Nenhum agendamento para hoje.</p>
+            <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+              Nenhum agendamento para hoje.
+            </p>
           )}
 
           {todayAppointments.map((appointment) => (
-            <div key={appointment.id} className="rounded-xl bg-zinc-800 p-4">
-              <p className="font-bold">
-                {appointment.appointment_time} — {appointment.clients?.name}
-              </p>
+            <div
+              key={appointment.id}
+              className="rounded-xl border border-zinc-800 bg-zinc-800 p-4"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-bold">
+                    {appointment.appointment_time} —{' '}
+                    {appointment.clients?.name}
+                  </p>
 
-              <p className="text-zinc-400">
-                {appointment.services?.name} com {appointment.professionals?.name}
-              </p>
+                  <p className="mt-1 text-zinc-400">
+                    {appointment.services?.name} com{' '}
+                    {appointment.professionals?.name}
+                  </p>
+                </div>
 
-              <p className="text-zinc-500">
-                Status:{' '}
                 <span
-                  className={
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
                     appointment.status === 'completed'
-                      ? 'text-green-400'
+                      ? 'bg-green-900 text-green-300'
                       : appointment.status === 'cancelled'
-                        ? 'text-red-400'
+                        ? 'bg-red-900 text-red-300'
                         : appointment.status === 'no_show'
-                          ? 'text-yellow-400'
-                          : 'text-blue-400'
-                  }
+                          ? 'bg-yellow-900 text-yellow-300'
+                          : 'bg-blue-900 text-blue-300'
+                  }`}
                 >
                   {getStatusLabel(appointment.status)}
                 </span>
-              </p>
+              </div>
             </div>
           ))}
         </div>
