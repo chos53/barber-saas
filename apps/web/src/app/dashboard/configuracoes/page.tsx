@@ -53,13 +53,19 @@ export default function SettingsPage() {
 
     const { error } = await supabase
       .from('company_settings')
-      .upsert({
-        company_id: companyId,
-        company_name: companyName.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-        opening_hours: openingHours.trim(),
-      })
+      .upsert(
+        {
+          company_id: companyId,
+          company_name: companyName.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+          opening_hours: openingHours.trim(),
+        },
+        {
+          onConflict: 'company_id',
+        }
+      )
+ 
 
     if (error) {
       alert(error.message)

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -22,6 +23,39 @@ export default function DashboardLayout({
   const router = useRouter()
   const pathname = usePathname()
 
+  const [companyName, setCompanyName] =
+    useState('Barber SaaS')
+
+  useEffect(() => {
+    loadCompanyName()
+  }, [])
+
+  async function loadCompanyName() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.company_id) return
+
+    const { data: settings } = await supabase
+      .from('company_settings')
+      .select('company_name')
+      .eq('company_id', profile.company_id)
+      .single()
+
+    if (settings?.company_name) {
+      setCompanyName(settings.company_name)
+    }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -32,7 +66,7 @@ export default function DashboardLayout({
       <aside className="flex w-72 flex-col border-r border-zinc-800 bg-zinc-950 p-6">
         <div>
           <h1 className="text-2xl font-bold">
-            Barber SaaS
+            {companyName}
           </h1>
 
           <p className="mt-1 text-sm text-zinc-500">
