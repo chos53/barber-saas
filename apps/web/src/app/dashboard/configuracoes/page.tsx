@@ -9,6 +9,8 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [openingHours, setOpeningHours] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
     loadSettings()
@@ -51,6 +53,9 @@ export default function SettingsPage() {
   async function saveSettings() {
     if (!companyId) return
 
+    setSaving(true)
+    setSuccessMessage('')
+
     const { error } = await supabase
       .from('company_settings')
       .upsert(
@@ -65,14 +70,15 @@ export default function SettingsPage() {
           onConflict: 'company_id',
         }
       )
- 
+
+    setSaving(false)
 
     if (error) {
       alert(error.message)
       return
     }
 
-    alert('Configurações salvas com sucesso!')
+    setSuccessMessage('Configurações salvas com sucesso!')
   }
 
   return (
@@ -112,11 +118,18 @@ export default function SettingsPage() {
           onChange={(e) => setOpeningHours(e.target.value)}
         />
 
+        {successMessage && (
+          <p className="rounded-lg bg-green-900 p-3 text-green-300">
+            {successMessage}
+          </p>
+        )}
+
         <button
           onClick={saveSettings}
-          className="rounded-lg bg-white p-3 font-bold text-black"
+          disabled={saving}
+          className="rounded-lg bg-white p-3 font-bold text-black disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Salvar configurações
+          {saving ? 'Salvando...' : 'Salvar configurações'}
         </button>
       </div>
     </div>
