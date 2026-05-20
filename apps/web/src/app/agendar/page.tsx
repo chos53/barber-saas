@@ -13,6 +13,7 @@ type Service = {
 export default function PublicBookingPage() {
   const [companyName, setCompanyName] = useState('')
   const [services, setServices] = useState<Service[]>([])
+  const [selectedServiceId, setSelectedServiceId] = useState('')
 
   useEffect(() => {
     loadData()
@@ -59,9 +60,14 @@ export default function PublicBookingPage() {
 
           <div className="mt-6 space-y-3">
             {services.map((service) => (
-              <div
+              <button
                 key={service.id}
-                className="rounded-xl border border-zinc-800 bg-zinc-800 p-4"
+                onClick={() => setSelectedServiceId(service.id)}
+                className={`w-full rounded-xl border p-4 text-left transition ${
+                  selectedServiceId === service.id
+                    ? 'border-white bg-zinc-700'
+                    : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -78,11 +84,11 @@ export default function PublicBookingPage() {
                     R$ {Number(service.price).toFixed(2)}
                   </strong>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
       </div>
     </main>
   )
-} 
+}
