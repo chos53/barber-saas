@@ -30,6 +30,9 @@ export default function PublicBookingPage() {
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
 
+  const [loading, setLoading] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
+
   useEffect(() => {
     loadData()
   }, [])
@@ -64,11 +67,99 @@ export default function PublicBookingPage() {
     setProfessionals(professionalsData || [])
   }
 
+  async function createBooking() {
+    setSuccessMessage('')
+
+    if (
+      !selectedServiceId ||
+      !selectedProfessionalId ||
+      !date ||
+      !time ||
+      !clientName.trim() ||
+      !clientPhone.trim()
+    ) {
+      alert('Preencha todos os campos.')
+      return
+    }
+
+    setLoading(true)
+
+    const { data: existingClient } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('phone', clientPhone.trim())
+      .maybeSingle()
+
+    let clientId = existingClient?.id
+
+    if (!clientId) {
+      const { data: newClient, error: clientError } =
+        await supabase
+          .from('clients')
+          .insert({
+            company_id: companyId,
+            name: clientName.trim(),
+            phone: clientPhone.trim(),
+            active: true,
+          })
+          .select('id')
+          .single()
+
+      if (clientError || !newClient) {
+        setLoading(false)
+        alert(clientError?.message || 'Erro ao criar cliente.')
+        return
+      }
+
+      clientId = newClient.id
+    }
+
+    const { error: appointmentError } = await supabase
+      .from('appointments')
+      .insert({
+        company_id: companyId,
+        client_id: clientId,
+        service_id: selectedServiceId,
+        professional_id: selectedProfessionalId,
+        appointment_date: date,
+        appointment_time: time,
+        status: 'scheduled',
+      })
+
+    setLoading(false)
+
+    if (appointmentError) {
+      if (appointmentError.code === '23505') {
+        alert(
+          'Este horário já está ocupado para este profissional.'
+        )
+        return
+      }
+
+      alert(appointmentError.message)
+      return
+    }
+
+    setSelectedServiceId('')
+    setSelectedProfessionalId('')
+    setDate('')
+    setTime('')
+    setClientName('')
+    setClientPhone('')
+
+    setSuccessMessage(
+      'Agendamento realizado com sucesso!'
+    )
+  }
+
   return (
     <main className="min-h-screen bg-black p-6 text-white">
       <div className="mx-auto max-w-2xl">
         <div className="rounded-2xl bg-zinc-900 p-8">
-          <h1 className="text-4xl font-bold">Agendar horário</h1>
+          <h1 className="text-4xl font-bold">
+            Agendar horário
+          </h1>
 
           <p className="mt-2 text-zinc-400">
             {companyName}
@@ -76,7 +167,9 @@ export default function PublicBookingPage() {
         </div>
 
         <div className="mt-6 rounded-2xl bg-zinc-900 p-8">
-          <h2 className="text-2xl font-bold">Escolha um serviço</h2>
+          <h2 className="text-2xl font-bold">
+            Escolha um serviço
+          </h2>
 
           <div className="mt-6 space-y-3">
             {services.map((service) => (
@@ -91,7 +184,10 @@ export default function PublicBookingPage() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-bold">{service.name}</p>
+                    <p className="font-bold">
+                      {service.name}
+                    </p>
+
                     <p className="text-sm text-zinc-400">
                       {service.duration_minutes} min
                     </p>
@@ -107,28 +203,39 @@ export default function PublicBookingPage() {
         </div>
 
         <div className="mt-6 rounded-2xl bg-zinc-900 p-8">
-          <h2 className="text-2xl font-bold">Escolha um profissional</h2>
+          <h2 className="text-2xl font-bold">
+            Escolha um profissional
+          </h2>
 
           <div className="mt-6 space-y-3">
             {professionals.map((professional) => (
               <button
                 key={professional.id}
-                onClick={() => setSelectedProfessionalId(professional.id)}
+                onClick={() =>
+                  setSelectedProfessionalId(professional.id)
+                }
                 className={`w-full rounded-xl border p-4 text-left transition ${
                   selectedProfessionalId === professional.id
                     ? 'border-white bg-zinc-700'
                     : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
                 }`}
               >
-                <p className="font-bold">{professional.name}</p>
-                <p className="text-sm text-zinc-400">{professional.role}</p>
+                <p className="font-bold">
+                  {professional.name}
+                </p>
+
+                <p className="text-sm text-zinc-400">
+                  {professional.role}
+                </p>
               </button>
             ))}
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 rounded-2xl bg-zinc-900 p-8">
-          <h2 className="text-2xl font-bold">Seus dados</h2>
+          <h2 className="text-2xl font-bold">
+            Seus dados
+          </h2>
 
           <input
             type="date"
@@ -158,10 +265,20 @@ export default function PublicBookingPage() {
             onChange={(e) => setClientPhone(e.target.value)}
           />
 
+          {successMessage && (
+            <p className="rounded-lg bg-green-900 p-3 text-green-300">
+              {successMessage}
+            </p>
+          )}
+
           <button
-            className="rounded-lg bg-white p-3 font-bold text-black"
+            onClick={createBooking}
+            disabled={loading}
+            className="rounded-lg bg-white p-3 font-bold text-black disabled:opacity-60"
           >
-            Confirmar agendamento
+            {loading
+              ? 'Agendando...'
+              : 'Confirmar agendamento'}
           </button>
         </div>
       </div>
