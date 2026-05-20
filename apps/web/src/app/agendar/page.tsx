@@ -17,11 +17,18 @@ type Professional = {
 }
 
 export default function PublicBookingPage() {
+  const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [services, setServices] = useState<Service[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
+
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [selectedProfessionalId, setSelectedProfessionalId] = useState('')
+
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('')
+  const [clientName, setClientName] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
 
   useEffect(() => {
     loadData()
@@ -36,6 +43,7 @@ export default function PublicBookingPage() {
 
     if (!settings?.company_id) return
 
+    setCompanyId(settings.company_id)
     setCompanyName(settings.company_name || '')
 
     const { data: servicesData } = await supabase
@@ -84,7 +92,6 @@ export default function PublicBookingPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-bold">{service.name}</p>
-
                     <p className="text-sm text-zinc-400">
                       {service.duration_minutes} min
                     </p>
@@ -114,13 +121,48 @@ export default function PublicBookingPage() {
                 }`}
               >
                 <p className="font-bold">{professional.name}</p>
-
-                <p className="text-sm text-zinc-400">
-                  {professional.role}
-                </p>
+                <p className="text-sm text-zinc-400">{professional.role}</p>
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 rounded-2xl bg-zinc-900 p-8">
+          <h2 className="text-2xl font-bold">Seus dados</h2>
+
+          <input
+            type="date"
+            className="rounded-lg bg-zinc-800 p-3"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+
+          <input
+            type="time"
+            className="rounded-lg bg-zinc-800 p-3"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+          />
+
+          <input
+            placeholder="Seu nome"
+            className="rounded-lg bg-zinc-800 p-3"
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+          />
+
+          <input
+            placeholder="Seu telefone"
+            className="rounded-lg bg-zinc-800 p-3"
+            value={clientPhone}
+            onChange={(e) => setClientPhone(e.target.value)}
+          />
+
+          <button
+            className="rounded-lg bg-white p-3 font-bold text-black"
+          >
+            Confirmar agendamento
+          </button>
         </div>
       </div>
     </main>
