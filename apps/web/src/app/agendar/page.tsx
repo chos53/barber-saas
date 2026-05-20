@@ -19,6 +19,8 @@ type Professional = {
 export default function PublicBookingPage() {
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
+  const [companyPhone, setCompanyPhone] = useState('')
+  const [companyAddress, setCompanyAddress] = useState('')
   const [services, setServices] = useState<Service[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
 
@@ -32,6 +34,7 @@ export default function PublicBookingPage() {
 
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [successDetails, setSuccessDetails] = useState('')
 
   useEffect(() => {
     loadData()
@@ -40,14 +43,16 @@ export default function PublicBookingPage() {
   async function loadData() {
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('company_id, company_name')
-      .limit(1)
+      .select('company_id, company_name, phone, address')
+       .limit(1)
       .single()
 
     if (!settings?.company_id) return
 
     setCompanyId(settings.company_id)
     setCompanyName(settings.company_name || '')
+    setCompanyPhone(settings.phone || '')
+    setCompanyAddress(settings.address || '')
 
     const { data: servicesData } = await supabase
       .from('services')
@@ -148,8 +153,21 @@ export default function PublicBookingPage() {
     setClientName('')
     setClientPhone('')
 
+    const selectedService = services.find(
+      (service) => service.id === selectedServiceId
+    )
+
+    const selectedProfessional = professionals.find(
+      (professional) =>
+        professional.id === selectedProfessionalId
+    )
+
     setSuccessMessage(
       'Agendamento realizado com sucesso!'
+    )
+
+    setSuccessDetails(
+      `${selectedService?.name} com ${selectedProfessional?.name} em ${date} às ${time}`
     )
   }
 
@@ -266,10 +284,36 @@ export default function PublicBookingPage() {
           />
 
           {successMessage && (
-            <p className="rounded-lg bg-green-900 p-3 text-green-300">
-              {successMessage}
-            </p>
+            <div className="rounded-xl bg-green-900 p-4">
+              <p className="font-bold text-green-300">
+                {successMessage}
+              </p>
+
+              <p className="mt-2 text-sm text-green-200">
+                {successDetails}
+              </p>
+
+              <div className="mt-4 border-t border-green-800 pt-4 text-sm text-green-100">
+                <p className="font-bold">
+                  {companyName}
+                </p>
+
+                {companyAddress && (
+                  <p className="mt-1">
+                    {companyAddress}
+                  </p>
+                )}
+
+                {companyPhone && (
+                  <p className="mt-1">
+                    {companyPhone}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
+     
+     
 
           <button
             onClick={createBooking}
