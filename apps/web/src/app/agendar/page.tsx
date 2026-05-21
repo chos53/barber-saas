@@ -305,17 +305,22 @@ export default function PublicBookingPage() {
 
               <input
                 type="date"
+                min={new Date().toISOString().split('T')[0]}
                 className="rounded-lg bg-zinc-800 p-3"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
+        
 
               <input
                 type="time"
+                min="08:00"
+                max="20:00"
                 className="rounded-lg bg-zinc-800 p-3"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
               />
+        
 
               <input
                 placeholder="Seu nome"
