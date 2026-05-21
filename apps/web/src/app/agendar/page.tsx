@@ -40,11 +40,22 @@ export default function PublicBookingPage() {
     loadData()
   }, [])
 
+  function resetBooking() {
+    setSelectedServiceId('')
+    setSelectedProfessionalId('')
+    setDate('')
+    setTime('')
+    setClientName('')
+    setClientPhone('')
+    setSuccessMessage('')
+    setSuccessDetails('')
+  }
+
   async function loadData() {
     const { data: settings } = await supabase
       .from('company_settings')
       .select('company_id, company_name, phone, address')
-       .limit(1)
+      .limit(1)
       .single()
 
     if (!settings?.company_id) return
@@ -86,6 +97,15 @@ export default function PublicBookingPage() {
       alert('Preencha todos os campos.')
       return
     }
+
+    const selectedService = services.find(
+      (service) => service.id === selectedServiceId
+    )
+
+    const selectedProfessional = professionals.find(
+      (professional) =>
+        professional.id === selectedProfessionalId
+    )
 
     setLoading(true)
 
@@ -146,22 +166,6 @@ export default function PublicBookingPage() {
       return
     }
 
-    setSelectedServiceId('')
-    setSelectedProfessionalId('')
-    setDate('')
-    setTime('')
-    setClientName('')
-    setClientPhone('')
-
-    const selectedService = services.find(
-      (service) => service.id === selectedServiceId
-    )
-
-    const selectedProfessional = professionals.find(
-      (professional) =>
-        professional.id === selectedProfessionalId
-    )
-
     setSuccessMessage(
       'Agendamento realizado com sucesso!'
     )
@@ -169,6 +173,13 @@ export default function PublicBookingPage() {
     setSuccessDetails(
       `${selectedService?.name} com ${selectedProfessional?.name} em ${date} às ${time}`
     )
+
+    setSelectedServiceId('')
+    setSelectedProfessionalId('')
+    setDate('')
+    setTime('')
+    setClientName('')
+    setClientPhone('')
   }
 
   return (
@@ -184,147 +195,154 @@ export default function PublicBookingPage() {
           </p>
         </div>
 
-        <div className="mt-6 rounded-2xl bg-zinc-900 p-8">
-          <h2 className="text-2xl font-bold">
-            Escolha um serviço
-          </h2>
+        {successMessage ? (
+          <div className="mt-6 rounded-2xl bg-green-900 p-8">
+            <p className="text-2xl font-bold text-green-300">
+              {successMessage}
+            </p>
 
-          <div className="mt-6 space-y-3">
-            {services.map((service) => (
-              <button
-                key={service.id}
-                onClick={() => setSelectedServiceId(service.id)}
-                className={`w-full rounded-xl border p-4 text-left transition ${
-                  selectedServiceId === service.id
-                    ? 'border-white bg-zinc-700'
-                    : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
+            <p className="mt-3 text-green-200">
+              {successDetails}
+            </p>
+
+            <div className="mt-6 border-t border-green-800 pt-6 text-green-100">
+              <p className="font-bold">
+                {companyName}
+              </p>
+
+              {companyAddress && (
+                <p className="mt-2">
+                  {companyAddress}
+                </p>
+              )}
+
+              {companyPhone && (
+                <p className="mt-2">
+                  {companyPhone}
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={resetBooking}
+              className="mt-6 w-full rounded-lg bg-white p-3 font-bold text-black"
+            >
+              Novo agendamento
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-6 rounded-2xl bg-zinc-900 p-8">
+              <h2 className="text-2xl font-bold">
+                Escolha um serviço
+              </h2>
+
+              <div className="mt-6 space-y-3">
+                {services.map((service) => (
+                  <button
+                    key={service.id}
+                    onClick={() => setSelectedServiceId(service.id)}
+                    className={`w-full rounded-xl border p-4 text-left transition ${
+                      selectedServiceId === service.id
+                        ? 'border-white bg-zinc-700'
+                        : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold">
+                          {service.name}
+                        </p>
+
+                        <p className="text-sm text-zinc-400">
+                          {service.duration_minutes} min
+                        </p>
+                      </div>
+
+                      <strong className="text-lg">
+                        R$ {Number(service.price).toFixed(2)}
+                      </strong>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl bg-zinc-900 p-8">
+              <h2 className="text-2xl font-bold">
+                Escolha um profissional
+              </h2>
+
+              <div className="mt-6 space-y-3">
+                {professionals.map((professional) => (
+                  <button
+                    key={professional.id}
+                    onClick={() =>
+                      setSelectedProfessionalId(professional.id)
+                    }
+                    className={`w-full rounded-xl border p-4 text-left transition ${
+                      selectedProfessionalId === professional.id
+                        ? 'border-white bg-zinc-700'
+                        : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
+                    }`}
+                  >
                     <p className="font-bold">
-                      {service.name}
+                      {professional.name}
                     </p>
 
                     <p className="text-sm text-zinc-400">
-                      {service.duration_minutes} min
+                      {professional.role}
                     </p>
-                  </div>
-
-                  <strong className="text-lg">
-                    R$ {Number(service.price).toFixed(2)}
-                  </strong>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-2xl bg-zinc-900 p-8">
-          <h2 className="text-2xl font-bold">
-            Escolha um profissional
-          </h2>
-
-          <div className="mt-6 space-y-3">
-            {professionals.map((professional) => (
-              <button
-                key={professional.id}
-                onClick={() =>
-                  setSelectedProfessionalId(professional.id)
-                }
-                className={`w-full rounded-xl border p-4 text-left transition ${
-                  selectedProfessionalId === professional.id
-                    ? 'border-white bg-zinc-700'
-                    : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
-                }`}
-              >
-                <p className="font-bold">
-                  {professional.name}
-                </p>
-
-                <p className="text-sm text-zinc-400">
-                  {professional.role}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-4 rounded-2xl bg-zinc-900 p-8">
-          <h2 className="text-2xl font-bold">
-            Seus dados
-          </h2>
-
-          <input
-            type="date"
-            className="rounded-lg bg-zinc-800 p-3"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-
-          <input
-            type="time"
-            className="rounded-lg bg-zinc-800 p-3"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-          />
-
-          <input
-            placeholder="Seu nome"
-            className="rounded-lg bg-zinc-800 p-3"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-          />
-
-          <input
-            placeholder="Seu telefone"
-            className="rounded-lg bg-zinc-800 p-3"
-            value={clientPhone}
-            onChange={(e) => setClientPhone(e.target.value)}
-          />
-
-          {successMessage && (
-            <div className="rounded-xl bg-green-900 p-4">
-              <p className="font-bold text-green-300">
-                {successMessage}
-              </p>
-
-              <p className="mt-2 text-sm text-green-200">
-                {successDetails}
-              </p>
-
-              <div className="mt-4 border-t border-green-800 pt-4 text-sm text-green-100">
-                <p className="font-bold">
-                  {companyName}
-                </p>
-
-                {companyAddress && (
-                  <p className="mt-1">
-                    {companyAddress}
-                  </p>
-                )}
-
-                {companyPhone && (
-                  <p className="mt-1">
-                    {companyPhone}
-                  </p>
-                )}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-     
-     
 
-          <button
-            onClick={createBooking}
-            disabled={loading}
-            className="rounded-lg bg-white p-3 font-bold text-black disabled:opacity-60"
-          >
-            {loading
-              ? 'Agendando...'
-              : 'Confirmar agendamento'}
-          </button>
-        </div>
+            <div className="mt-6 grid gap-4 rounded-2xl bg-zinc-900 p-8">
+              <h2 className="text-2xl font-bold">
+                Seus dados
+              </h2>
+
+              <input
+                type="date"
+                className="rounded-lg bg-zinc-800 p-3"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+
+              <input
+                type="time"
+                className="rounded-lg bg-zinc-800 p-3"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+              />
+
+              <input
+                placeholder="Seu nome"
+                className="rounded-lg bg-zinc-800 p-3"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+              />
+
+              <input
+                placeholder="Seu telefone"
+                className="rounded-lg bg-zinc-800 p-3"
+                value={clientPhone}
+                onChange={(e) => setClientPhone(e.target.value)}
+              />
+
+              <button
+                onClick={createBooking}
+                disabled={loading}
+                className="rounded-lg bg-white p-3 font-bold text-black disabled:opacity-60"
+              >
+                {loading
+                  ? 'Agendando...'
+                  : 'Confirmar agendamento'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </main>
   )
