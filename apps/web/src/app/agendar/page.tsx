@@ -35,6 +35,33 @@ export default function PublicBookingPage() {
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [successDetails, setSuccessDetails] = useState('')
+  const availableTimes = [
+    '08:00',
+    '08:30',
+    '09:00',
+    '09:30',
+    '10:00',
+    '10:30',
+    '11:00',
+    '11:30',
+    '12:00',
+    '12:30',
+    '13:00',
+    '13:30',
+    '14:00',
+    '14:30',
+    '15:00',
+    '15:30',
+    '16:00',
+    '16:30',
+    '17:00',
+    '17:30',
+    '18:00',
+    '18:30',
+    '19:00',
+    '19:30',
+    '20:00',
+  ]
 
   useEffect(() => {
     loadData()
@@ -322,14 +349,29 @@ export default function PublicBookingPage() {
               />
         
 
-              <input
-                type="time"
-                min="08:00"
-                max="20:00"
-                className="rounded-lg bg-zinc-800 p-3"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-              />
+              <div>
+                <p className="mb-3 text-sm text-zinc-400">
+                  Escolha um horário
+                </p>
+
+                <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                  {availableTimes.map((availableTime) => (
+                    <button
+                      key={availableTime}
+                      type="button"
+                      onClick={() => setTime(availableTime)}
+                      className={`rounded-lg p-3 text-sm font-medium transition ${
+                        time === availableTime
+                          ? 'bg-white text-black'
+                          : 'bg-zinc-800 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {availableTime}
+                    </button>
+                  ))}
+                </div>
+              </div>
+         
         
 
               <input
