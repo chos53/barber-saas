@@ -97,7 +97,17 @@ export default function PublicBookingPage() {
       alert('Preencha todos os campos.')
       return
     }
-
+    if (time < '08:00' || time > '20:00') {
+        alert('Escolha um horário entre 08:00 e 20:00.')
+        return
+      }
+      
+      const today = new Date().toISOString().split('T')[0]
+      
+      if (date < today) {
+        alert('Não é possível agendar em uma data passada.')
+        return
+      }
     const selectedService = services.find(
       (service) => service.id === selectedServiceId
     )
