@@ -32,40 +32,34 @@ export default function PublicBookingPage() {
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
 
+  const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [successDetails, setSuccessDetails] = useState('')
+
   const availableTimes = [
-    '08:00',
-    '08:30',
-    '09:00',
-    '09:30',
-    '10:00',
-    '10:30',
-    '11:00',
-    '11:30',
-    '12:00',
-    '12:30',
-    '13:00',
-    '13:30',
-    '14:00',
-    '14:30',
-    '15:00',
-    '15:30',
-    '16:00',
-    '16:30',
-    '17:00',
-    '17:30',
-    '18:00',
-    '18:30',
-    '19:00',
-    '19:30',
+    '08:00', '08:30',
+    '09:00', '09:30',
+    '10:00', '10:30',
+    '11:00', '11:30',
+    '12:00', '12:30',
+    '13:00', '13:30',
+    '14:00', '14:30',
+    '15:00', '15:30',
+    '16:00', '16:30',
+    '17:00', '17:30',
+    '18:00', '18:30',
+    '19:00', '19:30',
     '20:00',
   ]
 
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    loadOccupiedTimes()
+  }, [date, selectedProfessionalId])
 
   function resetBooking() {
     setSelectedServiceId('')
@@ -74,6 +68,7 @@ export default function PublicBookingPage() {
     setTime('')
     setClientName('')
     setClientPhone('')
+    setOccupiedTimes([])
     setSuccessMessage('')
     setSuccessDetails('')
   }
@@ -110,6 +105,25 @@ export default function PublicBookingPage() {
     setProfessionals(professionalsData || [])
   }
 
+  async function loadOccupiedTimes() {
+    if (!date || !selectedProfessionalId) {
+      setOccupiedTimes([])
+      return
+    }
+
+    const { data } = await supabase
+      .from('appointments')
+      .select('appointment_time')
+      .eq('professional_id', selectedProfessionalId)
+      .eq('appointment_date', date)
+      .neq('status', 'cancelled')
+
+    const times =
+      data?.map((item) => item.appointment_time.slice(0, 5)) || []
+
+    setOccupiedTimes(times)
+  }
+
   async function createBooking() {
     setSuccessMessage('')
 
@@ -124,17 +138,24 @@ export default function PublicBookingPage() {
       alert('Preencha todos os campos.')
       return
     }
+
     if (time < '08:00' || time > '20:00') {
-        alert('Escolha um horário entre 08:00 e 20:00.')
-        return
-      }
-      
-      const today = new Date().toISOString().split('T')[0]
-      
-      if (date < today) {
-        alert('Não é possível agendar em uma data passada.')
-        return
-      }
+      alert('Escolha um horário entre 08:00 e 20:00.')
+      return
+    }
+
+    const today = new Date().toISOString().split('T')[0]
+
+    if (date < today) {
+      alert('Não é possível agendar em uma data passada.')
+      return
+    }
+
+    if (occupiedTimes.includes(time)) {
+      alert('Este horário já está ocupado.')
+      return
+    }
+
     const selectedService = services.find(
       (service) => service.id === selectedServiceId
     )
@@ -217,6 +238,7 @@ export default function PublicBookingPage() {
     setTime('')
     setClientName('')
     setClientPhone('')
+    setOccupiedTimes([])
   }
 
   return (
@@ -345,9 +367,11 @@ export default function PublicBookingPage() {
                 min={new Date().toISOString().split('T')[0]}
                 className="rounded-lg bg-zinc-800 p-3"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  setDate(e.target.value)
+                  setTime('')
+                }}
               />
-        
 
               <div>
                 <p className="mb-3 text-sm text-zinc-400">
@@ -355,24 +379,30 @@ export default function PublicBookingPage() {
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-                  {availableTimes.map((availableTime) => (
-                    <button
-                      key={availableTime}
-                      type="button"
-                      onClick={() => setTime(availableTime)}
-                      className={`rounded-lg p-3 text-sm font-medium transition ${
-                        time === availableTime
-                          ? 'bg-white text-black'
-                          : 'bg-zinc-800 hover:bg-zinc-700'
-                      }`}
-                    >
-                      {availableTime}
-                    </button>
-                  ))}
+                  {availableTimes.map((availableTime) => {
+                    const isOccupied =
+                      occupiedTimes.includes(availableTime)
+
+                    return (
+                      <button
+                        key={availableTime}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => setTime(availableTime)}
+                        className={`rounded-lg p-3 text-sm font-medium transition ${
+                          isOccupied
+                            ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                            : time === availableTime
+                              ? 'bg-white text-black'
+                              : 'bg-zinc-800 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {availableTime}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
-         
-        
 
               <input
                 placeholder="Seu nome"
