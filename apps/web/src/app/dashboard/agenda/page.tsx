@@ -701,6 +701,50 @@ export default function AgendaPage() {
                 </div>
               </div>
 
+              {selectedAppointment.status === 'scheduled' && (
+                <div className="grid gap-2 rounded-2xl bg-zinc-800 p-4">
+                  <p className="text-sm text-zinc-500">Ações</p>
+
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <button
+                      onClick={() =>
+                        updateAppointmentStatus(
+                          selectedAppointment.id,
+                          'completed'
+                        )
+                      }
+                      className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
+                    >
+                      Concluído
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        updateAppointmentStatus(
+                          selectedAppointment.id,
+                          'cancelled'
+                        )
+                      }
+                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        updateAppointmentStatus(
+                          selectedAppointment.id,
+                          'no_show'
+                        )
+                      }
+                      className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
+                    >
+                      Não compareceu
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {selectedAppointment.notes && (
                 <div className="rounded-2xl bg-zinc-800 p-4">
                   <p className="text-sm text-zinc-500">
