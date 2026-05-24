@@ -14,6 +14,7 @@ type Professional = {
   id: string
   name: string
   role: string | null
+  photo_url: string | null
 }
 
 export default function PublicBookingPage() {
@@ -25,31 +26,49 @@ export default function PublicBookingPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([])
 
   const [selectedServiceId, setSelectedServiceId] = useState('')
-  const [selectedProfessionalId, setSelectedProfessionalId] = useState('')
+  const [selectedProfessionalId, setSelectedProfessionalId] =
+    useState('')
 
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
 
-  const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+  const [occupiedTimes, setOccupiedTimes] = useState<
+    string[]
+  >([])
+
   const [loading, setLoading] = useState(false)
+
   const [successMessage, setSuccessMessage] = useState('')
-  const [successDetails, setSuccessDetails] = useState('')
+  const [successDetails, setSuccessDetails] =
+    useState('')
 
   const availableTimes = [
-    '08:00', '08:30',
-    '09:00', '09:30',
-    '10:00', '10:30',
-    '11:00', '11:30',
-    '12:00', '12:30',
-    '13:00', '13:30',
-    '14:00', '14:30',
-    '15:00', '15:30',
-    '16:00', '16:30',
-    '17:00', '17:30',
-    '18:00', '18:30',
-    '19:00', '19:30',
+    '08:00',
+    '08:30',
+    '09:00',
+    '09:30',
+    '10:00',
+    '10:30',
+    '11:00',
+    '11:30',
+    '12:00',
+    '12:30',
+    '13:00',
+    '13:30',
+    '14:00',
+    '14:30',
+    '15:00',
+    '15:30',
+    '16:00',
+    '16:30',
+    '17:00',
+    '17:30',
+    '18:00',
+    '18:30',
+    '19:00',
+    '19:30',
     '20:00',
   ]
 
@@ -76,7 +95,9 @@ export default function PublicBookingPage() {
   async function loadData() {
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('company_id, company_name, phone, address')
+      .select(
+        'company_id, company_name, phone, address'
+      )
       .limit(1)
       .single()
 
@@ -89,17 +110,22 @@ export default function PublicBookingPage() {
 
     const { data: servicesData } = await supabase
       .from('services')
-      .select('id, name, price, duration_minutes')
+      .select(
+        'id, name, price, duration_minutes'
+      )
       .eq('company_id', settings.company_id)
       .eq('active', true)
       .order('name')
 
-    const { data: professionalsData } = await supabase
-      .from('professionals')
-      .select('id, name, role')
-      .eq('company_id', settings.company_id)
-      .eq('active', true)
-      .order('name')
+    const { data: professionalsData } =
+      await supabase
+        .from('professionals')
+        .select(
+          'id, name, role, photo_url'
+        )
+        .eq('company_id', settings.company_id)
+        .eq('active', true)
+        .order('name')
 
     setServices(servicesData || [])
     setProfessionals(professionalsData || [])
@@ -114,12 +140,17 @@ export default function PublicBookingPage() {
     const { data } = await supabase
       .from('appointments')
       .select('appointment_time')
-      .eq('professional_id', selectedProfessionalId)
+      .eq(
+        'professional_id',
+        selectedProfessionalId
+      )
       .eq('appointment_date', date)
       .neq('status', 'cancelled')
 
     const times =
-      data?.map((item) => item.appointment_time.slice(0, 5)) || []
+      data?.map((item) =>
+        item.appointment_time.slice(0, 5)
+      ) || []
 
     setOccupiedTimes(times)
   }
@@ -140,14 +171,20 @@ export default function PublicBookingPage() {
     }
 
     if (time < '08:00' || time > '20:00') {
-      alert('Escolha um horário entre 08:00 e 20:00.')
+      alert(
+        'Escolha um horário entre 08:00 e 20:00.'
+      )
       return
     }
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date()
+      .toISOString()
+      .split('T')[0]
 
     if (date < today) {
-      alert('Não é possível agendar em uma data passada.')
+      alert(
+        'Não é possível agendar em uma data passada.'
+      )
       return
     }
 
@@ -157,58 +194,71 @@ export default function PublicBookingPage() {
     }
 
     const selectedService = services.find(
-      (service) => service.id === selectedServiceId
+      (service) =>
+        service.id === selectedServiceId
     )
 
-    const selectedProfessional = professionals.find(
-      (professional) =>
-        professional.id === selectedProfessionalId
-    )
+    const selectedProfessional =
+      professionals.find(
+        (professional) =>
+          professional.id ===
+          selectedProfessionalId
+      )
 
     setLoading(true)
 
-    const { data: existingClient } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('company_id', companyId)
-      .eq('phone', clientPhone.trim())
-      .maybeSingle()
+    const { data: existingClient } =
+      await supabase
+        .from('clients')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('phone', clientPhone.trim())
+        .maybeSingle()
 
     let clientId = existingClient?.id
 
     if (!clientId) {
-      const { data: newClient, error: clientError } =
-        await supabase
-          .from('clients')
-          .insert({
-            company_id: companyId,
-            name: clientName.trim(),
-            phone: clientPhone.trim(),
-            active: true,
-          })
-          .select('id')
-          .single()
+      const {
+        data: newClient,
+        error: clientError,
+      } = await supabase
+        .from('clients')
+        .insert({
+          company_id: companyId,
+          name: clientName.trim(),
+          phone: clientPhone.trim(),
+          active: true,
+        })
+        .select('id')
+        .single()
 
       if (clientError || !newClient) {
         setLoading(false)
-        alert(clientError?.message || 'Erro ao criar cliente.')
+
+        alert(
+          clientError?.message ||
+            'Erro ao criar cliente.'
+        )
+
         return
       }
 
       clientId = newClient.id
     }
 
-    const { error: appointmentError } = await supabase
-      .from('appointments')
-      .insert({
-        company_id: companyId,
-        client_id: clientId,
-        service_id: selectedServiceId,
-        professional_id: selectedProfessionalId,
-        appointment_date: date,
-        appointment_time: time,
-        status: 'scheduled',
-      })
+    const { error: appointmentError } =
+      await supabase
+        .from('appointments')
+        .insert({
+          company_id: companyId,
+          client_id: clientId,
+          service_id: selectedServiceId,
+          professional_id:
+            selectedProfessionalId,
+          appointment_date: date,
+          appointment_time: time,
+          status: 'scheduled',
+        })
 
     setLoading(false)
 
@@ -217,6 +267,7 @@ export default function PublicBookingPage() {
         alert(
           'Este horário já está ocupado para este profissional.'
         )
+
         return
       }
 
@@ -300,9 +351,14 @@ export default function PublicBookingPage() {
                 {services.map((service) => (
                   <button
                     key={service.id}
-                    onClick={() => setSelectedServiceId(service.id)}
+                    onClick={() =>
+                      setSelectedServiceId(
+                        service.id
+                      )
+                    }
                     className={`w-full rounded-xl border p-4 text-left transition ${
-                      selectedServiceId === service.id
+                      selectedServiceId ===
+                      service.id
                         ? 'border-white bg-zinc-700'
                         : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
                     }`}
@@ -314,12 +370,18 @@ export default function PublicBookingPage() {
                         </p>
 
                         <p className="text-sm text-zinc-400">
-                          {service.duration_minutes} min
+                          {
+                            service.duration_minutes
+                          }{' '}
+                          min
                         </p>
                       </div>
 
                       <strong className="text-lg">
-                        R$ {Number(service.price).toFixed(2)}
+                        R${' '}
+                        {Number(
+                          service.price
+                        ).toFixed(2)}
                       </strong>
                     </div>
                   </button>
@@ -333,27 +395,54 @@ export default function PublicBookingPage() {
               </h2>
 
               <div className="mt-6 space-y-3">
-                {professionals.map((professional) => (
-                  <button
-                    key={professional.id}
-                    onClick={() =>
-                      setSelectedProfessionalId(professional.id)
-                    }
-                    className={`w-full rounded-xl border p-4 text-left transition ${
-                      selectedProfessionalId === professional.id
-                        ? 'border-white bg-zinc-700'
-                        : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
-                    }`}
-                  >
-                    <p className="font-bold">
-                      {professional.name}
-                    </p>
+                {professionals.map(
+                  (professional) => (
+                    <button
+                      key={professional.id}
+                      onClick={() =>
+                        setSelectedProfessionalId(
+                          professional.id
+                        )
+                      }
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        selectedProfessionalId ===
+                        professional.id
+                          ? 'border-white bg-zinc-700'
+                          : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        {professional.photo_url ? (
+                          <img
+                            src={
+                              professional.photo_url
+                            }
+                            alt={
+                              professional.name
+                            }
+                            className="h-20 w-20 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-700 text-2xl font-bold">
+                            {professional.name.charAt(
+                              0
+                            )}
+                          </div>
+                        )}
 
-                    <p className="text-sm text-zinc-400">
-                      {professional.role}
-                    </p>
-                  </button>
-                ))}
+                        <div>
+                          <p className="text-lg font-bold">
+                            {professional.name}
+                          </p>
+
+                          <p className="text-zinc-400">
+                            {professional.role}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                )}
               </div>
             </div>
 
@@ -364,7 +453,11 @@ export default function PublicBookingPage() {
 
               <input
                 type="date"
-                min={new Date().toISOString().split('T')[0]}
+                min={
+                  new Date()
+                    .toISOString()
+                    .split('T')[0]
+                }
                 className="rounded-lg bg-zinc-800 p-3"
                 value={date}
                 onChange={(e) => {
@@ -379,28 +472,37 @@ export default function PublicBookingPage() {
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-                  {availableTimes.map((availableTime) => {
-                    const isOccupied =
-                      occupiedTimes.includes(availableTime)
+                  {availableTimes.map(
+                    (availableTime) => {
+                      const isOccupied =
+                        occupiedTimes.includes(
+                          availableTime
+                        )
 
-                    return (
-                      <button
-                        key={availableTime}
-                        type="button"
-                        disabled={isOccupied}
-                        onClick={() => setTime(availableTime)}
-                        className={`rounded-lg p-3 text-sm font-medium transition ${
-                          isOccupied
-                            ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                            : time === availableTime
-                              ? 'bg-white text-black'
-                              : 'bg-zinc-800 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {availableTime}
-                      </button>
-                    )
-                  })}
+                      return (
+                        <button
+                          key={availableTime}
+                          type="button"
+                          disabled={isOccupied}
+                          onClick={() =>
+                            setTime(
+                              availableTime
+                            )
+                          }
+                          className={`rounded-lg p-3 text-sm font-medium transition ${
+                            isOccupied
+                              ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                              : time ===
+                                  availableTime
+                                ? 'bg-white text-black'
+                                : 'bg-zinc-800 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {availableTime}
+                        </button>
+                      )
+                    }
+                  )}
                 </div>
               </div>
 
@@ -408,14 +510,22 @@ export default function PublicBookingPage() {
                 placeholder="Seu nome"
                 className="rounded-lg bg-zinc-800 p-3"
                 value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                onChange={(e) =>
+                  setClientName(
+                    e.target.value
+                  )
+                }
               />
 
               <input
                 placeholder="Seu telefone"
                 className="rounded-lg bg-zinc-800 p-3"
                 value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
+                onChange={(e) =>
+                  setClientPhone(
+                    e.target.value
+                  )
+                }
               />
 
               <button
