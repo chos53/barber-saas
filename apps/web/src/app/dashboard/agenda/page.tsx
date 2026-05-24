@@ -34,41 +34,25 @@ export default function AgendaPage() {
 
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
-  const [professionals, setProfessionals] = useState<
-    Professional[]
-  >([])
-
-  const [appointments, setAppointments] = useState<
-    Appointment[]
-  >([])
-
-  const [occupiedTimes, setOccupiedTimes] =
-    useState<string[]>([])
+  const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
 
   const [search, setSearch] = useState('')
 
   const [clientId, setClientId] = useState('')
   const [serviceId, setServiceId] = useState('')
-  const [professionalId, setProfessionalId] =
-    useState('')
-
+  const [professionalId, setProfessionalId] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
 
   const [filterDate, setFilterDate] = useState('')
 
-  const [openingTime, setOpeningTime] =
-    useState('08:00')
-
-  const [closingTime, setClosingTime] =
-    useState('20:00')
-
-  const [intervalMinutes, setIntervalMinutes] =
-    useState(30)
-
-  const [availableTimes, setAvailableTimes] =
-    useState<string[]>([])
+  const [openingTime, setOpeningTime] = useState('08:00')
+  const [closingTime, setClosingTime] = useState('20:00')
+  const [intervalMinutes, setIntervalMinutes] = useState(30)
+  const [availableTimes, setAvailableTimes] = useState<string[]>([])
 
   useEffect(() => {
     loadData()
@@ -80,15 +64,11 @@ export default function AgendaPage() {
       closingTime,
       intervalMinutes
     )
-  }, [
-    openingTime,
-    closingTime,
-    intervalMinutes,
-  ])
+  }, [openingTime, closingTime, intervalMinutes])
 
   useEffect(() => {
     loadOccupiedTimes()
-  }, [date, professionalId])
+  }, [date, professionalId, serviceId])
 
   function generateAvailableTimes(
     opening: string,
@@ -103,11 +83,8 @@ export default function AgendaPage() {
     const [closingHour, closingMinute] =
       closing.split(':').map(Number)
 
-    const start =
-      openingHour * 60 + openingMinute
-
-    const end =
-      closingHour * 60 + closingMinute
+    const start = openingHour * 60 + openingMinute
+    const end = closingHour * 60 + closingMinute
 
     for (
       let minutes = start;
@@ -115,7 +92,6 @@ export default function AgendaPage() {
       minutes += interval
     ) {
       const hour = Math.floor(minutes / 60)
-
       const minute = minutes % 60
 
       const formattedTime = `${String(hour).padStart(
@@ -137,40 +113,66 @@ export default function AgendaPage() {
 
     const { data } = await supabase
       .from('appointments')
-      .select('appointment_time')
+      .select(`
+        appointment_time,
+        services (
+          duration_minutes
+        )
+      `)
       .eq('professional_id', professionalId)
       .eq('appointment_date', date)
       .neq('status', 'cancelled')
 
-    const times =
-      data?.map((item) =>
-        item.appointment_time.slice(0, 5)
-      ) || []
+    const blockedTimes: string[] = []
 
-    setOccupiedTimes(times)
+    data?.forEach((appointment: any) => {
+      const appointmentTime =
+        appointment.appointment_time.slice(0, 5)
+
+      const duration =
+        appointment.services?.duration_minutes || 0
+
+      const totalBlockMinutes =
+        duration + intervalMinutes
+
+      const [hour, minute] =
+        appointmentTime.split(':').map(Number)
+
+      const startMinutes = hour * 60 + minute
+
+      for (
+        let current = startMinutes;
+        current < startMinutes + totalBlockMinutes;
+        current += intervalMinutes
+      ) {
+        const currentHour = Math.floor(current / 60)
+        const currentMinute = current % 60
+
+        const formattedTime = `${String(currentHour).padStart(
+          2,
+          '0'
+        )}:${String(currentMinute).padStart(2, '0')}`
+
+        blockedTimes.push(formattedTime)
+      }
+    })
+
+    setOccupiedTimes(blockedTimes)
   }
 
   const filteredAppointments = useMemo(() => {
-    return appointments.filter(
-      (appointment) => {
-        const clientName =
-          appointment.clients?.name?.toLowerCase() ||
-          ''
+    return appointments.filter((appointment) => {
+      const clientName =
+        appointment.clients?.name?.toLowerCase() || ''
 
-        const professionalName =
-          appointment.professionals?.name?.toLowerCase() ||
-          ''
+      const professionalName =
+        appointment.professionals?.name?.toLowerCase() || ''
 
-        return (
-          clientName.includes(
-            search.toLowerCase()
-          ) ||
-          professionalName.includes(
-            search.toLowerCase()
-          )
-        )
-      }
-    )
+      return (
+        clientName.includes(search.toLowerCase()) ||
+        professionalName.includes(search.toLowerCase())
+      )
+    })
   }, [appointments, search])
 
   function getStatusLabel(status: string) {
@@ -210,24 +212,14 @@ export default function AgendaPage() {
 
     const { data: settings } = await supabase
       .from('company_settings')
-      .select(
-        'opening_time, closing_time, interval_minutes'
-      )
+      .select('opening_time, closing_time, interval_minutes')
       .eq('company_id', profile.company_id)
       .single()
 
     if (settings) {
-      setOpeningTime(
-        settings.opening_time || '08:00'
-      )
-
-      setClosingTime(
-        settings.closing_time || '20:00'
-      )
-
-      setIntervalMinutes(
-        settings.interval_minutes || 30
-      )
+      setOpeningTime(settings.opening_time || '08:00')
+      setClosingTime(settings.closing_time || '20:00')
+      setIntervalMinutes(settings.interval_minutes || 30)
     }
 
     const { data: clientsData } = await supabase
@@ -242,9 +234,7 @@ export default function AgendaPage() {
       .eq('company_id', profile.company_id)
       .eq('active', true)
 
-    const {
-      data: professionalsData,
-    } = await supabase
+    const { data: professionalsData } = await supabase
       .from('professionals')
       .select('id, name')
       .eq('company_id', profile.company_id)
@@ -263,55 +253,29 @@ export default function AgendaPage() {
         professionals ( name )
       `)
       .eq('company_id', profile.company_id)
-      .order('appointment_date', {
-        ascending: true,
-      })
-      .order('appointment_time', {
-        ascending: true,
-      })
+      .order('appointment_date', { ascending: true })
+      .order('appointment_time', { ascending: true })
 
     if (filterDate) {
-      query.eq(
-        'appointment_date',
-        filterDate
-      )
+      query.eq('appointment_date', filterDate)
     }
 
-    const { data: appointmentsData } =
-      await query
+    const { data: appointmentsData } = await query
 
     setClients(clientsData || [])
     setServices(servicesData || [])
-
-    setProfessionals(
-      professionalsData || []
-    )
-
-    setAppointments(
-      (appointmentsData || []) as Appointment[]
-    )
+    setProfessionals(professionalsData || [])
+    setAppointments((appointmentsData || []) as Appointment[])
   }
 
   async function createAppointment() {
-    if (
-      !clientId ||
-      !serviceId ||
-      !professionalId ||
-      !date ||
-      !time
-    ) {
-      alert(
-        'Preencha cliente, serviço, profissional, data e horário.'
-      )
-
+    if (!clientId || !serviceId || !professionalId || !date || !time) {
+      alert('Preencha cliente, serviço, profissional, data e horário.')
       return
     }
 
     if (occupiedTimes.includes(time)) {
-      alert(
-        'Este horário já está ocupado.'
-      )
-
+      alert('Este horário já está ocupado.')
       return
     }
 
@@ -333,7 +297,6 @@ export default function AgendaPage() {
         alert(
           'Este profissional já possui um agendamento neste dia e horário.'
         )
-
         return
       }
 
@@ -347,6 +310,7 @@ export default function AgendaPage() {
     setDate('')
     setTime('')
     setNotes('')
+    setOccupiedTimes([])
 
     setFilterDate(date)
 
@@ -385,9 +349,7 @@ export default function AgendaPage() {
           type="date"
           className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
           value={filterDate}
-          onChange={(e) =>
-            setFilterDate(e.target.value)
-          }
+          onChange={(e) => setFilterDate(e.target.value)}
         />
       </div>
 
@@ -396,9 +358,7 @@ export default function AgendaPage() {
           placeholder="Pesquisar cliente ou profissional..."
           className="w-full rounded-xl bg-zinc-900 p-4"
           value={search}
-          onChange={(e) =>
-            setSearch(e.target.value)
-          }
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
@@ -406,9 +366,7 @@ export default function AgendaPage() {
         <select
           className="rounded-lg bg-zinc-800 p-3"
           value={clientId}
-          onChange={(e) =>
-            setClientId(e.target.value)
-          }
+          onChange={(e) => setClientId(e.target.value)}
         >
           <option value="">
             Selecione um cliente
@@ -427,9 +385,10 @@ export default function AgendaPage() {
         <select
           className="rounded-lg bg-zinc-800 p-3"
           value={serviceId}
-          onChange={(e) =>
+          onChange={(e) => {
             setServiceId(e.target.value)
-          }
+            setTime('')
+          }}
         >
           <option value="">
             Selecione um serviço
@@ -448,33 +407,33 @@ export default function AgendaPage() {
         <select
           className="rounded-lg bg-zinc-800 p-3"
           value={professionalId}
-          onChange={(e) =>
+          onChange={(e) => {
             setProfessionalId(e.target.value)
-          }
+            setTime('')
+          }}
         >
           <option value="">
             Selecione um profissional
           </option>
 
-          {professionals.map(
-            (professional) => (
-              <option
-                key={professional.id}
-                value={professional.id}
-              >
-                {professional.name}
-              </option>
-            )
-          )}
+          {professionals.map((professional) => (
+            <option
+              key={professional.id}
+              value={professional.id}
+            >
+              {professional.name}
+            </option>
+          ))}
         </select>
 
         <input
           type="date"
           className="rounded-lg bg-zinc-800 p-3"
           value={date}
-          onChange={(e) =>
+          onChange={(e) => {
             setDate(e.target.value)
-          }
+            setTime('')
+          }}
         />
 
         <div>
@@ -483,34 +442,28 @@ export default function AgendaPage() {
           </p>
 
           <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-            {availableTimes.map(
-              (availableTime) => {
-                const isOccupied =
-                  occupiedTimes.includes(
-                    availableTime
-                  )
+            {availableTimes.map((availableTime) => {
+              const isOccupied =
+                occupiedTimes.includes(availableTime)
 
-                return (
-                  <button
-                    key={availableTime}
-                    type="button"
-                    disabled={isOccupied}
-                    onClick={() =>
-                      setTime(availableTime)
-                    }
-                    className={`rounded-xl p-3 text-sm font-medium transition ${
-                      isOccupied
-                        ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                        : time === availableTime
-                          ? 'bg-white text-black'
-                          : 'bg-zinc-800 hover:bg-zinc-700'
-                    }`}
-                  >
-                    {availableTime}
-                  </button>
-                )
-              }
-            )}
+              return (
+                <button
+                  key={availableTime}
+                  type="button"
+                  disabled={isOccupied}
+                  onClick={() => setTime(availableTime)}
+                  className={`rounded-xl p-3 text-sm font-medium transition ${
+                    isOccupied
+                      ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                      : time === availableTime
+                        ? 'bg-white text-black'
+                        : 'bg-zinc-800 hover:bg-zinc-700'
+                  }`}
+                >
+                  {availableTime}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -518,9 +471,7 @@ export default function AgendaPage() {
           placeholder="Observações do agendamento"
           className="rounded-lg bg-zinc-800 p-3"
           value={notes}
-          onChange={(e) =>
-            setNotes(e.target.value)
-          }
+          onChange={(e) => setNotes(e.target.value)}
         />
 
         <button
@@ -532,130 +483,106 @@ export default function AgendaPage() {
       </div>
 
       <div className="mt-8 space-y-3">
-        {filteredAppointments.length ===
-          0 && (
+        {filteredAppointments.length === 0 && (
           <p className="rounded-xl bg-zinc-900 p-4 text-zinc-500">
             Nenhum agendamento encontrado.
           </p>
         )}
 
-        {filteredAppointments.map(
-          (appointment) => (
-            <div
-              key={appointment.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xl font-bold">
-                    {
-                      appointment.clients
-                        ?.name
-                    }
-                  </p>
+        {filteredAppointments.map((appointment) => (
+          <div
+            key={appointment.id}
+            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xl font-bold">
+                  {appointment.clients?.name}
+                </p>
 
-                  <p className="mt-1 text-zinc-300">
-                    {
-                      appointment.services
-                        ?.name
-                    }
-                  </p>
+                <p className="mt-1 text-zinc-300">
+                  {appointment.services?.name}
+                </p>
 
-                  <p className="mt-2 text-sm text-zinc-500">
-                    Profissional:{' '}
-                    {
-                      appointment
-                        .professionals
-                        ?.name
-                    }
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-lg font-bold">
-                    {appointment.appointment_time.slice(
-                      0,
-                      5
-                    )}
-                  </p>
-
-                  <p className="text-sm text-zinc-500">
-                    {
-                      appointment.appointment_date
-                    }
-                  </p>
-                </div>
+                <p className="mt-2 text-sm text-zinc-500">
+                  Profissional: {appointment.professionals?.name}
+                </p>
               </div>
 
-              {appointment.notes && (
-                <div className="mt-4 rounded-xl bg-zinc-800 p-3">
-                  <p className="text-sm text-zinc-400">
-                    {appointment.notes}
-                  </p>
-                </div>
-              )}
+              <div className="text-right">
+                <p className="text-lg font-bold">
+                  {appointment.appointment_time.slice(0, 5)}
+                </p>
 
-              <div className="mt-4">
-                <span
-                  className={`rounded-full px-3 py-1 text-sm font-bold ${
-                    appointment.status ===
-                    'completed'
-                      ? 'bg-green-900 text-green-300'
-                      : appointment.status ===
-                          'cancelled'
-                        ? 'bg-red-900 text-red-300'
-                        : appointment.status ===
-                            'no_show'
-                          ? 'bg-yellow-900 text-yellow-300'
-                          : 'bg-blue-900 text-blue-300'
-                  }`}
-                >
-                  {getStatusLabel(
-                    appointment.status
-                  )}
-                </span>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() =>
-                    updateAppointmentStatus(
-                      appointment.id,
-                      'completed'
-                    )
-                  }
-                  className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
-                >
-                  Concluído
-                </button>
-
-                <button
-                  onClick={() =>
-                    updateAppointmentStatus(
-                      appointment.id,
-                      'cancelled'
-                    )
-                  }
-                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  onClick={() =>
-                    updateAppointmentStatus(
-                      appointment.id,
-                      'no_show'
-                    )
-                  }
-                  className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
-                >
-                  Não compareceu
-                </button>
+                <p className="text-sm text-zinc-500">
+                  {appointment.appointment_date}
+                </p>
               </div>
             </div>
-          )
-        )}
+
+            {appointment.notes && (
+              <div className="mt-4 rounded-xl bg-zinc-800 p-3">
+                <p className="text-sm text-zinc-400">
+                  {appointment.notes}
+                </p>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <span
+                className={`rounded-full px-3 py-1 text-sm font-bold ${
+                  appointment.status === 'completed'
+                    ? 'bg-green-900 text-green-300'
+                    : appointment.status === 'cancelled'
+                      ? 'bg-red-900 text-red-300'
+                      : appointment.status === 'no_show'
+                        ? 'bg-yellow-900 text-yellow-300'
+                        : 'bg-blue-900 text-blue-300'
+                }`}
+              >
+                {getStatusLabel(appointment.status)}
+              </span>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() =>
+                  updateAppointmentStatus(
+                    appointment.id,
+                    'completed'
+                  )
+                }
+                className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
+              >
+                Concluído
+              </button>
+
+              <button
+                onClick={() =>
+                  updateAppointmentStatus(
+                    appointment.id,
+                    'cancelled'
+                  )
+                }
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={() =>
+                  updateAppointmentStatus(
+                    appointment.id,
+                    'no_show'
+                  )
+                }
+                className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
+              >
+                Não compareceu
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
