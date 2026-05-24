@@ -572,37 +572,39 @@ export default function AgendaPage() {
                 )}
               </div>
 
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    updateAppointmentStatus(appointment.id, 'completed')
-                  }}
-                  className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
-                >
-                  Concluído
-                </button>
+              {appointment.status === 'scheduled' && (
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateAppointmentStatus(appointment.id, 'completed')
+                    }}
+                    className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
+                  >
+                    Concluído
+                  </button>
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    updateAppointmentStatus(appointment.id, 'cancelled')
-                  }}
-                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
-                >
-                  Cancelar
-                </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateAppointmentStatus(appointment.id, 'cancelled')
+                    }}
+                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
+                  >
+                    Cancelar
+                  </button>
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    updateAppointmentStatus(appointment.id, 'no_show')
-                  }}
-                  className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
-                >
-                  Não compareceu
-                </button>
-              </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateAppointmentStatus(appointment.id, 'no_show')
+                    }}
+                    className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
+                  >
+                    Não compareceu
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
