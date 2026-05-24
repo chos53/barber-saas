@@ -552,6 +552,63 @@ export default function PublicBookingPage() {
                 }
               />
 
+              {selectedServiceId &&
+                selectedProfessionalId &&
+                date &&
+                time && (
+                  <div className="rounded-2xl border border-zinc-700 bg-zinc-800 p-5">
+                    <p className="text-lg font-bold">
+                      Resumo do agendamento
+                    </p>
+
+                    <div className="mt-4 space-y-2 text-zinc-300">
+                      <p>
+                        <strong>Serviço:</strong>{' '}
+                        {
+                          services.find(
+                            (service) =>
+                              service.id ===
+                              selectedServiceId
+                          )?.name
+                        }
+                      </p>
+
+                      <p>
+                        <strong>Profissional:</strong>{' '}
+                        {
+                          professionals.find(
+                            (professional) =>
+                              professional.id ===
+                              selectedProfessionalId
+                          )?.name
+                        }
+                      </p>
+
+                      <p>
+                        <strong>Data:</strong>{' '}
+                        {date}
+                      </p>
+
+                      <p>
+                        <strong>Horário:</strong>{' '}
+                        {time}
+                      </p>
+
+                      <p>
+                        <strong>Valor:</strong>{' '}
+                        R${' '}
+                        {Number(
+                          services.find(
+                            (service) =>
+                              service.id ===
+                              selectedServiceId
+                          )?.price || 0
+                        ).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
               <button
                 onClick={createBooking}
                 disabled={loading}
