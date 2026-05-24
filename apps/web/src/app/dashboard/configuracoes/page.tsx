@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { v4 as uuidv4 } from 'uuid'
 
 export default function SettingsPage() {
   const [companyId, setCompanyId] = useState('')
@@ -9,6 +10,10 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [openingHours, setOpeningHours] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
 
@@ -38,7 +43,7 @@ export default function SettingsPage() {
 
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('company_name, phone, address, opening_hours')
+      .select('company_name, phone, address, opening_hours, logo_url')
       .eq('company_id', profile.company_id)
       .single()
 
@@ -47,7 +52,31 @@ export default function SettingsPage() {
       setPhone(settings.phone || '')
       setAddress(settings.address || '')
       setOpeningHours(settings.opening_hours || '')
+      setLogoUrl(settings.logo_url || '')
+      setLogoPreview(settings.logo_url || '')
     }
+  }
+
+  async function uploadLogo() {
+    if (!logoFile) return logoUrl
+
+    const fileExt = logoFile.name.split('.').pop()
+    const fileName = `${uuidv4()}.${fileExt}`
+
+    const { error } = await supabase.storage
+      .from('logos')
+      .upload(fileName, logoFile)
+
+    if (error) {
+      alert(error.message)
+      return logoUrl
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from('logos').getPublicUrl(fileName)
+
+    return publicUrl
   }
 
   async function saveSettings() {
@@ -56,20 +85,21 @@ export default function SettingsPage() {
     setSaving(true)
     setSuccessMessage('')
 
-    const { error } = await supabase
-      .from('company_settings')
-      .upsert(
-        {
-          company_id: companyId,
-          company_name: companyName.trim(),
-          phone: phone.trim(),
-          address: address.trim(),
-          opening_hours: openingHours.trim(),
-        },
-        {
-          onConflict: 'company_id',
-        }
-      )
+    const finalLogoUrl = await uploadLogo()
+
+    const { error } = await supabase.from('company_settings').upsert(
+      {
+        company_id: companyId,
+        company_name: companyName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        opening_hours: openingHours.trim(),
+        logo_url: finalLogoUrl || null,
+      },
+      {
+        onConflict: 'company_id',
+      }
+    )
 
     setSaving(false)
 
@@ -78,6 +108,8 @@ export default function SettingsPage() {
       return
     }
 
+    setLogoUrl(finalLogoUrl || '')
+    setLogoFile(null)
     setSuccessMessage('Configurações salvas com sucesso!')
   }
 
@@ -90,6 +122,39 @@ export default function SettingsPage() {
       </p>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
+            Logo da empresa
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
+            <span className="font-medium">Escolher logo</span>
+
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+
+                setLogoFile(file)
+                setLogoPreview(URL.createObjectURL(file))
+              }}
+            />
+          </label>
+
+          {logoPreview && (
+            <div className="mt-4 flex justify-center">
+              <img
+                src={logoPreview}
+                alt="Logo"
+                className="h-28 w-28 rounded-2xl object-cover ring-4 ring-zinc-700"
+              />
+            </div>
+          )}
+        </div>
+
         <input
           placeholder="Nome da empresa"
           className="rounded-lg bg-zinc-800 p-3"

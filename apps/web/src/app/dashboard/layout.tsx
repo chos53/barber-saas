@@ -23,14 +23,14 @@ export default function DashboardLayout({
   const router = useRouter()
   const pathname = usePathname()
 
-  const [companyName, setCompanyName] =
-    useState('Barber SaaS')
+  const [companyName, setCompanyName] = useState('Barber SaaS')
+  const [logoUrl, setLogoUrl] = useState('')
 
   useEffect(() => {
-    loadCompanyName()
+    loadCompanyBrand()
   }, [])
 
-  async function loadCompanyName() {
+  async function loadCompanyBrand() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -47,12 +47,16 @@ export default function DashboardLayout({
 
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('company_name')
+      .select('company_name, logo_url')
       .eq('company_id', profile.company_id)
       .single()
 
     if (settings?.company_name) {
       setCompanyName(settings.company_name)
+    }
+
+    if (settings?.logo_url) {
+      setLogoUrl(settings.logo_url)
     }
   }
 
@@ -65,6 +69,14 @@ export default function DashboardLayout({
     <main className="flex min-h-screen bg-black text-white">
       <aside className="flex w-72 flex-col border-r border-zinc-800 bg-zinc-950 p-6">
         <div>
+          {logoUrl && (
+            <img
+              src={logoUrl}
+              alt={companyName}
+              className="mb-4 h-20 w-20 rounded-2xl object-cover ring-2 ring-zinc-800"
+            />
+          )}
+
           <h1 className="text-2xl font-bold">
             {companyName}
           </h1>
