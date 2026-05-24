@@ -42,12 +42,16 @@ export default function AgendaPage() {
     Appointment[]
   >([])
 
+  const [occupiedTimes, setOccupiedTimes] =
+    useState<string[]>([])
+
   const [search, setSearch] = useState('')
 
   const [clientId, setClientId] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [professionalId, setProfessionalId] =
     useState('')
+
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
@@ -81,6 +85,10 @@ export default function AgendaPage() {
     closingTime,
     intervalMinutes,
   ])
+
+  useEffect(() => {
+    loadOccupiedTimes()
+  }, [date, professionalId])
 
   function generateAvailableTimes(
     opening: string,
@@ -119,6 +127,27 @@ export default function AgendaPage() {
     }
 
     setAvailableTimes(times)
+  }
+
+  async function loadOccupiedTimes() {
+    if (!date || !professionalId) {
+      setOccupiedTimes([])
+      return
+    }
+
+    const { data } = await supabase
+      .from('appointments')
+      .select('appointment_time')
+      .eq('professional_id', professionalId)
+      .eq('appointment_date', date)
+      .neq('status', 'cancelled')
+
+    const times =
+      data?.map((item) =>
+        item.appointment_time.slice(0, 5)
+      ) || []
+
+    setOccupiedTimes(times)
   }
 
   const filteredAppointments = useMemo(() => {
@@ -253,6 +282,7 @@ export default function AgendaPage() {
 
     setClients(clientsData || [])
     setServices(servicesData || [])
+
     setProfessionals(
       professionalsData || []
     )
@@ -272,6 +302,14 @@ export default function AgendaPage() {
     ) {
       alert(
         'Preencha cliente, serviço, profissional, data e horário.'
+      )
+
+      return
+    }
+
+    if (occupiedTimes.includes(time)) {
+      alert(
+        'Este horário já está ocupado.'
       )
 
       return
@@ -446,22 +484,32 @@ export default function AgendaPage() {
 
           <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
             {availableTimes.map(
-              (availableTime) => (
-                <button
-                  key={availableTime}
-                  type="button"
-                  onClick={() =>
-                    setTime(availableTime)
-                  }
-                  className={`rounded-xl p-3 text-sm font-medium transition ${
-                    time === availableTime
-                      ? 'bg-white text-black'
-                      : 'bg-zinc-800 hover:bg-zinc-700'
-                  }`}
-                >
-                  {availableTime}
-                </button>
-              )
+              (availableTime) => {
+                const isOccupied =
+                  occupiedTimes.includes(
+                    availableTime
+                  )
+
+                return (
+                  <button
+                    key={availableTime}
+                    type="button"
+                    disabled={isOccupied}
+                    onClick={() =>
+                      setTime(availableTime)
+                    }
+                    className={`rounded-xl p-3 text-sm font-medium transition ${
+                      isOccupied
+                        ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                        : time === availableTime
+                          ? 'bg-white text-black'
+                          : 'bg-zinc-800 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {availableTime}
+                  </button>
+                )
+              }
             )}
           </div>
         </div>
