@@ -27,6 +27,7 @@ export default function PublicBookingPage() {
   const [openingTime, setOpeningTime] = useState('08:00')
   const [closingTime, setClosingTime] = useState('20:00')
   const [intervalMinutes, setIntervalMinutes] = useState(30)
+
   const [availableTimes, setAvailableTimes] = useState<string[]>([])
 
   const [services, setServices] = useState<Service[]>([])
@@ -41,7 +42,9 @@ export default function PublicBookingPage() {
   const [clientPhone, setClientPhone] = useState('')
 
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+
   const [loading, setLoading] = useState(false)
+
   const [successMessage, setSuccessMessage] = useState('')
   const [successDetails, setSuccessDetails] = useState('')
 
@@ -50,12 +53,24 @@ export default function PublicBookingPage() {
   }, [])
 
   useEffect(() => {
-    generateAvailableTimes(openingTime, closingTime, intervalMinutes)
-  }, [openingTime, closingTime, intervalMinutes])
+    generateAvailableTimes(
+      openingTime,
+      closingTime,
+      intervalMinutes
+    )
+  }, [
+    openingTime,
+    closingTime,
+    intervalMinutes,
+  ])
 
   useEffect(() => {
     loadOccupiedTimes()
-  }, [date, selectedProfessionalId])
+  }, [
+    date,
+    selectedProfessionalId,
+    selectedServiceId,
+  ])
 
   function generateAvailableTimes(
     opening: string,
@@ -64,19 +79,31 @@ export default function PublicBookingPage() {
   ) {
     const times: string[] = []
 
-    const [openingHour, openingMinute] = opening.split(':').map(Number)
-    const [closingHour, closingMinute] = closing.split(':').map(Number)
+    const [openingHour, openingMinute] =
+      opening.split(':').map(Number)
 
-    const start = openingHour * 60 + openingMinute
-    const end = closingHour * 60 + closingMinute
+    const [closingHour, closingMinute] =
+      closing.split(':').map(Number)
 
-    for (let minutes = start; minutes <= end; minutes += interval) {
+    const start =
+      openingHour * 60 + openingMinute
+
+    const end =
+      closingHour * 60 + closingMinute
+
+    for (
+      let minutes = start;
+      minutes <= end;
+      minutes += interval
+    ) {
       const hour = Math.floor(minutes / 60)
+
       const minute = minutes % 60
 
-      const formattedTime = `${String(hour).padStart(2, '0')}:${String(
-        minute
-      ).padStart(2, '0')}`
+      const formattedTime = `${String(hour).padStart(
+        2,
+        '0'
+      )}:${String(minute).padStart(2, '0')}`
 
       times.push(formattedTime)
     }
@@ -99,15 +126,23 @@ export default function PublicBookingPage() {
   async function loadData() {
     const { data: settings } = await supabase
       .from('company_settings')
-      .select(
-        'company_id, company_name, phone, address, logo_url, opening_time, closing_time, interval_minutes'
-      )
+      .select(`
+        company_id,
+        company_name,
+        phone,
+        address,
+        logo_url,
+        opening_time,
+        closing_time,
+        interval_minutes
+      `)
       .limit(1)
       .single()
 
     if (!settings?.company_id) return
 
     setCompanyId(settings.company_id)
+
     setCompanyName(settings.company_name || '')
     setCompanyPhone(settings.phone || '')
     setCompanyAddress(settings.address || '')
@@ -115,18 +150,29 @@ export default function PublicBookingPage() {
 
     setOpeningTime(settings.opening_time || '08:00')
     setClosingTime(settings.closing_time || '20:00')
+
     setIntervalMinutes(settings.interval_minutes || 30)
 
     const { data: servicesData } = await supabase
       .from('services')
-      .select('id, name, price, duration_minutes')
+      .select(`
+        id,
+        name,
+        price,
+        duration_minutes
+      `)
       .eq('company_id', settings.company_id)
       .eq('active', true)
       .order('name')
 
     const { data: professionalsData } = await supabase
       .from('professionals')
-      .select('id, name, role, photo_url')
+      .select(`
+        id,
+        name,
+        role,
+        photo_url
+      `)
       .eq('company_id', settings.company_id)
       .eq('active', true)
       .order('name')
@@ -143,15 +189,56 @@ export default function PublicBookingPage() {
 
     const { data } = await supabase
       .from('appointments')
-      .select('appointment_time')
+      .select(`
+        appointment_time,
+        services (
+          duration_minutes
+        )
+      `)
       .eq('professional_id', selectedProfessionalId)
       .eq('appointment_date', date)
       .neq('status', 'cancelled')
 
-    const times =
-      data?.map((item) => item.appointment_time.slice(0, 5)) || []
+    const blockedTimes: string[] = []
 
-    setOccupiedTimes(times)
+    data?.forEach((appointment: any) => {
+      const appointmentTime =
+        appointment.appointment_time.slice(0, 5)
+
+      const duration =
+        appointment.services?.duration_minutes || 0
+
+      const totalBlockMinutes =
+        duration + intervalMinutes
+
+      const [hour, minute] =
+        appointmentTime.split(':').map(Number)
+
+      const startMinutes =
+        hour * 60 + minute
+
+      for (
+        let current = startMinutes;
+        current < startMinutes + totalBlockMinutes;
+        current += intervalMinutes
+      ) {
+        const currentHour =
+          Math.floor(current / 60)
+
+        const currentMinute =
+          current % 60
+
+        const formattedTime = `${String(
+          currentHour
+        ).padStart(2, '0')}:${String(
+          currentMinute
+        ).padStart(2, '0')}`
+
+        blockedTimes.push(formattedTime)
+      }
+    })
+
+    setOccupiedTimes(blockedTimes)
   }
 
   async function createBooking() {
@@ -169,18 +256,6 @@ export default function PublicBookingPage() {
       return
     }
 
-    if (time < openingTime || time > closingTime) {
-      alert(`Escolha um horário entre ${openingTime} e ${closingTime}.`)
-      return
-    }
-
-    const today = new Date().toISOString().split('T')[0]
-
-    if (date < today) {
-      alert('Não é possível agendar em uma data passada.')
-      return
-    }
-
     if (occupiedTimes.includes(time)) {
       alert('Este horário já está ocupado.')
       return
@@ -191,7 +266,8 @@ export default function PublicBookingPage() {
     )
 
     const selectedProfessional = professionals.find(
-      (professional) => professional.id === selectedProfessionalId
+      (professional) =>
+        professional.id === selectedProfessionalId
     )
 
     setLoading(true)
@@ -206,7 +282,10 @@ export default function PublicBookingPage() {
     let clientId = existingClient?.id
 
     if (!clientId) {
-      const { data: newClient, error: clientError } = await supabase
+      const {
+        data: newClient,
+        error: clientError,
+      } = await supabase
         .from('clients')
         .insert({
           company_id: companyId,
@@ -219,38 +298,43 @@ export default function PublicBookingPage() {
 
       if (clientError || !newClient) {
         setLoading(false)
-        alert(clientError?.message || 'Erro ao criar cliente.')
+
+        alert(
+          clientError?.message ||
+            'Erro ao criar cliente.'
+        )
+
         return
       }
 
       clientId = newClient.id
     }
 
-    const { error: appointmentError } = await supabase
-      .from('appointments')
-      .insert({
-        company_id: companyId,
-        client_id: clientId,
-        service_id: selectedServiceId,
-        professional_id: selectedProfessionalId,
-        appointment_date: date,
-        appointment_time: time,
-        status: 'scheduled',
-      })
+    const { error: appointmentError } =
+      await supabase
+        .from('appointments')
+        .insert({
+          company_id: companyId,
+          client_id: clientId,
+          service_id: selectedServiceId,
+          professional_id:
+            selectedProfessionalId,
+          appointment_date: date,
+          appointment_time: time,
+          status: 'scheduled',
+        })
 
     setLoading(false)
 
     if (appointmentError) {
-      if (appointmentError.code === '23505') {
-        alert('Este horário já está ocupado para este profissional.')
-        return
-      }
-
       alert(appointmentError.message)
       return
     }
 
-    setSuccessMessage('Agendamento realizado com sucesso!')
+    setSuccessMessage(
+      'Agendamento realizado com sucesso!'
+    )
+
     setSuccessDetails(
       `${selectedService?.name} com ${selectedProfessional?.name} em ${date} às ${time}`
     )
@@ -291,19 +375,7 @@ export default function PublicBookingPage() {
 
         {successMessage ? (
           <div className="mt-6 rounded-3xl border border-green-800 bg-green-950 p-8 text-center shadow-2xl">
-            {companyLogo && (
-              <img
-                src={companyLogo}
-                alt={companyName}
-                className="mx-auto mb-6 h-24 w-24 rounded-3xl object-cover ring-4 ring-green-800"
-              />
-            )}
-
-            <p className="text-sm font-medium uppercase tracking-[0.3em] text-green-400">
-              Agendamento confirmado
-            </p>
-
-            <p className="mt-4 text-3xl font-bold text-green-300">
+            <p className="text-3xl font-bold text-green-300">
               {successMessage}
             </p>
 
@@ -311,27 +383,9 @@ export default function PublicBookingPage() {
               {successDetails}
             </p>
 
-            <div className="mt-8 rounded-2xl border border-green-800 bg-black/20 p-6 text-green-100">
-              <p className="text-lg font-bold">
-                {companyName}
-              </p>
-
-              {companyAddress && (
-                <p className="mt-3">
-                  {companyAddress}
-                </p>
-              )}
-
-              {companyPhone && (
-                <p className="mt-2">
-                  {companyPhone}
-                </p>
-              )}
-            </div>
-
             <button
               onClick={resetBooking}
-              className="mt-6 w-full rounded-xl bg-white p-4 font-bold text-black transition hover:bg-zinc-200"
+              className="mt-6 w-full rounded-xl bg-white p-4 font-bold text-black"
             >
               Novo agendamento
             </button>
@@ -347,14 +401,16 @@ export default function PublicBookingPage() {
                 {services.map((service) => (
                   <button
                     key={service.id}
-                    onClick={() => setSelectedServiceId(service.id)}
+                    onClick={() =>
+                      setSelectedServiceId(service.id)
+                    }
                     className={`w-full rounded-2xl border p-5 text-left transition ${
                       selectedServiceId === service.id
                         ? 'border-white bg-zinc-700'
                         : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center justify-between">
                       <div>
                         <p className="text-lg font-bold">
                           {service.name}
@@ -365,7 +421,7 @@ export default function PublicBookingPage() {
                         </p>
                       </div>
 
-                      <strong className="text-lg">
+                      <strong>
                         R$ {Number(service.price).toFixed(2)}
                       </strong>
                     </div>
@@ -384,10 +440,13 @@ export default function PublicBookingPage() {
                   <button
                     key={professional.id}
                     onClick={() =>
-                      setSelectedProfessionalId(professional.id)
+                      setSelectedProfessionalId(
+                        professional.id
+                      )
                     }
                     className={`w-full rounded-2xl border p-5 text-left transition ${
-                      selectedProfessionalId === professional.id
+                      selectedProfessionalId ===
+                      professional.id
                         ? 'border-white bg-zinc-700'
                         : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
                     }`}
@@ -421,13 +480,8 @@ export default function PublicBookingPage() {
             </div>
 
             <div className="mt-6 grid gap-4 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-xl">
-              <h2 className="text-2xl font-bold">
-                Seus dados
-              </h2>
-
               <input
                 type="date"
-                min={new Date().toISOString().split('T')[0]}
                 className="rounded-xl bg-zinc-800 p-4"
                 value={date}
                 onChange={(e) => {
@@ -442,28 +496,37 @@ export default function PublicBookingPage() {
                 </p>
 
                 <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-                  {availableTimes.map((availableTime) => {
-                    const isOccupied =
-                      occupiedTimes.includes(availableTime)
+                  {availableTimes.map(
+                    (availableTime) => {
+                      const isOccupied =
+                        occupiedTimes.includes(
+                          availableTime
+                        )
 
-                    return (
-                      <button
-                        key={availableTime}
-                        type="button"
-                        disabled={isOccupied}
-                        onClick={() => setTime(availableTime)}
-                        className={`rounded-xl p-3 text-sm font-medium transition ${
-                          isOccupied
-                            ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                            : time === availableTime
-                              ? 'bg-white text-black'
-                              : 'bg-zinc-800 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {availableTime}
-                      </button>
-                    )
-                  })}
+                      return (
+                        <button
+                          key={availableTime}
+                          type="button"
+                          disabled={isOccupied}
+                          onClick={() =>
+                            setTime(
+                              availableTime
+                            )
+                          }
+                          className={`rounded-xl p-3 text-sm font-medium transition ${
+                            isOccupied
+                              ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                              : time ===
+                                  availableTime
+                                ? 'bg-white text-black'
+                                : 'bg-zinc-800 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {availableTime}
+                        </button>
+                      )
+                    }
+                  )}
                 </div>
               </div>
 
@@ -471,22 +534,32 @@ export default function PublicBookingPage() {
                 placeholder="Seu nome"
                 className="rounded-xl bg-zinc-800 p-4"
                 value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                onChange={(e) =>
+                  setClientName(
+                    e.target.value
+                  )
+                }
               />
 
               <input
                 placeholder="Seu telefone"
                 className="rounded-xl bg-zinc-800 p-4"
                 value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
+                onChange={(e) =>
+                  setClientPhone(
+                    e.target.value
+                  )
+                }
               />
 
               <button
                 onClick={createBooking}
                 disabled={loading}
-                className="rounded-xl bg-white p-4 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-60"
+                className="rounded-xl bg-white p-4 font-bold text-black"
               >
-                {loading ? 'Agendando...' : 'Confirmar agendamento'}
+                {loading
+                  ? 'Agendando...'
+                  : 'Confirmar agendamento'}
               </button>
             </div>
           </>
