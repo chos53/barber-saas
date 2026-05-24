@@ -35,7 +35,6 @@ export default function AgendaPage() {
   const [services, setServices] = useState<Service[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
-
   const [search, setSearch] = useState('')
 
   const [clientId, setClientId] = useState('')
@@ -45,9 +44,7 @@ export default function AgendaPage() {
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
 
-  const [filterDate, setFilterDate] = useState(
-    new Date().toISOString().split('T')[0]
-  )
+  const [filterDate, setFilterDate] = useState('')
 
   useEffect(() => {
     loadData()
@@ -121,7 +118,7 @@ export default function AgendaPage() {
       .eq('company_id', profile.company_id)
       .eq('active', true)
 
-    const { data: appointmentsData } = await supabase
+    const query = supabase
       .from('appointments')
       .select(`
         id,
@@ -134,8 +131,14 @@ export default function AgendaPage() {
         professionals ( name )
       `)
       .eq('company_id', profile.company_id)
-      .eq('appointment_date', filterDate)
+      .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true })
+
+    if (filterDate) {
+      query.eq('appointment_date', filterDate)
+    }
+
+    const { data: appointmentsData } = await query
 
     setClients(clientsData || [])
     setServices(servicesData || [])
@@ -178,7 +181,6 @@ export default function AgendaPage() {
     setDate('')
     setTime('')
     setNotes('')
-
     setFilterDate(date)
 
     loadData()
@@ -307,44 +309,59 @@ export default function AgendaPage() {
         )}
 
         {filteredAppointments.map((appointment) => (
-          <div key={appointment.id} className="rounded-xl bg-zinc-900 p-4">
-            <p className="font-bold">
-              {appointment.clients?.name} —{' '}
-              {appointment.services?.name}
-            </p>
+          <div
+            key={appointment.id}
+            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xl font-bold">
+                  {appointment.clients?.name}
+                </p>
 
-            <p className="text-zinc-400">
-              Profissional:{' '}
-              {appointment.professionals?.name}
-            </p>
+                <p className="mt-1 text-zinc-300">
+                  {appointment.services?.name}
+                </p>
 
-            <p className="text-zinc-400">
-              {appointment.appointment_date} às{' '}
-              {appointment.appointment_time}
-            </p>
+                <p className="mt-2 text-sm text-zinc-500">
+                  Profissional: {appointment.professionals?.name}
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-lg font-bold">
+                  {appointment.appointment_time.slice(0, 5)}
+                </p>
+
+                <p className="text-sm text-zinc-500">
+                  {appointment.appointment_date}
+                </p>
+              </div>
+            </div>
 
             {appointment.notes && (
-              <p className="mt-2 text-sm text-zinc-500">
-                Obs: {appointment.notes}
-              </p>
+              <div className="mt-4 rounded-xl bg-zinc-800 p-3">
+                <p className="text-sm text-zinc-400">
+                  {appointment.notes}
+                </p>
+              </div>
             )}
 
-            <p className="mt-2 text-zinc-500">
-              Status:{' '}
+            <div className="mt-4">
               <span
-                className={
+                className={`rounded-full px-3 py-1 text-sm font-bold ${
                   appointment.status === 'completed'
-                    ? 'text-green-400'
+                    ? 'bg-green-900 text-green-300'
                     : appointment.status === 'cancelled'
-                      ? 'text-red-400'
+                      ? 'bg-red-900 text-red-300'
                       : appointment.status === 'no_show'
-                        ? 'text-yellow-400'
-                        : 'text-blue-400'
-                }
+                        ? 'bg-yellow-900 text-yellow-300'
+                        : 'bg-blue-900 text-blue-300'
+                }`}
               >
                 {getStatusLabel(appointment.status)}
               </span>
-            </p>
+            </div>
 
             <div className="mt-4 flex gap-2">
               <button
