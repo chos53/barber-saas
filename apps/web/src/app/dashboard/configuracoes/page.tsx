@@ -10,6 +10,10 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [openingHours, setOpeningHours] = useState('')
+  const [openingTime, setOpeningTime] = useState('08:00')
+  const [closingTime, setClosingTime] = useState('20:00')
+  const [intervalMinutes, setIntervalMinutes] = useState('30')
+
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
@@ -43,7 +47,9 @@ export default function SettingsPage() {
 
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('company_name, phone, address, opening_hours, logo_url')
+      .select(
+        'company_name, phone, address, opening_hours, opening_time, closing_time, interval_minutes, logo_url'
+      )
       .eq('company_id', profile.company_id)
       .single()
 
@@ -52,6 +58,9 @@ export default function SettingsPage() {
       setPhone(settings.phone || '')
       setAddress(settings.address || '')
       setOpeningHours(settings.opening_hours || '')
+      setOpeningTime(settings.opening_time || '08:00')
+      setClosingTime(settings.closing_time || '20:00')
+      setIntervalMinutes(String(settings.interval_minutes || 30))
       setLogoUrl(settings.logo_url || '')
       setLogoPreview(settings.logo_url || '')
     }
@@ -94,6 +103,9 @@ export default function SettingsPage() {
         phone: phone.trim(),
         address: address.trim(),
         opening_hours: openingHours.trim(),
+        opening_time: openingTime,
+        closing_time: closingTime,
+        interval_minutes: Number(intervalMinutes),
         logo_url: finalLogoUrl || null,
       },
       {
@@ -177,11 +189,54 @@ export default function SettingsPage() {
         />
 
         <textarea
-          placeholder="Horário de funcionamento"
+          placeholder="Horário de funcionamento em texto livre"
           className="rounded-lg bg-zinc-800 p-3"
           value={openingHours}
           onChange={(e) => setOpeningHours(e.target.value)}
         />
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-2 block text-sm text-zinc-400">
+              Hora de abertura
+            </label>
+
+            <input
+              type="time"
+              className="w-full rounded-lg bg-zinc-800 p-3"
+              value={openingTime}
+              onChange={(e) => setOpeningTime(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-zinc-400">
+              Hora de fechamento
+            </label>
+
+            <input
+              type="time"
+              className="w-full rounded-lg bg-zinc-800 p-3"
+              value={closingTime}
+              onChange={(e) => setClosingTime(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-zinc-400">
+              Intervalo em minutos
+            </label>
+
+            <input
+              type="number"
+              min="10"
+              step="5"
+              className="w-full rounded-lg bg-zinc-800 p-3"
+              value={intervalMinutes}
+              onChange={(e) => setIntervalMinutes(e.target.value)}
+            />
+          </div>
+        </div>
 
         {successMessage && (
           <p className="rounded-lg bg-green-900 p-3 text-green-300">
