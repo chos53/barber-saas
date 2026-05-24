@@ -48,8 +48,20 @@ export default function PublicBookingPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [successDetails, setSuccessDetails] = useState('')
 
+  const [today, setToday] = useState('')
+  const [currentTime, setCurrentTime] = useState('')
+
   useEffect(() => {
     loadData()
+
+    const now = new Date()
+    const currentDate = now.toISOString().split('T')[0]
+
+    const hours = String(now.getHours()).padStart(2, '0')
+    const minutes = String(now.getMinutes()).padStart(2, '0')
+
+    setToday(currentDate)
+    setCurrentTime(`${hours}:${minutes}`)
   }, [])
 
   useEffect(() => {
@@ -58,19 +70,11 @@ export default function PublicBookingPage() {
       closingTime,
       intervalMinutes
     )
-  }, [
-    openingTime,
-    closingTime,
-    intervalMinutes,
-  ])
+  }, [openingTime, closingTime, intervalMinutes])
 
   useEffect(() => {
     loadOccupiedTimes()
-  }, [
-    date,
-    selectedProfessionalId,
-    selectedServiceId,
-  ])
+  }, [date, selectedProfessionalId, selectedServiceId])
 
   function generateAvailableTimes(
     opening: string,
@@ -85,11 +89,8 @@ export default function PublicBookingPage() {
     const [closingHour, closingMinute] =
       closing.split(':').map(Number)
 
-    const start =
-      openingHour * 60 + openingMinute
-
-    const end =
-      closingHour * 60 + closingMinute
+    const start = openingHour * 60 + openingMinute
+    const end = closingHour * 60 + closingMinute
 
     for (
       let minutes = start;
@@ -97,7 +98,6 @@ export default function PublicBookingPage() {
       minutes += interval
     ) {
       const hour = Math.floor(minutes / 60)
-
       const minute = minutes % 60
 
       const formattedTime = `${String(hour).padStart(
@@ -142,15 +142,12 @@ export default function PublicBookingPage() {
     if (!settings?.company_id) return
 
     setCompanyId(settings.company_id)
-
     setCompanyName(settings.company_name || '')
     setCompanyPhone(settings.phone || '')
     setCompanyAddress(settings.address || '')
     setCompanyLogo(settings.logo_url || '')
-
     setOpeningTime(settings.opening_time || '08:00')
     setClosingTime(settings.closing_time || '20:00')
-
     setIntervalMinutes(settings.interval_minutes || 30)
 
     const { data: servicesData } = await supabase
@@ -214,19 +211,15 @@ export default function PublicBookingPage() {
       const [hour, minute] =
         appointmentTime.split(':').map(Number)
 
-      const startMinutes =
-        hour * 60 + minute
+      const startMinutes = hour * 60 + minute
 
       for (
         let current = startMinutes;
         current < startMinutes + totalBlockMinutes;
         current += intervalMinutes
       ) {
-        const currentHour =
-          Math.floor(current / 60)
-
-        const currentMinute =
-          current % 60
+        const currentHour = Math.floor(current / 60)
+        const currentMinute = current % 60
 
         const formattedTime = `${String(
           currentHour
@@ -253,6 +246,16 @@ export default function PublicBookingPage() {
       !clientPhone.trim()
     ) {
       alert('Preencha todos os campos.')
+      return
+    }
+
+    if (date < today) {
+      alert('Não é possível agendar em uma data passada.')
+      return
+    }
+
+    if (date === today && time < currentTime) {
+      alert('Não é possível agendar em um horário que já passou.')
       return
     }
 
@@ -482,6 +485,7 @@ export default function PublicBookingPage() {
             <div className="mt-6 grid gap-4 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-xl">
               <input
                 type="date"
+                min={today}
                 className="rounded-xl bg-zinc-800 p-4"
                 value={date}
                 onChange={(e) => {
@@ -503,11 +507,18 @@ export default function PublicBookingPage() {
                           availableTime
                         )
 
+                      const isPastTime =
+                        date === today &&
+                        availableTime < currentTime
+
                       return (
                         <button
                           key={availableTime}
                           type="button"
-                          disabled={isOccupied}
+                          disabled={
+                            isOccupied ||
+                            isPastTime
+                          }
                           onClick={() =>
                             setTime(
                               availableTime
@@ -516,10 +527,12 @@ export default function PublicBookingPage() {
                           className={`rounded-xl p-3 text-sm font-medium transition ${
                             isOccupied
                               ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                              : time ===
-                                  availableTime
-                                ? 'bg-white text-black'
-                                : 'bg-zinc-800 hover:bg-zinc-700'
+                              : isPastTime
+                                ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                                : time ===
+                                    availableTime
+                                  ? 'bg-white text-black'
+                                  : 'bg-zinc-800 hover:bg-zinc-700'
                           }`}
                         >
                           {availableTime}
