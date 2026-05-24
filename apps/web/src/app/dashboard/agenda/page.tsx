@@ -38,6 +38,13 @@ export default function AgendaPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
 
+  const [
+    selectedAppointment,
+    setSelectedAppointment,
+  ] = useState<Appointment | null>(
+    null
+  )
+
   const [search, setSearch] = useState('')
 
   const [clientId, setClientId] = useState('')
@@ -626,7 +633,12 @@ export default function AgendaPage() {
           (appointment) => (
             <div
               key={appointment.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg"
+              onClick={() =>
+                setSelectedAppointment(
+                  appointment
+                )
+              }
+              className="cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg transition hover:border-white"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -703,36 +715,42 @@ export default function AgendaPage() {
 
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.stopPropagation()
+
                     updateAppointmentStatus(
                       appointment.id,
                       'completed'
                     )
-                  }
+                  }}
                   className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
                 >
                   Concluído
                 </button>
 
                 <button
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.stopPropagation()
+
                     updateAppointmentStatus(
                       appointment.id,
                       'cancelled'
                     )
-                  }
+                  }}
                   className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
                 >
                   Cancelar
                 </button>
 
                 <button
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.stopPropagation()
+
                     updateAppointmentStatus(
                       appointment.id,
                       'no_show'
                     )
-                  }
+                  }}
                   className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
                 >
                   Não compareceu
@@ -742,6 +760,120 @@ export default function AgendaPage() {
           )
         )}
       </div>
+
+      {selectedAppointment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
+                  Detalhes do agendamento
+                </p>
+
+                <h2 className="mt-2 text-3xl font-bold">
+                  {
+                    selectedAppointment
+                      .clients?.name
+                  }
+                </h2>
+              </div>
+
+              <button
+                onClick={() =>
+                  setSelectedAppointment(
+                    null
+                  )
+                }
+                className="rounded-xl bg-zinc-800 px-4 py-2"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <div className="rounded-2xl bg-zinc-800 p-4">
+                <p className="text-sm text-zinc-500">
+                  Serviço
+                </p>
+
+                <p className="mt-1 text-lg font-bold">
+                  {
+                    selectedAppointment
+                      .services?.name
+                  }
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-zinc-800 p-4">
+                <p className="text-sm text-zinc-500">
+                  Profissional
+                </p>
+
+                <p className="mt-1 text-lg font-bold">
+                  {
+                    selectedAppointment
+                      .professionals
+                      ?.name
+                  }
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-2xl bg-zinc-800 p-4">
+                  <p className="text-sm text-zinc-500">
+                    Data
+                  </p>
+
+                  <p className="mt-1 text-lg font-bold">
+                    {
+                      selectedAppointment.appointment_date
+                    }
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-zinc-800 p-4">
+                  <p className="text-sm text-zinc-500">
+                    Horário
+                  </p>
+
+                  <p className="mt-1 text-lg font-bold">
+                    {selectedAppointment.appointment_time.slice(
+                      0,
+                      5
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-zinc-800 p-4">
+                <p className="text-sm text-zinc-500">
+                  Status
+                </p>
+
+                <p className="mt-1 text-lg font-bold">
+                  {getStatusLabel(
+                    selectedAppointment.status
+                  )}
+                </p>
+              </div>
+
+              {selectedAppointment.notes && (
+                <div className="rounded-2xl bg-zinc-800 p-4">
+                  <p className="text-sm text-zinc-500">
+                    Observações
+                  </p>
+
+                  <p className="mt-2 text-zinc-300">
+                    {
+                      selectedAppointment.notes
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
