@@ -54,8 +54,30 @@ export default function AgendaPage() {
   const [intervalMinutes, setIntervalMinutes] = useState(30)
   const [availableTimes, setAvailableTimes] = useState<string[]>([])
 
+  const [today, setToday] = useState('')
+  const [currentTime, setCurrentTime] = useState('')
+
   useEffect(() => {
     loadData()
+
+    const now = new Date()
+
+    const currentDate =
+      now.toISOString().split('T')[0]
+
+    const hours = String(
+      now.getHours()
+    ).padStart(2, '0')
+
+    const minutes = String(
+      now.getMinutes()
+    ).padStart(2, '0')
+
+    setToday(currentDate)
+
+    setCurrentTime(
+      `${hours}:${minutes}`
+    )
   }, [filterDate])
 
   useEffect(() => {
@@ -83,8 +105,11 @@ export default function AgendaPage() {
     const [closingHour, closingMinute] =
       closing.split(':').map(Number)
 
-    const start = openingHour * 60 + openingMinute
-    const end = closingHour * 60 + closingMinute
+    const start =
+      openingHour * 60 + openingMinute
+
+    const end =
+      closingHour * 60 + closingMinute
 
     for (
       let minutes = start;
@@ -92,6 +117,7 @@ export default function AgendaPage() {
       minutes += interval
     ) {
       const hour = Math.floor(minutes / 60)
+
       const minute = minutes % 60
 
       const formattedTime = `${String(hour).padStart(
@@ -138,20 +164,25 @@ export default function AgendaPage() {
       const [hour, minute] =
         appointmentTime.split(':').map(Number)
 
-      const startMinutes = hour * 60 + minute
+      const startMinutes =
+        hour * 60 + minute
 
       for (
         let current = startMinutes;
         current < startMinutes + totalBlockMinutes;
         current += intervalMinutes
       ) {
-        const currentHour = Math.floor(current / 60)
-        const currentMinute = current % 60
+        const currentHour =
+          Math.floor(current / 60)
 
-        const formattedTime = `${String(currentHour).padStart(
-          2,
-          '0'
-        )}:${String(currentMinute).padStart(2, '0')}`
+        const currentMinute =
+          current % 60
+
+        const formattedTime = `${String(
+          currentHour
+        ).padStart(2, '0')}:${String(
+          currentMinute
+        ).padStart(2, '0')}`
 
         blockedTimes.push(formattedTime)
       }
@@ -212,14 +243,24 @@ export default function AgendaPage() {
 
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('opening_time, closing_time, interval_minutes')
+      .select(
+        'opening_time, closing_time, interval_minutes'
+      )
       .eq('company_id', profile.company_id)
       .single()
 
     if (settings) {
-      setOpeningTime(settings.opening_time || '08:00')
-      setClosingTime(settings.closing_time || '20:00')
-      setIntervalMinutes(settings.interval_minutes || 30)
+      setOpeningTime(
+        settings.opening_time || '08:00'
+      )
+
+      setClosingTime(
+        settings.closing_time || '20:00'
+      )
+
+      setIntervalMinutes(
+        settings.interval_minutes || 30
+      )
     }
 
     const { data: clientsData } = await supabase
@@ -253,29 +294,74 @@ export default function AgendaPage() {
         professionals ( name )
       `)
       .eq('company_id', profile.company_id)
-      .order('appointment_date', { ascending: true })
-      .order('appointment_time', { ascending: true })
+      .order('appointment_date', {
+        ascending: true,
+      })
+      .order('appointment_time', {
+        ascending: true,
+      })
 
     if (filterDate) {
-      query.eq('appointment_date', filterDate)
+      query.eq(
+        'appointment_date',
+        filterDate
+      )
     }
 
-    const { data: appointmentsData } = await query
+    const { data: appointmentsData } =
+      await query
 
     setClients(clientsData || [])
     setServices(servicesData || [])
-    setProfessionals(professionalsData || [])
-    setAppointments((appointmentsData || []) as Appointment[])
+    setProfessionals(
+      professionalsData || []
+    )
+
+    setAppointments(
+      (appointmentsData ||
+        []) as Appointment[]
+    )
   }
 
   async function createAppointment() {
-    if (!clientId || !serviceId || !professionalId || !date || !time) {
-      alert('Preencha cliente, serviço, profissional, data e horário.')
+    if (
+      !clientId ||
+      !serviceId ||
+      !professionalId ||
+      !date ||
+      !time
+    ) {
+      alert(
+        'Preencha cliente, serviço, profissional, data e horário.'
+      )
+
+      return
+    }
+
+    if (date < today) {
+      alert(
+        'Não é possível criar agendamento em data passada.'
+      )
+
+      return
+    }
+
+    if (
+      date === today &&
+      time < currentTime
+    ) {
+      alert(
+        'Não é possível criar agendamento em horário passado.'
+      )
+
       return
     }
 
     if (occupiedTimes.includes(time)) {
-      alert('Este horário já está ocupado.')
+      alert(
+        'Este horário já está ocupado.'
+      )
+
       return
     }
 
@@ -297,10 +383,12 @@ export default function AgendaPage() {
         alert(
           'Este profissional já possui um agendamento neste dia e horário.'
         )
+
         return
       }
 
       alert(error.message)
+
       return
     }
 
@@ -347,9 +435,14 @@ export default function AgendaPage() {
 
         <input
           type="date"
+          min={today}
           className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
           value={filterDate}
-          onChange={(e) => setFilterDate(e.target.value)}
+          onChange={(e) =>
+            setFilterDate(
+              e.target.value
+            )
+          }
         />
       </div>
 
@@ -358,7 +451,9 @@ export default function AgendaPage() {
           placeholder="Pesquisar cliente ou profissional..."
           className="w-full rounded-xl bg-zinc-900 p-4"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) =>
+            setSearch(e.target.value)
+          }
         />
       </div>
 
@@ -366,7 +461,9 @@ export default function AgendaPage() {
         <select
           className="rounded-lg bg-zinc-800 p-3"
           value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
+          onChange={(e) =>
+            setClientId(e.target.value)
+          }
         >
           <option value="">
             Selecione um cliente
@@ -386,7 +483,10 @@ export default function AgendaPage() {
           className="rounded-lg bg-zinc-800 p-3"
           value={serviceId}
           onChange={(e) => {
-            setServiceId(e.target.value)
+            setServiceId(
+              e.target.value
+            )
+
             setTime('')
           }}
         >
@@ -408,7 +508,10 @@ export default function AgendaPage() {
           className="rounded-lg bg-zinc-800 p-3"
           value={professionalId}
           onChange={(e) => {
-            setProfessionalId(e.target.value)
+            setProfessionalId(
+              e.target.value
+            )
+
             setTime('')
           }}
         >
@@ -416,18 +519,23 @@ export default function AgendaPage() {
             Selecione um profissional
           </option>
 
-          {professionals.map((professional) => (
-            <option
-              key={professional.id}
-              value={professional.id}
-            >
-              {professional.name}
-            </option>
-          ))}
+          {professionals.map(
+            (professional) => (
+              <option
+                key={professional.id}
+                value={
+                  professional.id
+                }
+              >
+                {professional.name}
+              </option>
+            )
+          )}
         </select>
 
         <input
           type="date"
+          min={today}
           className="rounded-lg bg-zinc-800 p-3"
           value={date}
           onChange={(e) => {
@@ -442,28 +550,49 @@ export default function AgendaPage() {
           </p>
 
           <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-            {availableTimes.map((availableTime) => {
-              const isOccupied =
-                occupiedTimes.includes(availableTime)
+            {availableTimes.map(
+              (availableTime) => {
+                const isOccupied =
+                  occupiedTimes.includes(
+                    availableTime
+                  )
 
-              return (
-                <button
-                  key={availableTime}
-                  type="button"
-                  disabled={isOccupied}
-                  onClick={() => setTime(availableTime)}
-                  className={`rounded-xl p-3 text-sm font-medium transition ${
-                    isOccupied
-                      ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                      : time === availableTime
-                        ? 'bg-white text-black'
-                        : 'bg-zinc-800 hover:bg-zinc-700'
-                  }`}
-                >
-                  {availableTime}
-                </button>
-              )
-            })}
+                const isPastTime =
+                  date === today &&
+                  availableTime <
+                    currentTime
+
+                return (
+                  <button
+                    key={
+                      availableTime
+                    }
+                    type="button"
+                    disabled={
+                      isOccupied ||
+                      isPastTime
+                    }
+                    onClick={() =>
+                      setTime(
+                        availableTime
+                      )
+                    }
+                    className={`rounded-xl p-3 text-sm font-medium transition ${
+                      isOccupied
+                        ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                        : isPastTime
+                          ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                          : time ===
+                              availableTime
+                            ? 'bg-white text-black'
+                            : 'bg-zinc-800 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {availableTime}
+                  </button>
+                )
+              }
+            )}
           </div>
         </div>
 
@@ -471,7 +600,9 @@ export default function AgendaPage() {
           placeholder="Observações do agendamento"
           className="rounded-lg bg-zinc-800 p-3"
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) =>
+            setNotes(e.target.value)
+          }
         />
 
         <button
@@ -483,106 +614,133 @@ export default function AgendaPage() {
       </div>
 
       <div className="mt-8 space-y-3">
-        {filteredAppointments.length === 0 && (
+        {filteredAppointments.length ===
+          0 && (
           <p className="rounded-xl bg-zinc-900 p-4 text-zinc-500">
-            Nenhum agendamento encontrado.
+            Nenhum agendamento
+            encontrado.
           </p>
         )}
 
-        {filteredAppointments.map((appointment) => (
-          <div
-            key={appointment.id}
-            className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xl font-bold">
-                  {appointment.clients?.name}
-                </p>
+        {filteredAppointments.map(
+          (appointment) => (
+            <div
+              key={appointment.id}
+              className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xl font-bold">
+                    {
+                      appointment.clients
+                        ?.name
+                    }
+                  </p>
 
-                <p className="mt-1 text-zinc-300">
-                  {appointment.services?.name}
-                </p>
+                  <p className="mt-1 text-zinc-300">
+                    {
+                      appointment.services
+                        ?.name
+                    }
+                  </p>
 
-                <p className="mt-2 text-sm text-zinc-500">
-                  Profissional: {appointment.professionals?.name}
-                </p>
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Profissional:{' '}
+                    {
+                      appointment
+                        .professionals
+                        ?.name
+                    }
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-lg font-bold">
+                    {appointment.appointment_time.slice(
+                      0,
+                      5
+                    )}
+                  </p>
+
+                  <p className="text-sm text-zinc-500">
+                    {
+                      appointment.appointment_date
+                    }
+                  </p>
+                </div>
               </div>
 
-              <div className="text-right">
-                <p className="text-lg font-bold">
-                  {appointment.appointment_time.slice(0, 5)}
-                </p>
+              {appointment.notes && (
+                <div className="mt-4 rounded-xl bg-zinc-800 p-3">
+                  <p className="text-sm text-zinc-400">
+                    {
+                      appointment.notes
+                    }
+                  </p>
+                </div>
+              )}
 
-                <p className="text-sm text-zinc-500">
-                  {appointment.appointment_date}
-                </p>
-              </div>
-            </div>
-
-            {appointment.notes && (
-              <div className="mt-4 rounded-xl bg-zinc-800 p-3">
-                <p className="text-sm text-zinc-400">
-                  {appointment.notes}
-                </p>
-              </div>
-            )}
-
-            <div className="mt-4">
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-bold ${
-                  appointment.status === 'completed'
-                    ? 'bg-green-900 text-green-300'
-                    : appointment.status === 'cancelled'
-                      ? 'bg-red-900 text-red-300'
-                      : appointment.status === 'no_show'
-                        ? 'bg-yellow-900 text-yellow-300'
-                        : 'bg-blue-900 text-blue-300'
-                }`}
-              >
-                {getStatusLabel(appointment.status)}
-              </span>
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() =>
-                  updateAppointmentStatus(
-                    appointment.id,
+              <div className="mt-4">
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-bold ${
+                    appointment.status ===
                     'completed'
-                  )
-                }
-                className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
-              >
-                Concluído
-              </button>
+                      ? 'bg-green-900 text-green-300'
+                      : appointment.status ===
+                          'cancelled'
+                        ? 'bg-red-900 text-red-300'
+                        : appointment.status ===
+                            'no_show'
+                          ? 'bg-yellow-900 text-yellow-300'
+                          : 'bg-blue-900 text-blue-300'
+                  }`}
+                >
+                  {getStatusLabel(
+                    appointment.status
+                  )}
+                </span>
+              </div>
 
-              <button
-                onClick={() =>
-                  updateAppointmentStatus(
-                    appointment.id,
-                    'cancelled'
-                  )
-                }
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
-              >
-                Cancelar
-              </button>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() =>
+                    updateAppointmentStatus(
+                      appointment.id,
+                      'completed'
+                    )
+                  }
+                  className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
+                >
+                  Concluído
+                </button>
 
-              <button
-                onClick={() =>
-                  updateAppointmentStatus(
-                    appointment.id,
-                    'no_show'
-                  )
-                }
-                className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
-              >
-                Não compareceu
-              </button>
+                <button
+                  onClick={() =>
+                    updateAppointmentStatus(
+                      appointment.id,
+                      'cancelled'
+                    )
+                  }
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  onClick={() =>
+                    updateAppointmentStatus(
+                      appointment.id,
+                      'no_show'
+                    )
+                  }
+                  className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
+                >
+                  Não compareceu
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
     </div>
   )
