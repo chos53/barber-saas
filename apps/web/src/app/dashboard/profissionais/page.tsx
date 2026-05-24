@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { v4 as uuidv4 } from 'uuid'
 
 type Professional = {
   id: string
@@ -10,6 +11,7 @@ type Professional = {
   email: string | null
   role: string | null
   active: boolean
+  photo_url: string | null
 }
 
 export default function ProfessionalsPage() {
@@ -22,7 +24,12 @@ export default function ProfessionalsPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('')
 
-  const [editingProfessionalId, setEditingProfessionalId] = useState('')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState('')
+
+  const [editingProfessionalId, setEditingProfessionalId] =
+    useState('')
+
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
@@ -62,11 +69,38 @@ export default function ProfessionalsPage() {
 
     const { data } = await supabase
       .from('professionals')
-      .select('id, name, phone, email, role, active')
+      .select(
+        'id, name, phone, email, role, active, photo_url'
+      )
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
     setProfessionals(data || [])
+  }
+
+  async function uploadPhoto() {
+    if (!photoFile) return ''
+
+    const fileExt = photoFile.name.split('.').pop()
+
+    const fileName = `${uuidv4()}.${fileExt}`
+
+    const { error } = await supabase.storage
+      .from('professionals')
+      .upload(fileName, photoFile)
+
+    if (error) {
+      alert(error.message)
+      return ''
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage
+      .from('professionals')
+      .getPublicUrl(fileName)
+
+    return publicUrl
   }
 
   async function createProfessional() {
@@ -75,14 +109,23 @@ export default function ProfessionalsPage() {
       return
     }
 
-    const { error } = await supabase.from('professionals').insert({
-      company_id: companyId,
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      role: role.trim(),
-      active: true,
-    })
+    let photoUrl = ''
+
+    if (photoFile) {
+      photoUrl = await uploadPhoto()
+    }
+
+    const { error } = await supabase
+      .from('professionals')
+      .insert({
+        company_id: companyId,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        role: role.trim(),
+        photo_url: photoUrl || null,
+        active: true,
+      })
 
     if (error) {
       alert(error.message)
@@ -93,16 +136,21 @@ export default function ProfessionalsPage() {
     setPhone('')
     setEmail('')
     setRole('')
+    setPhotoFile(null)
+    setPhotoPreview('')
 
     loadData()
   }
 
   function startEditing(professional: Professional) {
     setEditingProfessionalId(professional.id)
+
     setEditName(professional.name)
     setEditPhone(professional.phone || '')
     setEditEmail(professional.email || '')
     setEditRole(professional.role || '')
+
+    setPhotoPreview(professional.photo_url || '')
   }
 
   function cancelEditing() {
@@ -113,10 +161,18 @@ export default function ProfessionalsPage() {
     setEditRole('')
   }
 
-  async function updateProfessional(professionalId: string) {
+  async function updateProfessional(
+    professionalId: string
+  ) {
     if (!editName.trim()) {
       alert('Digite o nome do profissional.')
       return
+    }
+
+    let photoUrl = photoPreview
+
+    if (photoFile) {
+      photoUrl = await uploadPhoto()
     }
 
     const { error } = await supabase
@@ -126,6 +182,7 @@ export default function ProfessionalsPage() {
         phone: editPhone.trim(),
         email: editEmail.trim(),
         role: editRole.trim(),
+        photo_url: photoUrl || null,
       })
       .eq('id', professionalId)
 
@@ -133,6 +190,9 @@ export default function ProfessionalsPage() {
       alert(error.message)
       return
     }
+
+    setPhotoFile(null)
+    setPhotoPreview('')
 
     cancelEditing()
     loadData()
@@ -159,7 +219,9 @@ export default function ProfessionalsPage() {
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">Profissionais</h1>
+      <h1 className="text-4xl font-bold">
+        Profissionais
+      </h1>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
         <input
@@ -184,11 +246,50 @@ export default function ProfessionalsPage() {
         />
 
         <input
-          placeholder="Função. Ex: Barbeiro, Cabeleireira"
+          placeholder="Função. Ex: Barbeiro"
           className="rounded-lg bg-zinc-800 p-3"
           value={role}
           onChange={(e) => setRole(e.target.value)}
         />
+
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
+            Foto do profissional
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
+            <span className="font-medium">
+              Escolher foto
+            </span>
+
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+
+                if (!file) return
+
+                setPhotoFile(file)
+
+                setPhotoPreview(
+                  URL.createObjectURL(file)
+                )
+              }}
+            />
+          </label>
+
+          {photoPreview && (
+            <div className="mt-4 flex justify-center">
+              <img
+                src={photoPreview}
+                alt="Preview"
+                className="h-28 w-28 rounded-full object-cover ring-4 ring-zinc-700"
+              />
+            </div>
+          )}
+        </div>
 
         <button
           onClick={createProfessional}
@@ -209,7 +310,8 @@ export default function ProfessionalsPage() {
 
       <div className="mt-8 space-y-3">
         {filteredProfessionals.map((professional) => {
-          const isEditing = editingProfessionalId === professional.id
+          const isEditing =
+            editingProfessionalId === professional.id
 
           return (
             <div
@@ -221,30 +323,77 @@ export default function ProfessionalsPage() {
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
+                    onChange={(e) =>
+                      setEditName(e.target.value)
+                    }
                   />
 
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
+                    onChange={(e) =>
+                      setEditPhone(e.target.value)
+                    }
                   />
 
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
+                    onChange={(e) =>
+                      setEditEmail(e.target.value)
+                    }
                   />
 
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editRole}
-                    onChange={(e) => setEditRole(e.target.value)}
+                    onChange={(e) =>
+                      setEditRole(e.target.value)
+                    }
                   />
+
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
+                      Foto do profissional
+                    </label>
+
+                    <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
+                      <span className="font-medium">
+                        Trocar foto
+                      </span>
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setPhotoFile(file);
+                          setPhotoPreview(
+                            URL.createObjectURL(file)
+                          );
+                        }}
+                      />
+                    </label>
+
+                    {photoPreview && (
+                      <div className="mt-4 flex justify-center">
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="h-28 w-28 rounded-full object-cover ring-4 ring-zinc-700"
+                        />
+                      </div>
+                    )}
+                  </div>
+           
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => updateProfessional(professional.id)}
+                      onClick={() =>
+                        updateProfessional(professional.id)
+                      }
                       className="rounded-lg bg-green-600 px-4 py-2 font-bold"
                     >
                       Salvar
@@ -260,38 +409,58 @@ export default function ProfessionalsPage() {
                 </div>
               ) : (
                 <>
-                  <p className="font-bold">{professional.name}</p>
+                  <div className="flex items-center gap-4">
+                    {professional.photo_url ? (
+                      <img
+                        src={professional.photo_url}
+                        alt={professional.name}
+                        className="h-20 w-20 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800 text-2xl font-bold">
+                        {professional.name.charAt(0)}
+                      </div>
+                    )}
 
-                  <p className="text-zinc-400">
-                    {professional.role}
-                  </p>
+                    <div>
+                      <p className="font-bold">
+                        {professional.name}
+                      </p>
 
-                  <p className="text-zinc-500">
-                    {professional.phone}
-                  </p>
+                      <p className="text-zinc-400">
+                        {professional.role}
+                      </p>
 
-                  <p className="text-zinc-500">
-                    {professional.email}
-                  </p>
+                      <p className="text-zinc-500">
+                        {professional.phone}
+                      </p>
 
-                  <p className="mt-2 text-sm text-zinc-500">
-                    Status:{' '}
-                    <span
-                      className={
-                        professional.active
-                          ? 'text-green-400'
-                          : 'text-yellow-400'
-                      }
-                    >
-                      {professional.active
-                        ? 'Ativo'
-                        : 'Inativo'}
-                    </span>
-                  </p>
+                      <p className="text-zinc-500">
+                        {professional.email}
+                      </p>
+
+                      <p className="mt-2 text-sm text-zinc-500">
+                        Status:{' '}
+                        <span
+                          className={
+                            professional.active
+                              ? 'text-green-400'
+                              : 'text-yellow-400'
+                          }
+                        >
+                          {professional.active
+                            ? 'Ativo'
+                            : 'Inativo'}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
 
                   <div className="mt-4 flex gap-2">
                     <button
-                      onClick={() => startEditing(professional)}
+                      onClick={() =>
+                        startEditing(professional)
+                      }
                       className="rounded-lg bg-white px-4 py-2 font-bold text-black"
                     >
                       Editar
