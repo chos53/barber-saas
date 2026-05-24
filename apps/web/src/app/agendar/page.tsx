@@ -65,11 +65,7 @@ export default function PublicBookingPage() {
   }, [])
 
   useEffect(() => {
-    generateAvailableTimes(
-      openingTime,
-      closingTime,
-      intervalMinutes
-    )
+    generateAvailableTimes(openingTime, closingTime, intervalMinutes)
   }, [openingTime, closingTime, intervalMinutes])
 
   useEffect(() => {
@@ -83,27 +79,19 @@ export default function PublicBookingPage() {
   ) {
     const times: string[] = []
 
-    const [openingHour, openingMinute] =
-      opening.split(':').map(Number)
-
-    const [closingHour, closingMinute] =
-      closing.split(':').map(Number)
+    const [openingHour, openingMinute] = opening.split(':').map(Number)
+    const [closingHour, closingMinute] = closing.split(':').map(Number)
 
     const start = openingHour * 60 + openingMinute
     const end = closingHour * 60 + closingMinute
 
-    for (
-      let minutes = start;
-      minutes <= end;
-      minutes += interval
-    ) {
+    for (let minutes = start; minutes <= end; minutes += interval) {
       const hour = Math.floor(minutes / 60)
       const minute = minutes % 60
 
-      const formattedTime = `${String(hour).padStart(
-        2,
-        '0'
-      )}:${String(minute).padStart(2, '0')}`
+      const formattedTime = `${String(hour).padStart(2, '0')}:${String(
+        minute
+      ).padStart(2, '0')}`
 
       times.push(formattedTime)
     }
@@ -199,18 +187,11 @@ export default function PublicBookingPage() {
     const blockedTimes: string[] = []
 
     data?.forEach((appointment: any) => {
-      const appointmentTime =
-        appointment.appointment_time.slice(0, 5)
+      const appointmentTime = appointment.appointment_time.slice(0, 5)
+      const duration = appointment.services?.duration_minutes || 0
+      const totalBlockMinutes = duration + intervalMinutes
 
-      const duration =
-        appointment.services?.duration_minutes || 0
-
-      const totalBlockMinutes =
-        duration + intervalMinutes
-
-      const [hour, minute] =
-        appointmentTime.split(':').map(Number)
-
+      const [hour, minute] = appointmentTime.split(':').map(Number)
       const startMinutes = hour * 60 + minute
 
       for (
@@ -221,11 +202,10 @@ export default function PublicBookingPage() {
         const currentHour = Math.floor(current / 60)
         const currentMinute = current % 60
 
-        const formattedTime = `${String(
-          currentHour
-        ).padStart(2, '0')}:${String(
-          currentMinute
-        ).padStart(2, '0')}`
+        const formattedTime = `${String(currentHour).padStart(
+          2,
+          '0'
+        )}:${String(currentMinute).padStart(2, '0')}`
 
         blockedTimes.push(formattedTime)
       }
@@ -249,6 +229,10 @@ export default function PublicBookingPage() {
       return
     }
 
+    if (loading) {
+      return
+    }
+
     if (date < today) {
       alert('Não é possível agendar em uma data passada.')
       return
@@ -269,8 +253,7 @@ export default function PublicBookingPage() {
     )
 
     const selectedProfessional = professionals.find(
-      (professional) =>
-        professional.id === selectedProfessionalId
+      (professional) => professional.id === selectedProfessionalId
     )
 
     setLoading(true)
@@ -285,10 +268,7 @@ export default function PublicBookingPage() {
     let clientId = existingClient?.id
 
     if (!clientId) {
-      const {
-        data: newClient,
-        error: clientError,
-      } = await supabase
+      const { data: newClient, error: clientError } = await supabase
         .from('clients')
         .insert({
           company_id: companyId,
@@ -301,31 +281,24 @@ export default function PublicBookingPage() {
 
       if (clientError || !newClient) {
         setLoading(false)
-
-        alert(
-          clientError?.message ||
-            'Erro ao criar cliente.'
-        )
-
+        alert(clientError?.message || 'Erro ao criar cliente.')
         return
       }
 
       clientId = newClient.id
     }
 
-    const { error: appointmentError } =
-      await supabase
-        .from('appointments')
-        .insert({
-          company_id: companyId,
-          client_id: clientId,
-          service_id: selectedServiceId,
-          professional_id:
-            selectedProfessionalId,
-          appointment_date: date,
-          appointment_time: time,
-          status: 'scheduled',
-        })
+    const { error: appointmentError } = await supabase
+      .from('appointments')
+      .insert({
+        company_id: companyId,
+        client_id: clientId,
+        service_id: selectedServiceId,
+        professional_id: selectedProfessionalId,
+        appointment_date: date,
+        appointment_time: time,
+        status: 'scheduled',
+      })
 
     setLoading(false)
 
@@ -334,9 +307,7 @@ export default function PublicBookingPage() {
       return
     }
 
-    setSuccessMessage(
-      'Agendamento realizado com sucesso!'
-    )
+    setSuccessMessage('Agendamento realizado com sucesso!')
 
     setSuccessDetails(
       `${selectedService?.name} com ${selectedProfessional?.name} em ${date} às ${time}`
@@ -350,6 +321,14 @@ export default function PublicBookingPage() {
     setClientPhone('')
     setOccupiedTimes([])
   }
+
+  const canSubmit =
+    selectedServiceId &&
+    selectedProfessionalId &&
+    date &&
+    time &&
+    clientName.trim() &&
+    clientPhone.trim()
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 p-6 text-white">
@@ -404,9 +383,10 @@ export default function PublicBookingPage() {
                 {services.map((service) => (
                   <button
                     key={service.id}
-                    onClick={() =>
+                    onClick={() => {
                       setSelectedServiceId(service.id)
-                    }
+                      setTime('')
+                    }}
                     className={`w-full rounded-2xl border p-5 text-left transition ${
                       selectedServiceId === service.id
                         ? 'border-white bg-zinc-700'
@@ -442,14 +422,12 @@ export default function PublicBookingPage() {
                 {professionals.map((professional) => (
                   <button
                     key={professional.id}
-                    onClick={() =>
-                      setSelectedProfessionalId(
-                        professional.id
-                      )
-                    }
+                    onClick={() => {
+                      setSelectedProfessionalId(professional.id)
+                      setTime('')
+                    }}
                     className={`w-full rounded-2xl border p-5 text-left transition ${
-                      selectedProfessionalId ===
-                      professional.id
+                      selectedProfessionalId === professional.id
                         ? 'border-white bg-zinc-700'
                         : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
                     }`}
@@ -499,47 +477,47 @@ export default function PublicBookingPage() {
                   Escolha um horário
                 </p>
 
-                <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
-                  {availableTimes.map(
-                    (availableTime) => {
-                      const isOccupied =
-                        occupiedTimes.includes(
-                          availableTime
-                        )
+                {availableTimes.filter((availableTime) => {
+                  const isOccupied = occupiedTimes.includes(availableTime)
+                  const isPastTime =
+                    date === today && availableTime < currentTime
 
-                      const isPastTime =
-                        date === today &&
-                        availableTime < currentTime
-
-                      return (
-                        <button
-                          key={availableTime}
-                          type="button"
-                          disabled={
-                            isOccupied ||
-                            isPastTime
-                          }
-                          onClick={() =>
-                            setTime(
-                              availableTime
-                            )
-                          }
-                          className={`rounded-xl p-3 text-sm font-medium transition ${
-                            isOccupied
-                              ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                              : isPastTime
-                                ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
-                                : time ===
-                                    availableTime
-                                  ? 'bg-white text-black'
-                                  : 'bg-zinc-800 hover:bg-zinc-700'
-                          }`}
-                        >
-                          {availableTime}
-                        </button>
-                      )
-                    }
+                  return !isOccupied && !isPastTime
+                }).length === 0 &&
+                  date &&
+                  selectedProfessionalId && (
+                    <div className="mb-4 rounded-2xl border border-red-900 bg-red-950 p-4 text-sm text-red-300">
+                      Não existem horários disponíveis para esta data.
+                    </div>
                   )}
+
+                <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
+                  {availableTimes.map((availableTime) => {
+                    const isOccupied = occupiedTimes.includes(availableTime)
+
+                    const isPastTime =
+                      date === today && availableTime < currentTime
+
+                    return (
+                      <button
+                        key={availableTime}
+                        type="button"
+                        disabled={isOccupied || isPastTime}
+                        onClick={() => setTime(availableTime)}
+                        className={`rounded-xl p-3 text-sm font-medium transition ${
+                          isOccupied
+                            ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                            : isPastTime
+                              ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                              : time === availableTime
+                                ? 'bg-white text-black'
+                                : 'bg-zinc-800 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {availableTime}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -547,22 +525,14 @@ export default function PublicBookingPage() {
                 placeholder="Seu nome"
                 className="rounded-xl bg-zinc-800 p-4"
                 value={clientName}
-                onChange={(e) =>
-                  setClientName(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => setClientName(e.target.value)}
               />
 
               <input
                 placeholder="Seu telefone"
                 className="rounded-xl bg-zinc-800 p-4"
                 value={clientPhone}
-                onChange={(e) =>
-                  setClientPhone(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => setClientPhone(e.target.value)}
               />
 
               {selectedServiceId &&
@@ -579,9 +549,7 @@ export default function PublicBookingPage() {
                         <strong>Serviço:</strong>{' '}
                         {
                           services.find(
-                            (service) =>
-                              service.id ===
-                              selectedServiceId
+                            (service) => service.id === selectedServiceId
                           )?.name
                         }
                       </p>
@@ -591,30 +559,24 @@ export default function PublicBookingPage() {
                         {
                           professionals.find(
                             (professional) =>
-                              professional.id ===
-                              selectedProfessionalId
+                              professional.id === selectedProfessionalId
                           )?.name
                         }
                       </p>
 
                       <p>
-                        <strong>Data:</strong>{' '}
-                        {date}
+                        <strong>Data:</strong> {date}
                       </p>
 
                       <p>
-                        <strong>Horário:</strong>{' '}
-                        {time}
+                        <strong>Horário:</strong> {time}
                       </p>
 
                       <p>
-                        <strong>Valor:</strong>{' '}
-                        R${' '}
+                        <strong>Valor:</strong> R${' '}
                         {Number(
                           services.find(
-                            (service) =>
-                              service.id ===
-                              selectedServiceId
+                            (service) => service.id === selectedServiceId
                           )?.price || 0
                         ).toFixed(2)}
                       </p>
@@ -624,12 +586,14 @@ export default function PublicBookingPage() {
 
               <button
                 onClick={createBooking}
-                disabled={loading}
-                className="rounded-xl bg-white p-4 font-bold text-black"
+                disabled={!canSubmit || loading}
+                className={`rounded-xl p-4 font-bold transition ${
+                  !canSubmit || loading
+                    ? 'cursor-not-allowed bg-zinc-700 text-zinc-400'
+                    : 'bg-white text-black hover:opacity-90'
+                }`}
               >
-                {loading
-                  ? 'Agendando...'
-                  : 'Confirmar agendamento'}
+                {loading ? 'Agendando...' : 'Confirmar agendamento'}
               </button>
             </div>
           </>
