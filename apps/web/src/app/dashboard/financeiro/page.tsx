@@ -17,12 +17,16 @@ type FinancialTransaction = {
 
 type TransactionFilter = 'all' | 'income' | 'expense' | 'cancelled'
 
+type PeriodFilter = 'today' | 'last_7_days' | 'current_month' | 'custom'
+
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
-  const [filterDate, setFilterDate] = useState('')
   const [transactionFilter, setTransactionFilter] =
     useState<TransactionFilter>('all')
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('today')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [today, setToday] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingExpense, setSavingExpense] = useState(false)
@@ -39,15 +43,50 @@ export default function FinanceiroPage() {
     const currentDate = now.toISOString().split('T')[0]
 
     setToday(currentDate)
-    setFilterDate(currentDate)
+    setStartDate(currentDate)
+    setEndDate(currentDate)
     setExpenseDate(currentDate)
   }, [])
 
   useEffect(() => {
-    if (filterDate) {
+    if (startDate && endDate) {
       loadTransactions()
     }
-  }, [filterDate])
+  }, [startDate, endDate])
+
+  function formatDate(date: Date) {
+    return date.toISOString().split('T')[0]
+  }
+
+  function handlePeriodChange(period: PeriodFilter) {
+    setPeriodFilter(period)
+
+    const now = new Date()
+    const currentDate = formatDate(now)
+
+    if (period === 'today') {
+      setStartDate(currentDate)
+      setEndDate(currentDate)
+      return
+    }
+
+    if (period === 'last_7_days') {
+      const pastDate = new Date()
+      pastDate.setDate(now.getDate() - 6)
+
+      setStartDate(formatDate(pastDate))
+      setEndDate(currentDate)
+      return
+    }
+
+    if (period === 'current_month') {
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      setStartDate(formatDate(firstDayOfMonth))
+      setEndDate(currentDate)
+      return
+    }
+  }
 
   async function loadTransactions() {
     setLoading(true)
@@ -88,7 +127,9 @@ export default function FinanceiroPage() {
         created_at
       `)
       .eq('company_id', profile.company_id)
-      .eq('transaction_date', filterDate)
+      .gte('transaction_date', startDate)
+      .lte('transaction_date', endDate)
+      .order('transaction_date', { ascending: false })
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -128,18 +169,16 @@ export default function FinanceiroPage() {
 
     setSavingExpense(true)
 
-    const { error } = await supabase
-      .from('financial_transactions')
-      .insert({
-        company_id: companyId,
-        type: 'expense',
-        category: expenseCategory,
-        description: expenseDescription.trim(),
-        amount: Number(expenseAmount),
-        payment_method: expensePaymentMethod,
-        status: 'paid',
-        transaction_date: expenseDate,
-      })
+    const { error } = await supabase.from('financial_transactions').insert({
+      company_id: companyId,
+      type: 'expense',
+      category: expenseCategory,
+      description: expenseDescription.trim(),
+      amount: Number(expenseAmount),
+      payment_method: expensePaymentMethod,
+      status: 'paid',
+      transaction_date: expenseDate,
+    })
 
     setSavingExpense(false)
 
@@ -152,10 +191,12 @@ export default function FinanceiroPage() {
     setExpenseCategory('general')
     setExpenseAmount('')
     setExpensePaymentMethod('cash')
-    setExpenseDate(today || filterDate)
+    setExpenseDate(today || startDate)
 
-    if (expenseDate !== filterDate) {
-      setFilterDate(expenseDate)
+    if (expenseDate < startDate || expenseDate > endDate) {
+      setPeriodFilter('custom')
+      setStartDate(expenseDate)
+      setEndDate(expenseDate)
       return
     }
 
@@ -328,18 +369,48 @@ export default function FinanceiroPage() {
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <label className="text-sm text-zinc-400">Filtrar por data</label>
+          <label className="text-sm text-zinc-400">Filtrar por período</label>
 
-          <input
-            type="date"
+          <select
             className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
-            value={filterDate}
-            onChange={(event) => setFilterDate(event.target.value)}
-          />
+            value={periodFilter}
+            onChange={(event) =>
+              handlePeriodChange(event.target.value as PeriodFilter)
+            }
+          >
+            <option value="today">Hoje</option>
+            <option value="last_7_days">Últimos 7 dias</option>
+            <option value="current_month">Mês atual</option>
+            <option value="custom">Período personalizado</option>
+          </select>
 
-          {today && filterDate === today && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <input
+              type="date"
+              className="rounded-lg bg-zinc-800 p-3"
+              value={startDate}
+              disabled={periodFilter !== 'custom'}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
+
+            <input
+              type="date"
+              className="rounded-lg bg-zinc-800 p-3"
+              value={endDate}
+              disabled={periodFilter !== 'custom'}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
+          </div>
+
+          {today && startDate === today && endDate === today && (
             <p className="mt-3 text-sm text-zinc-500">
               Exibindo movimentações de hoje.
+            </p>
+          )}
+
+          {startDate && endDate && startDate !== endDate && (
+            <p className="mt-3 text-sm text-zinc-500">
+              Exibindo movimentações de {startDate} até {endDate}.
             </p>
           )}
         </div>
@@ -493,7 +564,7 @@ export default function FinanceiroPage() {
 
         {!loading && transactions.length === 0 && (
           <p className="mt-6 rounded-xl bg-zinc-800 p-4 text-zinc-400">
-            Nenhuma movimentação encontrada para esta data.
+            Nenhuma movimentação encontrada para este período.
           </p>
         )}
 
