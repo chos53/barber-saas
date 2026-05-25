@@ -340,6 +340,14 @@ export default function AgendaPage() {
     appointmentId: string,
     status: string
   ) {
+    const appointment = appointments.find(
+      (item) => item.id === appointmentId
+    )
+
+    if (!appointment) {
+      return
+    }
+
     const { error } = await supabase
       .from('appointments')
       .update({ status })
@@ -348,6 +356,49 @@ export default function AgendaPage() {
     if (error) {
       alert(error.message)
       return
+    }
+
+    if (status === 'completed') {
+      const { data: fullAppointment } = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          company_id,
+          client_id,
+          professional_id,
+          service_id,
+          services (
+            name,
+            price
+          )
+        `)
+        .eq('id', appointmentId)
+        .single()
+
+      if (fullAppointment) {
+        const serviceData = Array.isArray(fullAppointment.services)
+          ? fullAppointment.services[0]
+          : fullAppointment.services
+
+        const serviceName = serviceData?.name || 'Serviço'
+        const servicePrice = Number(serviceData?.price || 0)
+
+        await supabase
+          .from('financial_transactions')
+          .insert({
+            company_id: fullAppointment.company_id,
+            appointment_id: fullAppointment.id,
+            professional_id: fullAppointment.professional_id,
+            client_id: fullAppointment.client_id,
+            type: 'income',
+            category: 'service',
+            description: serviceName,
+            amount: servicePrice,
+            payment_method: 'cash',
+            status: 'paid',
+            transaction_date: appointment.appointment_date,
+          })
+      }
     }
 
     if (selectedAppointment?.id === appointmentId) {
