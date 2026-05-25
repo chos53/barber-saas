@@ -359,45 +359,54 @@ export default function AgendaPage() {
     }
 
     if (status === 'completed') {
-      const { data: fullAppointment } = await supabase
-        .from('appointments')
-        .select(`
-          id,
-          company_id,
-          client_id,
-          professional_id,
-          service_id,
-          services (
-            name,
-            price
-          )
-        `)
-        .eq('id', appointmentId)
-        .single()
+      const { data: existingTransaction } = await supabase
+        .from('financial_transactions')
+        .select('id')
+        .eq('appointment_id', appointmentId)
+        .eq('type', 'income')
+        .maybeSingle()
 
-      if (fullAppointment) {
-        const serviceData = Array.isArray(fullAppointment.services)
-          ? fullAppointment.services[0]
-          : fullAppointment.services
+      if (!existingTransaction) {
+        const { data: fullAppointment } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            company_id,
+            client_id,
+            professional_id,
+            service_id,
+            services (
+              name,
+              price
+            )
+          `)
+          .eq('id', appointmentId)
+          .single()
 
-        const serviceName = serviceData?.name || 'Serviço'
-        const servicePrice = Number(serviceData?.price || 0)
+        if (fullAppointment) {
+          const serviceData = Array.isArray(fullAppointment.services)
+            ? fullAppointment.services[0]
+            : fullAppointment.services
 
-        await supabase
-          .from('financial_transactions')
-          .insert({
-            company_id: fullAppointment.company_id,
-            appointment_id: fullAppointment.id,
-            professional_id: fullAppointment.professional_id,
-            client_id: fullAppointment.client_id,
-            type: 'income',
-            category: 'service',
-            description: serviceName,
-            amount: servicePrice,
-            payment_method: 'cash',
-            status: 'paid',
-            transaction_date: appointment.appointment_date,
-          })
+          const serviceName = serviceData?.name || 'Serviço'
+          const servicePrice = Number(serviceData?.price || 0)
+
+          await supabase
+            .from('financial_transactions')
+            .insert({
+              company_id: fullAppointment.company_id,
+              appointment_id: fullAppointment.id,
+              professional_id: fullAppointment.professional_id,
+              client_id: fullAppointment.client_id,
+              type: 'income',
+              category: 'service',
+              description: serviceName,
+              amount: servicePrice,
+              payment_method: 'cash',
+              status: 'paid',
+              transaction_date: appointment.appointment_date,
+            })
+        }
       }
     }
 
