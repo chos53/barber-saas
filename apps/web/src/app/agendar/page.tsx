@@ -40,6 +40,7 @@ export default function PublicBookingPage() {
   const [time, setTime] = useState('')
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
+  const [notes, setNotes] = useState('')
 
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
 
@@ -106,6 +107,7 @@ export default function PublicBookingPage() {
     setTime('')
     setClientName('')
     setClientPhone('')
+    setNotes('')
     setOccupiedTimes([])
     setSuccessMessage('')
     setSuccessDetails('')
@@ -298,6 +300,7 @@ export default function PublicBookingPage() {
         appointment_date: date,
         appointment_time: time,
         status: 'scheduled',
+        notes: notes.trim(),
       })
 
     setLoading(false)
@@ -319,6 +322,7 @@ export default function PublicBookingPage() {
     setTime('')
     setClientName('')
     setClientPhone('')
+    setNotes('')
     setOccupiedTimes([])
   }
 
@@ -535,6 +539,13 @@ export default function PublicBookingPage() {
                 onChange={(e) => setClientPhone(e.target.value)}
               />
 
+              <textarea
+                placeholder="Observações do agendamento (opcional)"
+                className="min-h-[120px] rounded-xl bg-zinc-800 p-4"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+
               {selectedServiceId &&
                 selectedProfessionalId &&
                 date &&
@@ -580,6 +591,12 @@ export default function PublicBookingPage() {
                           )?.price || 0
                         ).toFixed(2)}
                       </p>
+
+                      {notes.trim() && (
+                        <p>
+                          <strong>Observações:</strong> {notes}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
