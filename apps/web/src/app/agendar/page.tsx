@@ -495,12 +495,14 @@ export default function PublicBookingPage() {
                     </div>
                   )}
 
-                <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
+                <div className="grid grid-cols-3 gap-3 md:grid-cols-5">
                   {availableTimes.map((availableTime) => {
                     const isOccupied = occupiedTimes.includes(availableTime)
 
                     const isPastTime =
                       date === today && availableTime < currentTime
+
+                    const isSelected = time === availableTime
 
                     return (
                       <button
@@ -508,17 +510,31 @@ export default function PublicBookingPage() {
                         type="button"
                         disabled={isOccupied || isPastTime}
                         onClick={() => setTime(availableTime)}
-                        className={`rounded-xl p-3 text-sm font-medium transition ${
+                        className={`relative overflow-hidden rounded-2xl border p-3 text-sm font-bold transition-all duration-200 ${
                           isOccupied
-                            ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                            ? 'cursor-not-allowed border-red-800 bg-red-950 text-red-300 opacity-70'
                             : isPastTime
-                              ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
-                              : time === availableTime
-                                ? 'bg-white text-black'
-                                : 'bg-zinc-800 hover:bg-zinc-700'
+                              ? 'cursor-not-allowed border-zinc-900 bg-zinc-950 text-zinc-600 opacity-50'
+                              : isSelected
+                                ? 'scale-105 border-white bg-white text-black shadow-lg shadow-white/20'
+                                : 'border-zinc-700 bg-zinc-800 hover:scale-105 hover:border-white hover:bg-zinc-700'
                         }`}
                       >
-                        {availableTime}
+                        <div className="flex flex-col items-center justify-center">
+                          <span>{availableTime}</span>
+
+                          {isOccupied && (
+                            <span className="mt-1 text-[10px] uppercase tracking-wide text-red-400">
+                              Ocupado
+                            </span>
+                          )}
+
+                          {isPastTime && (
+                            <span className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">
+                              Encerrado
+                            </span>
+                          )}
+                        </div>
                       </button>
                     )
                   })}
