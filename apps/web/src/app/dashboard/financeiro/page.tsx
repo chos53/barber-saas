@@ -16,10 +16,18 @@ type FinancialTransaction = {
 }
 
 export default function FinanceiroPage() {
+  const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
   const [filterDate, setFilterDate] = useState('')
   const [today, setToday] = useState('')
   const [loading, setLoading] = useState(true)
+  const [savingExpense, setSavingExpense] = useState(false)
+
+  const [expenseDescription, setExpenseDescription] = useState('')
+  const [expenseCategory, setExpenseCategory] = useState('general')
+  const [expenseAmount, setExpenseAmount] = useState('')
+  const [expensePaymentMethod, setExpensePaymentMethod] = useState('cash')
+  const [expenseDate, setExpenseDate] = useState('')
 
   useEffect(() => {
     const now = new Date()
@@ -27,6 +35,7 @@ export default function FinanceiroPage() {
 
     setToday(currentDate)
     setFilterDate(currentDate)
+    setExpenseDate(currentDate)
   }, [])
 
   useEffect(() => {
@@ -58,6 +67,8 @@ export default function FinanceiroPage() {
       return
     }
 
+    setCompanyId(profile.company_id)
+
     const { data, error } = await supabase
       .from('financial_transactions')
       .select(`
@@ -85,6 +96,67 @@ export default function FinanceiroPage() {
     setLoading(false)
   }
 
+  async function createExpense() {
+    if (!companyId) {
+      alert('Empresa não identificada. Atualize a página e tente novamente.')
+      return
+    }
+
+    if (!expenseDescription.trim()) {
+      alert('Informe a descrição da despesa.')
+      return
+    }
+
+    if (!expenseAmount || Number(expenseAmount) <= 0) {
+      alert('Informe um valor válido para a despesa.')
+      return
+    }
+
+    if (!expenseDate) {
+      alert('Informe a data da despesa.')
+      return
+    }
+
+    if (savingExpense) {
+      return
+    }
+
+    setSavingExpense(true)
+
+    const { error } = await supabase
+      .from('financial_transactions')
+      .insert({
+        company_id: companyId,
+        type: 'expense',
+        category: expenseCategory,
+        description: expenseDescription.trim(),
+        amount: Number(expenseAmount),
+        payment_method: expensePaymentMethod,
+        status: 'paid',
+        transaction_date: expenseDate,
+      })
+
+    setSavingExpense(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setExpenseDescription('')
+    setExpenseCategory('general')
+    setExpenseAmount('')
+    setExpensePaymentMethod('cash')
+    setExpenseDate(today || filterDate)
+
+    if (expenseDate !== filterDate) {
+      setFilterDate(expenseDate)
+      return
+    }
+
+    loadTransactions()
+  }
+
   function formatCurrency(value: number) {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -100,6 +172,33 @@ export default function FinanceiroPage() {
         return 'Despesa'
       default:
         return type
+    }
+  }
+
+  function getCategoryLabel(category: string) {
+    switch (category) {
+      case 'service':
+        return 'Serviço'
+      case 'general':
+        return 'Geral'
+      case 'rent':
+        return 'Aluguel'
+      case 'products':
+        return 'Produtos'
+      case 'commission':
+        return 'Comissão'
+      case 'energy':
+        return 'Energia'
+      case 'internet':
+        return 'Internet'
+      case 'maintenance':
+        return 'Manutenção'
+      case 'marketing':
+        return 'Marketing'
+      case 'tax':
+        return 'Impostos'
+      default:
+        return category
     }
   }
 
@@ -231,6 +330,81 @@ export default function FinanceiroPage() {
       </div>
 
       <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="text-2xl font-bold">Lançar despesa</h2>
+
+        <p className="mt-2 text-sm text-zinc-500">
+          Registre saídas como aluguel, produtos, energia, internet, marketing
+          ou manutenção.
+        </p>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <input
+            placeholder="Descrição da despesa"
+            className="rounded-xl bg-zinc-800 p-4"
+            value={expenseDescription}
+            onChange={(event) => setExpenseDescription(event.target.value)}
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Valor"
+            className="rounded-xl bg-zinc-800 p-4"
+            value={expenseAmount}
+            onChange={(event) => setExpenseAmount(event.target.value)}
+          />
+
+          <select
+            className="rounded-xl bg-zinc-800 p-4"
+            value={expenseCategory}
+            onChange={(event) => setExpenseCategory(event.target.value)}
+          >
+            <option value="general">Geral</option>
+            <option value="rent">Aluguel</option>
+            <option value="products">Produtos</option>
+            <option value="commission">Comissão</option>
+            <option value="energy">Energia</option>
+            <option value="internet">Internet</option>
+            <option value="maintenance">Manutenção</option>
+            <option value="marketing">Marketing</option>
+            <option value="tax">Impostos</option>
+          </select>
+
+          <select
+            className="rounded-xl bg-zinc-800 p-4"
+            value={expensePaymentMethod}
+            onChange={(event) => setExpensePaymentMethod(event.target.value)}
+          >
+            <option value="cash">Dinheiro</option>
+            <option value="pix">Pix</option>
+            <option value="credit_card">Cartão de crédito</option>
+            <option value="debit_card">Cartão de débito</option>
+            <option value="transfer">Transferência</option>
+          </select>
+
+          <input
+            type="date"
+            className="rounded-xl bg-zinc-800 p-4"
+            value={expenseDate}
+            onChange={(event) => setExpenseDate(event.target.value)}
+          />
+
+          <button
+            onClick={createExpense}
+            disabled={savingExpense}
+            className={`rounded-xl p-4 font-bold transition ${
+              savingExpense
+                ? 'cursor-not-allowed bg-zinc-700 text-zinc-400'
+                : 'bg-red-600 text-white hover:bg-red-500'
+            }`}
+          >
+            {savingExpense ? 'Salvando...' : 'Lançar despesa'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">Movimentações financeiras</h2>
 
         {loading && (
@@ -275,11 +449,12 @@ export default function FinanceiroPage() {
                     </p>
 
                     <p className="mt-1 text-sm text-zinc-500">
-                      Categoria: {transaction.category}
+                      Categoria: {getCategoryLabel(transaction.category)}
                     </p>
 
                     <p className="mt-1 text-sm text-zinc-500">
-                      Pagamento: {getPaymentMethodLabel(transaction.payment_method)}
+                      Pagamento:{' '}
+                      {getPaymentMethodLabel(transaction.payment_method)}
                     </p>
                   </div>
 
