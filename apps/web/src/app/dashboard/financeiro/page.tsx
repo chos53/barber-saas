@@ -22,11 +22,16 @@ type PeriodFilter = 'today' | 'last_7_days' | 'current_month' | 'custom'
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
+  const [monthlyTransactions, setMonthlyTransactions] = useState<
+    FinancialTransaction[]
+  >([])
   const [transactionFilter, setTransactionFilter] =
     useState<TransactionFilter>('all')
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('today')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [monthStartDate, setMonthStartDate] = useState('')
+  const [monthEndDate, setMonthEndDate] = useState('')
   const [today, setToday] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingExpense, setSavingExpense] = useState(false)
@@ -40,11 +45,14 @@ export default function FinanceiroPage() {
 
   useEffect(() => {
     const now = new Date()
-    const currentDate = now.toISOString().split('T')[0]
+    const currentDate = formatDate(now)
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
     setToday(currentDate)
     setStartDate(currentDate)
     setEndDate(currentDate)
+    setMonthStartDate(formatDate(firstDayOfMonth))
+    setMonthEndDate(currentDate)
     setExpenseDate(currentDate)
   }, [])
 
@@ -53,6 +61,12 @@ export default function FinanceiroPage() {
       loadTransactions()
     }
   }, [startDate, endDate])
+
+  useEffect(() => {
+    if (monthStartDate && monthEndDate) {
+      loadMonthlyTransactions()
+    }
+  }, [monthStartDate, monthEndDate])
 
   function formatDate(date: Date) {
     return date.toISOString().split('T')[0]
@@ -88,16 +102,14 @@ export default function FinanceiroPage() {
     }
   }
 
-  async function loadTransactions() {
-    setLoading(true)
-
+  async function getCompanyId() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
       window.location.href = '/login'
-      return
+      return null
     }
 
     const { data: profile } = await supabase
@@ -107,11 +119,23 @@ export default function FinanceiroPage() {
       .single()
 
     if (!profile?.company_id) {
-      setLoading(false)
-      return
+      return null
     }
 
     setCompanyId(profile.company_id)
+
+    return profile.company_id
+  }
+
+  async function loadTransactions() {
+    setLoading(true)
+
+    const currentCompanyId = await getCompanyId()
+
+    if (!currentCompanyId) {
+      setLoading(false)
+      return
+    }
 
     const { data, error } = await supabase
       .from('financial_transactions')
@@ -126,7 +150,7 @@ export default function FinanceiroPage() {
         transaction_date,
         created_at
       `)
-      .eq('company_id', profile.company_id)
+      .eq('company_id', currentCompanyId)
       .gte('transaction_date', startDate)
       .lte('transaction_date', endDate)
       .order('transaction_date', { ascending: false })
@@ -140,6 +164,40 @@ export default function FinanceiroPage() {
 
     setTransactions((data || []) as FinancialTransaction[])
     setLoading(false)
+  }
+
+  async function loadMonthlyTransactions() {
+    const currentCompanyId = companyId || (await getCompanyId())
+
+    if (!currentCompanyId) {
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('financial_transactions')
+      .select(`
+        id,
+        type,
+        category,
+        description,
+        amount,
+        payment_method,
+        status,
+        transaction_date,
+        created_at
+      `)
+      .eq('company_id', currentCompanyId)
+      .gte('transaction_date', monthStartDate)
+      .lte('transaction_date', monthEndDate)
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setMonthlyTransactions((data || []) as FinancialTransaction[])
   }
 
   async function createExpense() {
@@ -197,10 +255,13 @@ export default function FinanceiroPage() {
       setPeriodFilter('custom')
       setStartDate(expenseDate)
       setEndDate(expenseDate)
-      return
+    } else {
+      loadTransactions()
     }
 
-    loadTransactions()
+    if (expenseDate >= monthStartDate && expenseDate <= monthEndDate) {
+      loadMonthlyTransactions()
+    }
   }
 
   async function cancelTransaction(transactionId: string) {
@@ -231,6 +292,7 @@ export default function FinanceiroPage() {
     }
 
     loadTransactions()
+    loadMonthlyTransactions()
   }
 
   function formatCurrency(value: number) {
@@ -308,28 +370,41 @@ export default function FinanceiroPage() {
     }
   }
 
-  const totals = useMemo(() => {
-    const income = transactions
+  function calculateTotals(items: FinancialTransaction[]) {
+    const income = items
       .filter(
         (transaction) =>
           transaction.type === 'income' && transaction.status !== 'cancelled'
       )
       .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
 
-    const expenses = transactions
+    const expenses = items
       .filter(
         (transaction) =>
           transaction.type === 'expense' && transaction.status !== 'cancelled'
       )
       .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
 
+    const cancelled = items.filter(
+      (transaction) => transaction.status === 'cancelled'
+    ).length
+
     return {
       income,
       expenses,
       balance: income - expenses,
-      totalTransactions: transactions.length,
+      totalTransactions: items.length,
+      cancelled,
     }
+  }
+
+  const totals = useMemo(() => {
+    return calculateTotals(transactions)
   }, [transactions])
+
+  const monthlyTotals = useMemo(() => {
+    return calculateTotals(monthlyTransactions)
+  }, [monthlyTransactions])
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
@@ -360,11 +435,80 @@ export default function FinanceiroPage() {
         </div>
 
         <button
-          onClick={loadTransactions}
+          onClick={() => {
+            loadTransactions()
+            loadMonthlyTransactions()
+          }}
           className="rounded-xl bg-white px-5 py-3 font-bold text-black"
         >
           Atualizar
         </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-2xl font-bold">Resumo do mês atual</h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              De {monthStartDate} até {monthEndDate}
+            </p>
+          </div>
+
+          <span
+            className={`rounded-full px-4 py-2 text-sm font-bold ${
+              monthlyTotals.balance >= 0
+                ? 'bg-green-900 text-green-300'
+                : 'bg-red-900 text-red-300'
+            }`}
+          >
+            {monthlyTotals.balance >= 0 ? 'Lucro positivo' : 'Lucro negativo'}
+          </span>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-4">
+          <div className="rounded-2xl bg-zinc-950 p-5">
+            <p className="text-sm text-zinc-500">Faturamento mensal</p>
+
+            <p className="mt-3 text-2xl font-bold text-green-300">
+              {formatCurrency(monthlyTotals.income)}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-zinc-950 p-5">
+            <p className="text-sm text-zinc-500">Despesas mensais</p>
+
+            <p className="mt-3 text-2xl font-bold text-red-300">
+              {formatCurrency(monthlyTotals.expenses)}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-zinc-950 p-5">
+            <p className="text-sm text-zinc-500">Lucro mensal</p>
+
+            <p
+              className={`mt-3 text-2xl font-bold ${
+                monthlyTotals.balance >= 0 ? 'text-blue-300' : 'text-red-300'
+              }`}
+            >
+              {formatCurrency(monthlyTotals.balance)}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-zinc-950 p-5">
+            <p className="text-sm text-zinc-500">Movimentações no mês</p>
+
+            <p className="mt-3 text-2xl font-bold">
+              {monthlyTotals.totalTransactions}
+            </p>
+
+            {monthlyTotals.cancelled > 0 && (
+              <p className="mt-2 text-xs text-zinc-500">
+                {monthlyTotals.cancelled} cancelada(s)
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -442,7 +586,7 @@ export default function FinanceiroPage() {
 
       <div className="mt-6 grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-500">Entradas</p>
+          <p className="text-sm text-zinc-500">Entradas do período</p>
 
           <p className="mt-3 text-2xl font-bold text-green-300">
             {formatCurrency(totals.income)}
@@ -450,7 +594,7 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-500">Despesas</p>
+          <p className="text-sm text-zinc-500">Despesas do período</p>
 
           <p className="mt-3 text-2xl font-bold text-red-300">
             {formatCurrency(totals.expenses)}
@@ -458,7 +602,7 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-500">Saldo</p>
+          <p className="text-sm text-zinc-500">Saldo do período</p>
 
           <p
             className={`mt-3 text-2xl font-bold ${
@@ -470,7 +614,7 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-500">Movimentações</p>
+          <p className="text-sm text-zinc-500">Movimentações do período</p>
 
           <p className="mt-3 text-2xl font-bold">
             {totals.totalTransactions}
