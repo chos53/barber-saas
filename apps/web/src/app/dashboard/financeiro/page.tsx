@@ -22,6 +22,7 @@ export default function FinanceiroPage() {
   const [today, setToday] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingExpense, setSavingExpense] = useState(false)
+  const [cancellingId, setCancellingId] = useState('')
 
   const [expenseDescription, setExpenseDescription] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('general')
@@ -151,6 +152,36 @@ export default function FinanceiroPage() {
 
     if (expenseDate !== filterDate) {
       setFilterDate(expenseDate)
+      return
+    }
+
+    loadTransactions()
+  }
+
+  async function cancelTransaction(transactionId: string) {
+    const confirmCancel = window.confirm(
+      'Tem certeza que deseja cancelar esta movimentação? Ela continuará no histórico, mas não entrará mais nos cálculos.'
+    )
+
+    if (!confirmCancel) {
+      return
+    }
+
+    if (cancellingId) {
+      return
+    }
+
+    setCancellingId(transactionId)
+
+    const { error } = await supabase
+      .from('financial_transactions')
+      .update({ status: 'cancelled' })
+      .eq('id', transactionId)
+
+    setCancellingId('')
+
+    if (error) {
+      alert(error.message)
       return
     }
 
@@ -421,62 +452,101 @@ export default function FinanceiroPage() {
 
         {!loading && transactions.length > 0 && (
           <div className="mt-6 space-y-3">
-            {transactions.map((transaction) => (
-              <div
-                key={transaction.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
-              >
-                <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-bold ${
-                          transaction.type === 'income'
-                            ? 'bg-green-900 text-green-300'
-                            : 'bg-red-900 text-red-300'
+            {transactions.map((transaction) => {
+              const isCancelled = transaction.status === 'cancelled'
+
+              return (
+                <div
+                  key={transaction.id}
+                  className={`rounded-2xl border p-5 ${
+                    isCancelled
+                      ? 'border-zinc-800 bg-zinc-950 opacity-60'
+                      : 'border-zinc-800 bg-zinc-950'
+                  }`}
+                >
+                  <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            transaction.type === 'income'
+                              ? 'bg-green-900 text-green-300'
+                              : 'bg-red-900 text-red-300'
+                          }`}
+                        >
+                          {getTypeLabel(transaction.type)}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            isCancelled
+                              ? 'bg-zinc-700 text-zinc-300'
+                              : 'bg-zinc-800 text-zinc-300'
+                          }`}
+                        >
+                          {getStatusLabel(transaction.status)}
+                        </span>
+                      </div>
+
+                      <p
+                        className={`mt-3 text-lg font-bold ${
+                          isCancelled ? 'line-through text-zinc-500' : ''
                         }`}
                       >
-                        {getTypeLabel(transaction.type)}
-                      </span>
+                        {transaction.description || 'Movimentação financeira'}
+                      </p>
 
-                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
-                        {getStatusLabel(transaction.status)}
-                      </span>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Categoria: {getCategoryLabel(transaction.category)}
+                      </p>
+
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Pagamento:{' '}
+                        {getPaymentMethodLabel(transaction.payment_method)}
+                      </p>
+
+                      {isCancelled && (
+                        <p className="mt-3 rounded-xl bg-zinc-900 p-3 text-sm text-zinc-400">
+                          Esta movimentação foi cancelada e não entra nos
+                          cálculos do financeiro.
+                        </p>
+                      )}
                     </div>
 
-                    <p className="mt-3 text-lg font-bold">
-                      {transaction.description || 'Movimentação financeira'}
-                    </p>
+                    <div className="text-left md:text-right">
+                      <p
+                        className={`text-2xl font-bold ${
+                          isCancelled
+                            ? 'text-zinc-500 line-through'
+                            : transaction.type === 'income'
+                              ? 'text-green-300'
+                              : 'text-red-300'
+                        }`}
+                      >
+                        {transaction.type === 'income' ? '+' : '-'}{' '}
+                        {formatCurrency(Number(transaction.amount || 0))}
+                      </p>
 
-                    <p className="mt-1 text-sm text-zinc-500">
-                      Categoria: {getCategoryLabel(transaction.category)}
-                    </p>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {transaction.transaction_date}
+                      </p>
 
-                    <p className="mt-1 text-sm text-zinc-500">
-                      Pagamento:{' '}
-                      {getPaymentMethodLabel(transaction.payment_method)}
-                    </p>
-                  </div>
-
-                  <div className="text-left md:text-right">
-                    <p
-                      className={`text-2xl font-bold ${
-                        transaction.type === 'income'
-                          ? 'text-green-300'
-                          : 'text-red-300'
-                      }`}
-                    >
-                      {transaction.type === 'income' ? '+' : '-'}{' '}
-                      {formatCurrency(Number(transaction.amount || 0))}
-                    </p>
-
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {transaction.transaction_date}
-                    </p>
+                      {!isCancelled && (
+                        <button
+                          onClick={() => cancelTransaction(transaction.id)}
+                          disabled={cancellingId === transaction.id}
+                          className="mt-4 rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-950"
+                        >
+                          {cancellingId === transaction.id
+                            ? 'Cancelando...'
+                            : 'Cancelar'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
