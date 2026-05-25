@@ -19,6 +19,14 @@ type TransactionFilter = 'all' | 'income' | 'expense' | 'cancelled'
 
 type PeriodFilter = 'today' | 'last_7_days' | 'current_month' | 'custom'
 
+type PaymentFilter =
+  | 'all'
+  | 'cash'
+  | 'pix'
+  | 'credit_card'
+  | 'debit_card'
+  | 'transfer'
+
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
@@ -27,6 +35,10 @@ export default function FinanceiroPage() {
   >([])
   const [transactionFilter, setTransactionFilter] =
     useState<TransactionFilter>('all')
+
+  const [paymentFilter, setPaymentFilter] =
+    useState<PaymentFilter>('all')
+
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('today')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -408,20 +420,22 @@ export default function FinanceiroPage() {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
-      if (transactionFilter === 'all') {
-        return true
-      }
+      const transactionMatches =
+        transactionFilter === 'all'
+          ? true
+          : transactionFilter === 'cancelled'
+            ? transaction.status === 'cancelled'
+            : transaction.type === transactionFilter &&
+              transaction.status !== 'cancelled'
 
-      if (transactionFilter === 'cancelled') {
-        return transaction.status === 'cancelled'
-      }
+      const paymentMatches =
+        paymentFilter === 'all'
+          ? true
+          : transaction.payment_method === paymentFilter
 
-      return (
-        transaction.type === transactionFilter &&
-        transaction.status !== 'cancelled'
-      )
+      return transactionMatches && paymentMatches
     })
-  }, [transactions, transactionFilter])
+  }, [transactions, transactionFilter, paymentFilter])
 
   return (
     <div>
@@ -511,9 +525,11 @@ export default function FinanceiroPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl bg-zinc-900 p-6">
-          <label className="text-sm text-zinc-400">Filtrar por período</label>
+          <label className="text-sm text-zinc-400">
+            Filtrar por período
+          </label>
 
           <select
             className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
@@ -545,18 +561,6 @@ export default function FinanceiroPage() {
               onChange={(event) => setEndDate(event.target.value)}
             />
           </div>
-
-          {today && startDate === today && endDate === today && (
-            <p className="mt-3 text-sm text-zinc-500">
-              Exibindo movimentações de hoje.
-            </p>
-          )}
-
-          {startDate && endDate && startDate !== endDate && (
-            <p className="mt-3 text-sm text-zinc-500">
-              Exibindo movimentações de {startDate} até {endDate}.
-            </p>
-          )}
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
@@ -580,6 +584,37 @@ export default function FinanceiroPage() {
           <p className="mt-3 text-sm text-zinc-500">
             Exibindo {filteredTransactions.length} de {transactions.length}{' '}
             movimentações.
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <label className="text-sm text-zinc-400">
+            Forma de pagamento
+          </label>
+
+          <select
+            className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
+            value={paymentFilter}
+            onChange={(event) =>
+              setPaymentFilter(event.target.value as PaymentFilter)
+            }
+          >
+            <option value="all">Todas</option>
+            <option value="cash">Dinheiro</option>
+            <option value="pix">Pix</option>
+            <option value="credit_card">
+              Cartão de crédito
+            </option>
+            <option value="debit_card">
+              Cartão de débito
+            </option>
+            <option value="transfer">
+              Transferência
+            </option>
+          </select>
+
+          <p className="mt-3 text-sm text-zinc-500">
+            Filtre entradas e despesas pela forma de pagamento.
           </p>
         </div>
       </div>
@@ -614,10 +649,12 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-500">Movimentações do período</p>
+          <p className="text-sm text-zinc-500">
+            Movimentações do período
+          </p>
 
           <p className="mt-3 text-2xl font-bold">
-            {totals.totalTransactions}
+            {filteredTransactions.length}
           </p>
         </div>
       </div>
@@ -626,8 +663,8 @@ export default function FinanceiroPage() {
         <h2 className="text-2xl font-bold">Lançar despesa</h2>
 
         <p className="mt-2 text-sm text-zinc-500">
-          Registre saídas como aluguel, produtos, energia, internet, marketing
-          ou manutenção.
+          Registre saídas como aluguel, produtos, energia, internet,
+          marketing ou manutenção.
         </p>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -635,7 +672,9 @@ export default function FinanceiroPage() {
             placeholder="Descrição da despesa"
             className="rounded-xl bg-zinc-800 p-4"
             value={expenseDescription}
-            onChange={(event) => setExpenseDescription(event.target.value)}
+            onChange={(event) =>
+              setExpenseDescription(event.target.value)
+            }
           />
 
           <input
@@ -651,7 +690,9 @@ export default function FinanceiroPage() {
           <select
             className="rounded-xl bg-zinc-800 p-4"
             value={expenseCategory}
-            onChange={(event) => setExpenseCategory(event.target.value)}
+            onChange={(event) =>
+              setExpenseCategory(event.target.value)
+            }
           >
             <option value="general">Geral</option>
             <option value="rent">Aluguel</option>
@@ -667,13 +708,21 @@ export default function FinanceiroPage() {
           <select
             className="rounded-xl bg-zinc-800 p-4"
             value={expensePaymentMethod}
-            onChange={(event) => setExpensePaymentMethod(event.target.value)}
+            onChange={(event) =>
+              setExpensePaymentMethod(event.target.value)
+            }
           >
             <option value="cash">Dinheiro</option>
             <option value="pix">Pix</option>
-            <option value="credit_card">Cartão de crédito</option>
-            <option value="debit_card">Cartão de débito</option>
-            <option value="transfer">Transferência</option>
+            <option value="credit_card">
+              Cartão de crédito
+            </option>
+            <option value="debit_card">
+              Cartão de débito
+            </option>
+            <option value="transfer">
+              Transferência
+            </option>
           </select>
 
           <input
@@ -698,7 +747,9 @@ export default function FinanceiroPage() {
       </div>
 
       <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-        <h2 className="text-2xl font-bold">Movimentações financeiras</h2>
+        <h2 className="text-2xl font-bold">
+          Movimentações financeiras
+        </h2>
 
         {loading && (
           <p className="mt-6 rounded-xl bg-zinc-800 p-4 text-zinc-400">
@@ -723,7 +774,8 @@ export default function FinanceiroPage() {
         {!loading && filteredTransactions.length > 0 && (
           <div className="mt-6 space-y-3">
             {filteredTransactions.map((transaction) => {
-              const isCancelled = transaction.status === 'cancelled'
+              const isCancelled =
+                transaction.status === 'cancelled'
 
               return (
                 <div
@@ -760,25 +812,31 @@ export default function FinanceiroPage() {
 
                       <p
                         className={`mt-3 text-lg font-bold ${
-                          isCancelled ? 'line-through text-zinc-500' : ''
+                          isCancelled
+                            ? 'line-through text-zinc-500'
+                            : ''
                         }`}
                       >
-                        {transaction.description || 'Movimentação financeira'}
+                        {transaction.description ||
+                          'Movimentação financeira'}
                       </p>
 
                       <p className="mt-1 text-sm text-zinc-500">
-                        Categoria: {getCategoryLabel(transaction.category)}
+                        Categoria:{' '}
+                        {getCategoryLabel(transaction.category)}
                       </p>
 
                       <p className="mt-1 text-sm text-zinc-500">
                         Pagamento:{' '}
-                        {getPaymentMethodLabel(transaction.payment_method)}
+                        {getPaymentMethodLabel(
+                          transaction.payment_method
+                        )}
                       </p>
 
                       {isCancelled && (
                         <p className="mt-3 rounded-xl bg-zinc-900 p-3 text-sm text-zinc-400">
-                          Esta movimentação foi cancelada e não entra nos
-                          cálculos do financeiro.
+                          Esta movimentação foi cancelada e não entra
+                          nos cálculos do financeiro.
                         </p>
                       )}
                     </div>
@@ -793,8 +851,12 @@ export default function FinanceiroPage() {
                               : 'text-red-300'
                         }`}
                       >
-                        {transaction.type === 'income' ? '+' : '-'}{' '}
-                        {formatCurrency(Number(transaction.amount || 0))}
+                        {transaction.type === 'income'
+                          ? '+'
+                          : '-'}{' '}
+                        {formatCurrency(
+                          Number(transaction.amount || 0)
+                        )}
                       </p>
 
                       <p className="mt-1 text-sm text-zinc-500">
@@ -803,8 +865,12 @@ export default function FinanceiroPage() {
 
                       {!isCancelled && (
                         <button
-                          onClick={() => cancelTransaction(transaction.id)}
-                          disabled={cancellingId === transaction.id}
+                          onClick={() =>
+                            cancelTransaction(transaction.id)
+                          }
+                          disabled={
+                            cancellingId === transaction.id
+                          }
                           className="mt-4 rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-950"
                         >
                           {cancellingId === transaction.id
