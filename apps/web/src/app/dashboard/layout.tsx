@@ -11,6 +11,7 @@ const menuItems = [
   { label: 'Clientes', href: '/dashboard/clientes' },
   { label: 'Serviços', href: '/dashboard/servicos' },
   { label: 'Profissionais', href: '/dashboard/profissionais' },
+  { label: 'Financeiro', href: '/dashboard/financeiro' },
   { label: 'Relatórios', href: '/dashboard/relatorios' },
   { label: 'Configurações', href: '/dashboard/configuracoes' },
 ]
