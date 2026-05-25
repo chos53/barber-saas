@@ -60,6 +60,8 @@ export default function AgendaPage() {
   const [today, setToday] = useState('')
   const [currentTime, setCurrentTime] = useState('')
 
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash')
+
   useEffect(() => {
     loadData()
 
@@ -338,7 +340,8 @@ export default function AgendaPage() {
 
   async function updateAppointmentStatus(
     appointmentId: string,
-    status: string
+    status: string,
+    selectedMethod = 'cash'
   ) {
     const appointment = appointments.find(
       (item) => item.id === appointmentId
@@ -402,7 +405,7 @@ export default function AgendaPage() {
               category: 'service',
               description: serviceName,
               amount: servicePrice,
-              payment_method: 'cash',
+              payment_method: selectedMethod,
               status: 'paid',
               transaction_date: appointment.appointment_date,
             })
@@ -573,7 +576,10 @@ export default function AgendaPage() {
           return (
             <div
               key={appointment.id}
-              onClick={() => setSelectedAppointment(appointment)}
+              onClick={() => {
+                setSelectedAppointment(appointment)
+                setSelectedPaymentMethod('cash')
+              }}
               className="cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg transition hover:border-white"
             >
               <div className="flex items-start justify-between gap-4">
@@ -633,36 +639,65 @@ export default function AgendaPage() {
               </div>
 
               {appointment.status === 'scheduled' && (
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      updateAppointmentStatus(appointment.id, 'completed')
-                    }}
-                    className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
-                  >
-                    Concluído
-                  </button>
+                <div
+                  className="mt-4 grid gap-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="rounded-xl bg-zinc-800 p-3">
+                    <p className="mb-2 text-sm text-zinc-500">
+                      Forma de pagamento
+                    </p>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      updateAppointmentStatus(appointment.id, 'cancelled')
-                    }}
-                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
-                  >
-                    Cancelar
-                  </button>
+                    <select
+                      value={selectedPaymentMethod}
+                      onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                 
+                      className="w-full rounded-lg bg-zinc-900 p-3 text-sm"
+                    >
+                      <option value="cash">Dinheiro</option>
+                      <option value="pix">Pix</option>
+                      <option value="credit_card">Cartão de crédito</option>
+                      <option value="debit_card">Cartão de débito</option>
+                      <option value="transfer">Transferência</option>
+                    </select>
+                  </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      updateAppointmentStatus(appointment.id, 'no_show')
-                    }}
-                    className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
-                  >
-                    Não compareceu
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        updateAppointmentStatus(
+                          appointment.id,
+                          'completed',
+                          selectedPaymentMethod
+                        )
+                   
+                      }}
+                      className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
+                    >
+                      Concluído
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        updateAppointmentStatus(appointment.id, 'cancelled')
+                      }}
+                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        updateAppointmentStatus(appointment.id, 'no_show')
+                      }}
+                      className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
+                    >
+                      Não compareceu
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -765,12 +800,33 @@ export default function AgendaPage() {
                 <div className="grid gap-2 rounded-2xl bg-zinc-800 p-4">
                   <p className="text-sm text-zinc-500">Ações</p>
 
+                  <div className="rounded-2xl bg-zinc-900 p-4">
+                    <p className="mb-3 text-sm text-zinc-500">
+                      Forma de pagamento
+                    </p>
+
+                    <select
+                      value={selectedPaymentMethod}
+                      onChange={(e) =>
+                        setSelectedPaymentMethod(e.target.value)
+                      }
+                      className="w-full rounded-xl bg-zinc-800 p-3"
+                    >
+                      <option value="cash">Dinheiro</option>
+                      <option value="pix">Pix</option>
+                      <option value="credit_card">Cartão de crédito</option>
+                      <option value="debit_card">Cartão de débito</option>
+                      <option value="transfer">Transferência</option>
+                    </select>
+                  </div>
+
                   <div className="grid gap-2 md:grid-cols-3">
                     <button
                       onClick={() =>
                         updateAppointmentStatus(
                           selectedAppointment.id,
-                          'completed'
+                          'completed',
+                          selectedPaymentMethod
                         )
                       }
                       className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
