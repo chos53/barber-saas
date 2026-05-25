@@ -15,10 +15,14 @@ type FinancialTransaction = {
   created_at: string | null
 }
 
+type TransactionFilter = 'all' | 'income' | 'expense' | 'cancelled'
+
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
   const [filterDate, setFilterDate] = useState('')
+  const [transactionFilter, setTransactionFilter] =
+    useState<TransactionFilter>('all')
   const [today, setToday] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingExpense, setSavingExpense] = useState(false)
@@ -286,6 +290,23 @@ export default function FinanceiroPage() {
     }
   }, [transactions])
 
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      if (transactionFilter === 'all') {
+        return true
+      }
+
+      if (transactionFilter === 'cancelled') {
+        return transaction.status === 'cancelled'
+      }
+
+      return (
+        transaction.type === transactionFilter &&
+        transaction.status !== 'cancelled'
+      )
+    })
+  }, [transactions, transactionFilter])
+
   return (
     <div>
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -305,21 +326,47 @@ export default function FinanceiroPage() {
         </button>
       </div>
 
-      <div className="mt-6 rounded-2xl bg-zinc-900 p-6">
-        <label className="text-sm text-zinc-400">Filtrar por data</label>
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <label className="text-sm text-zinc-400">Filtrar por data</label>
 
-        <input
-          type="date"
-          className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
-          value={filterDate}
-          onChange={(event) => setFilterDate(event.target.value)}
-        />
+          <input
+            type="date"
+            className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
+            value={filterDate}
+            onChange={(event) => setFilterDate(event.target.value)}
+          />
 
-        {today && filterDate === today && (
+          {today && filterDate === today && (
+            <p className="mt-3 text-sm text-zinc-500">
+              Exibindo movimentações de hoje.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <label className="text-sm text-zinc-400">
+            Filtrar movimentações
+          </label>
+
+          <select
+            className="mt-2 w-full rounded-lg bg-zinc-800 p-3"
+            value={transactionFilter}
+            onChange={(event) =>
+              setTransactionFilter(event.target.value as TransactionFilter)
+            }
+          >
+            <option value="all">Todas</option>
+            <option value="income">Entradas</option>
+            <option value="expense">Despesas</option>
+            <option value="cancelled">Canceladas</option>
+          </select>
+
           <p className="mt-3 text-sm text-zinc-500">
-            Exibindo movimentações de hoje.
+            Exibindo {filteredTransactions.length} de {transactions.length}{' '}
+            movimentações.
           </p>
-        )}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-4">
@@ -450,9 +497,17 @@ export default function FinanceiroPage() {
           </p>
         )}
 
-        {!loading && transactions.length > 0 && (
+        {!loading &&
+          transactions.length > 0 &&
+          filteredTransactions.length === 0 && (
+            <p className="mt-6 rounded-xl bg-zinc-800 p-4 text-zinc-400">
+              Nenhuma movimentação encontrada para este filtro.
+            </p>
+          )}
+
+        {!loading && filteredTransactions.length > 0 && (
           <div className="mt-6 space-y-3">
-            {transactions.map((transaction) => {
+            {filteredTransactions.map((transaction) => {
               const isCancelled = transaction.status === 'cancelled'
 
               return (
