@@ -32,6 +32,14 @@ type Comanda = {
   items: ComandaItem[]
 }
 
+const paymentMethods = [
+  { value: 'cash', label: 'Dinheiro' },
+  { value: 'pix', label: 'Pix' },
+  { value: 'credit_card', label: 'Crédito' },
+  { value: 'debit_card', label: 'Débito' },
+  { value: 'bank_transfer', label: 'Transferência' },
+]
+
 export default function ComandasPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
@@ -42,6 +50,10 @@ export default function ComandasPage() {
   const [loading, setLoading] = useState(false)
 
   const [selectedServices, setSelectedServices] = useState<
+    Record<string, string>
+  >({})
+
+  const [paymentByComanda, setPaymentByComanda] = useState<
     Record<string, string>
   >({})
 
@@ -126,12 +138,14 @@ export default function ComandasPage() {
       })) || []
 
     setClients(clientsData || [])
+
     setServices(
       (servicesData || []).map((service) => ({
         ...service,
         price: Number(service.price),
       }))
     )
+
     setComandas(normalizedComandas)
   }
 
@@ -156,7 +170,7 @@ export default function ComandasPage() {
     setLoading(false)
 
     if (error) {
-      alert('Erro ao criar comanda.')
+      alert(`Erro ao criar comanda: ${error.message}`)
       console.error(error)
       return
     }
@@ -190,7 +204,7 @@ export default function ComandasPage() {
     })
 
     if (itemError) {
-      alert('Erro ao adicionar serviço.')
+      alert(`Erro ao adicionar serviço: ${itemError.message}`)
       console.error(itemError)
       return
     }
@@ -205,12 +219,83 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert('Serviço adicionado, mas houve erro ao atualizar o total.')
+      alert(
+        `Serviço adicionado, mas houve erro ao atualizar o total: ${totalError.message}`
+      )
       console.error(totalError)
       return
     }
 
     setSelectedServices((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
+    await loadData()
+  }
+
+  async function closeComanda(comanda: Comanda) {
+    const paymentMethod = paymentByComanda[comanda.id]
+
+    if (!paymentMethod) {
+      alert('Selecione a forma de pagamento.')
+      return
+    }
+
+    if (comanda.items.length === 0 || Number(comanda.total) <= 0) {
+      alert('Adicione pelo menos um item antes de fechar a comanda.')
+      return
+    }
+
+    const confirmClose = confirm(
+      `Fechar comanda de ${comanda.client_name} no valor de R$ ${Number(
+        comanda.total
+      ).toFixed(2)}?`
+    )
+
+    if (!confirmClose) return
+
+    const { error: transactionError } = await supabase
+      .from('financial_transactions')
+      .insert({
+        company_id: companyId,
+        client_id: comanda.client_id,
+        appointment_id: null,
+        professional_id: null,
+        type: 'income',
+        category: 'comanda',
+        description: `Comanda - ${comanda.client_name}`,
+        amount: Number(comanda.total),
+        payment_method: paymentMethod,
+        status: 'paid',
+   
+   
+        transaction_date: new Date().toISOString().split('T')[0],
+      })
+
+    if (transactionError) {
+      alert(`Erro ao gerar entrada no financeiro: ${transactionError.message}`)
+      console.error(transactionError)
+      return
+    }
+
+    const { error: comandaError } = await supabase
+      .from('comandas')
+      .update({
+        status: 'closed',
+        closed_at: new Date().toISOString(),
+      })
+      .eq('id', comanda.id)
+
+    if (comandaError) {
+      alert(
+        `Entrada financeira criada, mas houve erro ao fechar a comanda: ${comandaError.message}`
+      )
+      console.error(comandaError)
+      return
+    }
+
+    setPaymentByComanda((current) => ({
       ...current,
       [comanda.id]: '',
     }))
@@ -311,7 +396,9 @@ export default function ComandasPage() {
 
                     <p className="mt-1 text-sm text-zinc-500">
                       Criada em{' '}
-                      {new Date(comanda.created_at).toLocaleDateString('pt-BR')}
+                      {new Date(comanda.created_at).toLocaleDateString(
+                        'pt-BR'
+                      )}
                     </p>
                   </div>
 
@@ -392,6 +479,37 @@ export default function ComandasPage() {
                       </div>
                     ))}
                   </div>
+
+                  {comanda.status === 'open' && (
+                    <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto]">
+                      <select
+                        value={paymentByComanda[comanda.id] || ''}
+                        onChange={(event) =>
+                          setPaymentByComanda((current) => ({
+                            ...current,
+                            [comanda.id]: event.target.value,
+                          }))
+                        }
+                        className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                      >
+                        <option value="">Forma de pagamento</option>
+
+                        {paymentMethods.map((method) => (
+                          <option key={method.value} value={method.value}>
+                            {method.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => closeComanda(comanda)}
+                        className="rounded-xl bg-green-500 px-5 py-3 font-bold text-black transition hover:bg-green-400"
+                      >
+                        Fechar comanda
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
