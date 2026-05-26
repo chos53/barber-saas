@@ -8,6 +8,20 @@ type Client = {
   name: string
 }
 
+type Service = {
+  id: string
+  name: string
+  price: number
+}
+
+type ComandaItem = {
+  id: string
+  comanda_id: string
+  description: string
+  quantity: number
+  price: number
+}
+
 type Comanda = {
   id: string
   client_id: string | null
@@ -15,15 +29,21 @@ type Comanda = {
   total: number
   created_at: string
   client_name: string
+  items: ComandaItem[]
 }
 
 export default function ComandasPage() {
   const [clients, setClients] = useState<Client[]>([])
+  const [services, setServices] = useState<Service[]>([])
   const [comandas, setComandas] = useState<Comanda[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
   const [notes, setNotes] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const [selectedServices, setSelectedServices] = useState<
+    Record<string, string>
+  >({})
 
   useEffect(() => {
     loadData()
@@ -52,25 +72,66 @@ export default function ComandasPage() {
       .eq('company_id', profile.company_id)
       .order('name', { ascending: true })
 
+    const { data: servicesData } = await supabase
+      .from('services')
+      .select('id, name, price')
+      .eq('company_id', profile.company_id)
+      .order('name', { ascending: true })
+
     const { data: comandasData } = await supabase
       .from('comandas')
       .select('id, client_id, status, total, created_at')
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
+    const comandaIds = (comandasData || []).map((comanda) => comanda.id)
+
+    const { data: itemsData } =
+      comandaIds.length > 0
+        ? await supabase
+            .from('comanda_items')
+            .select('id, comanda_id, description, quantity, price')
+            .in('comanda_id', comandaIds)
+            .order('created_at', { ascending: true })
+        : { data: [] }
+
     const clientsMap = new Map(
       (clientsData || []).map((client) => [client.id, client.name])
     )
 
+    const itemsByComanda = new Map<string, ComandaItem[]>()
+
+    ;(itemsData || []).forEach((item) => {
+      const currentItems = itemsByComanda.get(item.comanda_id) || []
+
+      currentItems.push({
+        id: item.id,
+        comanda_id: item.comanda_id,
+        description: item.description,
+        quantity: Number(item.quantity),
+        price: Number(item.price),
+      })
+
+      itemsByComanda.set(item.comanda_id, currentItems)
+    })
+
     const normalizedComandas =
       comandasData?.map((comanda) => ({
         ...comanda,
+        total: Number(comanda.total),
         client_name: comanda.client_id
           ? clientsMap.get(comanda.client_id) || 'Cliente não informado'
           : 'Cliente não informado',
+        items: itemsByComanda.get(comanda.id) || [],
       })) || []
 
     setClients(clientsData || [])
+    setServices(
+      (servicesData || []).map((service) => ({
+        ...service,
+        price: Number(service.price),
+      }))
+    )
     setComandas(normalizedComandas)
   }
 
@@ -102,6 +163,58 @@ export default function ComandasPage() {
 
     setSelectedClientId('')
     setNotes('')
+    await loadData()
+  }
+
+  async function addServiceToComanda(comanda: Comanda) {
+    const serviceId = selectedServices[comanda.id]
+
+    if (!serviceId) {
+      alert('Selecione um serviço.')
+      return
+    }
+
+    const service = services.find((item) => item.id === serviceId)
+
+    if (!service) {
+      alert('Serviço não encontrado.')
+      return
+    }
+
+    const { error: itemError } = await supabase.from('comanda_items').insert({
+      comanda_id: comanda.id,
+      service_id: service.id,
+      description: service.name,
+      quantity: 1,
+      price: service.price,
+    })
+
+    if (itemError) {
+      alert('Erro ao adicionar serviço.')
+      console.error(itemError)
+      return
+    }
+
+    const newTotal = Number(comanda.total) + Number(service.price)
+
+    const { error: totalError } = await supabase
+      .from('comandas')
+      .update({
+        total: newTotal,
+      })
+      .eq('id', comanda.id)
+
+    if (totalError) {
+      alert('Serviço adicionado, mas houve erro ao atualizar o total.')
+      console.error(totalError)
+      return
+    }
+
+    setSelectedServices((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
     await loadData()
   }
 
@@ -180,7 +293,7 @@ export default function ComandasPage() {
             </span>
           </div>
 
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 space-y-4">
             {comandas.length === 0 && (
               <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
                 Nenhuma comanda encontrada.
@@ -218,6 +331,66 @@ export default function ComandasPage() {
                     >
                       {getStatusLabel(comanda.status)}
                     </span>
+                  </div>
+                </div>
+
+                <div className="mt-5 border-t border-zinc-700 pt-5">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                    <select
+                      value={selectedServices[comanda.id] || ''}
+                      onChange={(event) =>
+                        setSelectedServices((current) => ({
+                          ...current,
+                          [comanda.id]: event.target.value,
+                        }))
+                      }
+                      disabled={comanda.status !== 'open'}
+                      className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">Selecionar serviço</option>
+
+                      {services.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name} - R$ {service.price.toFixed(2)}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => addServiceToComanda(comanda)}
+                      disabled={comanda.status !== 'open'}
+                      className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {comanda.items.length === 0 && (
+                      <p className="rounded-xl bg-zinc-900 p-3 text-sm text-zinc-500">
+                        Nenhum item adicionado.
+                      </p>
+                    )}
+
+                    {comanda.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between rounded-xl bg-zinc-900 p-3"
+                      >
+                        <div>
+                          <p className="font-medium">{item.description}</p>
+
+                          <p className="text-sm text-zinc-500">
+                            Quantidade: {item.quantity}
+                          </p>
+                        </div>
+
+                        <strong className="text-green-400">
+                          R$ {(item.price * item.quantity).toFixed(2)}
+                        </strong>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
