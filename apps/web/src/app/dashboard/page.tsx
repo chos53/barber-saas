@@ -1,6 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { supabase } from '@/lib/supabase'
 
 type UpcomingAppointment = {
@@ -13,6 +22,16 @@ type UpcomingAppointment = {
   professionals: { name: string } | null
 }
 
+type RevenueChartItem = {
+  date: string
+  revenue: number
+}
+
+type ProfessionalRanking = {
+  name: string
+  total: number
+}
+
 export default function DashboardPage() {
   const [clientsCount, setClientsCount] = useState(0)
   const [servicesCount, setServicesCount] = useState(0)
@@ -22,10 +41,19 @@ export default function DashboardPage() {
   const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [realizedRevenue, setRealizedRevenue] = useState(0)
 
+  const [todayRevenue, setTodayRevenue] = useState(0)
+
   const [period, setPeriod] = useState('30')
 
   const [upcomingAppointments, setUpcomingAppointments] =
     useState<UpcomingAppointment[]>([])
+
+  const [revenueChartData, setRevenueChartData] = useState<
+    RevenueChartItem[]
+  >([])
+
+  const [professionalsRanking, setProfessionalsRanking] =
+    useState<ProfessionalRanking[]>([])
 
   useEffect(() => {
     loadDashboard()
@@ -105,58 +133,166 @@ export default function DashboardPage() {
         })
         .eq('company_id', companyId)
 
-    const { count: appointments } =
+    const { data: appointmentsData } =
       await supabase
         .from('appointments')
-        .select('*', {
-          count: 'exact',
-          head: true,
-        })
+        .select(`
+          *,
+          services (
+            id,
+            name,
+            price
+          ),
+          professionals (
+            id,
+            name
+          )
+        `)
         .eq('company_id', companyId)
         .gte(
           'appointment_date',
           formattedStartDate
         )
 
-    const { data: revenueData } =
-      await supabase
-        .from(
-          'appointment_financial_summary'
-        )
-        .select('price')
-        .eq('company_id', companyId)
-        .neq('status', 'cancelled')
-        .gte(
-          'appointment_date',
-          formattedStartDate
-        )
+    const appointments =
+      appointmentsData || []
 
-    const { data: realizedRevenueData } =
-      await supabase
-        .from(
-          'appointment_financial_summary'
-        )
-        .select('price')
-        .eq('company_id', companyId)
-        .eq('status', 'completed')
-        .gte(
-          'appointment_date',
-          formattedStartDate
-        )
+    const totalAppointments =
+      appointments.length
 
-    const totalRevenue =
-      revenueData?.reduce(
-        (sum, item) =>
-          sum + Number(item.price),
-        0
-      ) || 0
+    const completedAppointments =
+      appointments.filter(
+        (item) =>
+          item.status === 'completed'
+      )
+
+    const cancelledAppointments =
+      appointments.filter(
+        (item) =>
+          item.status === 'cancelled'
+      )
+
+    const totalExpectedRevenue =
+      appointments
+        .filter(
+          (item) =>
+            item.status !== 'cancelled'
+        )
+        .reduce(
+          (sum, item) =>
+            sum +
+            Number(
+              item.price ||
+                item.services?.price ||
+                0
+            ),
+          0
+        )
 
     const totalRealizedRevenue =
-      realizedRevenueData?.reduce(
+      completedAppointments.reduce(
         (sum, item) =>
-          sum + Number(item.price),
+          sum +
+          Number(
+            item.price ||
+              item.services?.price ||
+              0
+          ),
         0
-      ) || 0
+      )
+
+    const todayCompletedRevenue =
+      completedAppointments
+        .filter(
+          (item) =>
+            item.appointment_date ===
+            today
+        )
+        .reduce(
+          (sum, item) =>
+            sum +
+            Number(
+              item.price ||
+                item.services?.price ||
+                0
+            ),
+          0
+        )
+
+    const revenueMap: Record<
+      string,
+      number
+    > = {}
+
+    completedAppointments.forEach(
+      (appointment) => {
+        const date =
+          appointment.appointment_date
+
+        if (!revenueMap[date]) {
+          revenueMap[date] = 0
+        }
+
+        revenueMap[date] += Number(
+          appointment.price ||
+            appointment.services?.price ||
+            0
+        )
+      }
+    )
+
+    const chartData = Object.entries(
+      revenueMap
+    ).map(([date, revenue]) => ({
+      date,
+      revenue,
+    }))
+
+    setRevenueChartData(chartData)
+
+    const professionalsMap: Record<
+      string,
+      number
+    > = {}
+
+    completedAppointments.forEach(
+      (appointment) => {
+        const professionalName =
+          appointment.professionals
+            ?.name ||
+          'Não informado'
+
+        if (
+          !professionalsMap[
+            professionalName
+          ]
+        ) {
+          professionalsMap[
+            professionalName
+          ] = 0
+        }
+
+        professionalsMap[
+          professionalName
+        ] += Number(
+          appointment.price ||
+            appointment.services?.price ||
+            0
+        )
+      }
+    )
+
+    const ranking = Object.entries(
+      professionalsMap
+    )
+      .map(([name, total]) => ({
+        name,
+        total,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+
+    setProfessionalsRanking(ranking)
 
     const { data: upcomingData } =
       await supabase
@@ -182,23 +318,40 @@ export default function DashboardPage() {
 
     setClientsCount(clients || 0)
     setServicesCount(services || 0)
-    setProfessionalsCount(professionals || 0)
-    setAppointmentsCount(appointments || 0)
+    setProfessionalsCount(
+      professionals || 0
+    )
 
-    setExpectedRevenue(totalRevenue)
+    setAppointmentsCount(
+      totalAppointments
+    )
+
+    setExpectedRevenue(
+      totalExpectedRevenue
+    )
 
     setRealizedRevenue(
       totalRealizedRevenue
     )
 
+    setTodayRevenue(
+      todayCompletedRevenue
+    )
+
     setUpcomingAppointments(
-      (upcomingData || []) as UpcomingAppointment[]
+      (upcomingData ||
+        []) as UpcomingAppointment[]
     )
   }
 
+  const topProfessional =
+    useMemo(() => {
+      return professionalsRanking[0]
+    }, [professionalsRanking])
+
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-4xl font-bold">
             Dashboard
@@ -232,7 +385,58 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Faturamento hoje
+          </p>
+
+          <strong className="mt-3 block text-4xl text-green-400">
+            R$ {todayRevenue.toFixed(2)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Faturamento período
+          </p>
+
+          <strong className="mt-3 block text-4xl">
+            R$ {realizedRevenue.toFixed(2)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Agendamentos
+          </p>
+
+          <strong className="mt-3 block text-4xl">
+            {appointmentsCount}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Melhor profissional
+          </p>
+
+          <strong className="mt-3 block text-2xl text-yellow-400">
+            {topProfessional?.name ||
+              '-'}
+          </strong>
+
+          <p className="mt-2 text-sm text-zinc-500">
+            {topProfessional
+              ? `R$ ${topProfessional.total.toFixed(
+                  2
+                )}`
+              : 'Sem dados'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
           <p className="text-sm text-zinc-400">
             Clientes
@@ -262,35 +466,128 @@ export default function DashboardPage() {
             {professionalsCount}
           </strong>
         </div>
+      </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Agendamentos
-          </p>
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 xl:col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">
+              Faturamento diário
+            </h2>
 
-          <strong className="mt-3 block text-5xl">
-            {appointmentsCount}
-          </strong>
+            <span className="text-sm text-zinc-500">
+              Últimos {period} dias
+            </span>
+          </div>
+
+          {revenueChartData.length >
+          0 ? (
+            <div className="mt-6 h-[320px]">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+                <BarChart
+                  data={revenueChartData}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+
+                  <XAxis dataKey="date" />
+
+                  <YAxis
+                    tickFormatter={(
+                      value
+                    ) =>
+                      `R$ ${Number(
+                        value
+                      ).toFixed(0)}`
+                    }
+                  />
+
+                  <Tooltip
+                    formatter={(
+                      value
+                    ) =>
+                      `R$ ${Number(
+                        value
+                      ).toFixed(2)}`
+                    }
+                    contentStyle={{
+                      backgroundColor:
+                        '#18181b',
+                      border:
+                        '1px solid #3f3f46',
+                      borderRadius:
+                        '12px',
+                    }}
+                  />
+
+                  <Bar
+                    dataKey="revenue"
+                    fill="#22c55e"
+                    radius={[
+                      8,
+                      8,
+                      0,
+                      0,
+                    ]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="mt-6 text-zinc-500">
+              Nenhum dado encontrado.
+            </p>
+          )}
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Faturamento previsto
-          </p>
+          <h2 className="text-2xl font-bold">
+            Ranking profissionais
+          </h2>
 
-          <strong className="mt-3 block text-5xl">
-            R$ {expectedRevenue.toFixed(2)}
-          </strong>
-        </div>
+          <div className="mt-6 space-y-4">
+            {professionalsRanking.length ===
+              0 && (
+              <p className="text-zinc-500">
+                Nenhum dado encontrado.
+              </p>
+            )}
 
-        <div className="rounded-2xl border border-green-900 bg-zinc-900 p-6">
-          <p className="text-sm text-zinc-400">
-            Faturamento realizado
-          </p>
+            {professionalsRanking.map(
+              (
+                professional,
+                index
+              ) => (
+                <div
+                  key={professional.name}
+                  className="rounded-xl bg-zinc-800 p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-zinc-500">
+                        #{index + 1}
+                      </p>
 
-          <strong className="mt-3 block text-5xl text-green-400">
-            R$ {realizedRevenue.toFixed(2)}
-          </strong>
+                      <strong className="mt-1 block">
+                        {
+                          professional.name
+                        }
+                      </strong>
+                    </div>
+
+                    <strong className="text-green-400">
+                      R${' '}
+                      {professional.total.toFixed(
+                        2
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
         </div>
       </div>
 
