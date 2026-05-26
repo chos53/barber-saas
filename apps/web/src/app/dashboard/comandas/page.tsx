@@ -268,8 +268,6 @@ export default function ComandasPage() {
         amount: Number(comanda.total),
         payment_method: paymentMethod,
         status: 'paid',
-   
-   
         transaction_date: new Date().toISOString().split('T')[0],
       })
 
@@ -299,6 +297,36 @@ export default function ComandasPage() {
       ...current,
       [comanda.id]: '',
     }))
+
+    await loadData()
+  }
+
+  async function cancelComanda(comanda: Comanda) {
+    if (comanda.status !== 'open') {
+      alert('Somente comandas abertas podem ser canceladas.')
+      return
+    }
+
+    const confirmCancel = confirm(
+      `Cancelar comanda de ${comanda.client_name} no valor de R$ ${Number(
+        comanda.total
+      ).toFixed(2)}?`
+    )
+
+    if (!confirmCancel) return
+
+    const { error } = await supabase
+      .from('comandas')
+      .update({
+        status: 'cancelled',
+      })
+      .eq('id', comanda.id)
+
+    if (error) {
+      alert(`Erro ao cancelar comanda: ${error.message}`)
+      console.error(error)
+      return
+    }
 
     await loadData()
   }
@@ -388,7 +416,11 @@ export default function ComandasPage() {
             {comandas.map((comanda) => (
               <div
                 key={comanda.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-800 p-5"
+                className={`rounded-2xl border p-5 ${
+                  comanda.status === 'cancelled'
+                    ? 'border-red-900 bg-red-950/30'
+                    : 'border-zinc-800 bg-zinc-800'
+                }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -481,7 +513,7 @@ export default function ComandasPage() {
                   </div>
 
                   {comanda.status === 'open' && (
-                    <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto]">
+                    <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto_auto]">
                       <select
                         value={paymentByComanda[comanda.id] || ''}
                         onChange={(event) =>
@@ -508,7 +540,28 @@ export default function ComandasPage() {
                       >
                         Fechar comanda
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => cancelComanda(comanda)}
+                        className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition hover:bg-red-500"
+                      >
+                        Cancelar
+                      </button>
                     </div>
+                  )}
+
+                  {comanda.status === 'cancelled' && (
+                    <p className="mt-5 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+                      Esta comanda foi cancelada e não pode mais ser editada ou
+                      fechada.
+                    </p>
+                  )}
+
+                  {comanda.status === 'closed' && (
+                    <p className="mt-5 rounded-xl border border-green-900 bg-green-950/40 p-3 text-sm text-green-300">
+                      Esta comanda já foi fechada e lançada no financeiro.
+                    </p>
                   )}
                 </div>
               </div>
