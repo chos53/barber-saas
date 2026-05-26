@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,6 +22,18 @@ type RevenueItem = {
   realizado: number
 }
 
+type ProfessionalRevenue = {
+  professional_name: string
+  total: number
+}
+
+type ServiceRanking = {
+  service_name: string
+  total: number
+}
+
+const chartColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
+
 export default function ReportsPage() {
   const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [realizedRevenue, setRealizedRevenue] = useState(0)
@@ -26,6 +42,8 @@ export default function ReportsPage() {
   const [cancelledCount, setCancelledCount] = useState(0)
   const [period, setPeriod] = useState('30')
   const [chartData, setChartData] = useState<RevenueItem[]>([])
+  const [professionalRevenue, setProfessionalRevenue] = useState<ProfessionalRevenue[]>([])
+  const [servicesRanking, setServicesRanking] = useState<ServiceRanking[]>([])
 
   useEffect(() => {
     loadData()
@@ -49,29 +67,78 @@ export default function ReportsPage() {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - Number(period))
 
-    const formattedStartDate = startDate
-      .toISOString()
-      .split('T')[0]
+    const formattedStartDate = startDate.toISOString().split('T')[0]
 
-    const { data: revenueData } = await supabase
-      .from('appointment_financial_summary')
-      .select('price, status, appointment_date')
+    const { data: appointments } = await supabase
+      .from('appointments')
+      .select('*')
       .eq('company_id', profile.company_id)
       .gte('appointment_date', formattedStartDate)
 
-    const totalExpected =
-      revenueData
-        ?.filter((item) => item.status !== 'cancelled')
-        .reduce((sum, item) => sum + Number(item.price), 0) || 0
+    const serviceIds = [
+      ...new Set(
+        appointments
+          ?.map((appointment) => appointment.service_id)
+          .filter(Boolean)
+      ),
+    ]
 
-    const totalRealized =
-      revenueData
-        ?.filter((item) => item.status === 'completed')
-        .reduce((sum, item) => sum + Number(item.price), 0) || 0
+    const professionalIds = [
+      ...new Set(
+        appointments
+          ?.map((appointment) => appointment.professional_id)
+          .filter(Boolean)
+      ),
+    ]
+
+    const { data: services } =
+      serviceIds.length > 0
+        ? await supabase
+            .from('services')
+            .select('id, name, price')
+            .in('id', serviceIds)
+        : { data: [] }
+
+    const { data: professionals } =
+      professionalIds.length > 0
+        ? await supabase
+            .from('professionals')
+            .select('id, name')
+            .in('id', professionalIds)
+        : { data: [] }
+
+    const servicesMap = new Map(
+      services?.map((service) => [service.id, service]) || []
+    )
+
+    const professionalsMap = new Map(
+      professionals?.map((professional) => [professional.id, professional]) || []
+    )
+
+    const normalizedAppointments =
+      appointments?.map((appointment) => {
+        const service = servicesMap.get(appointment.service_id)
+        const professional = professionalsMap.get(appointment.professional_id)
+
+        return {
+          ...appointment,
+          price: Number(appointment.price || service?.price || 0),
+          service_name: service?.name || 'Não informado',
+          professional_name: professional?.name || 'Não informado',
+        }
+      }) || []
+
+    const totalExpected = normalizedAppointments
+      .filter((item) => item.status !== 'cancelled')
+      .reduce((sum, item) => sum + item.price, 0)
+
+    const totalRealized = normalizedAppointments
+      .filter((item) => item.status === 'completed')
+      .reduce((sum, item) => sum + item.price, 0)
 
     const groupedRevenue: Record<string, RevenueItem> = {}
 
-    revenueData?.forEach((item) => {
+    normalizedAppointments.forEach((item) => {
       const date = item.appointment_date
 
       if (!groupedRevenue[date]) {
@@ -83,43 +150,76 @@ export default function ReportsPage() {
       }
 
       if (item.status !== 'cancelled') {
-        groupedRevenue[date].previsto += Number(item.price)
+        groupedRevenue[date].previsto += item.price
       }
 
       if (item.status === 'completed') {
-        groupedRevenue[date].realizado += Number(item.price)
+        groupedRevenue[date].realizado += item.price
       }
     })
 
     setChartData(Object.values(groupedRevenue))
 
+    const professionalMap: Record<string, number> = {}
+
+    normalizedAppointments
+      .filter((item) => item.status === 'completed')
+      .forEach((item) => {
+        if (!professionalMap[item.professional_name]) {
+          professionalMap[item.professional_name] = 0
+        }
+
+        professionalMap[item.professional_name] += item.price
+      })
+
+    setProfessionalRevenue(
+      Object.entries(professionalMap)
+        .map(([professional_name, total]) => ({
+          professional_name,
+          total,
+        }))
+        .sort((a, b) => b.total - a.total)
+    )
+
+    const soldServicesMap: Record<string, number> = {}
+
+    normalizedAppointments
+      .filter((item) => item.status !== 'cancelled')
+      .forEach((item) => {
+        if (!soldServicesMap[item.service_name]) {
+          soldServicesMap[item.service_name] = 0
+        }
+
+        soldServicesMap[item.service_name] += 1
+      })
+
+    setServicesRanking(
+      Object.entries(soldServicesMap)
+        .map(([service_name, total]) => ({
+          service_name,
+          total,
+        }))
+        .sort((a, b) => b.total - a.total)
+    )
+
     setExpectedRevenue(totalExpected)
     setRealizedRevenue(totalRealized)
-
-    const { count: totalAppointments } = await supabase
-      .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('company_id', profile.company_id)
-      .gte('appointment_date', formattedStartDate)
-
-    const { count: completedAppointments } = await supabase
-      .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('company_id', profile.company_id)
-      .eq('status', 'completed')
-      .gte('appointment_date', formattedStartDate)
-
-    const { count: cancelledAppointments } = await supabase
-      .from('appointments')
-      .select('*', { count: 'exact', head: true })
-      .eq('company_id', profile.company_id)
-      .eq('status', 'cancelled')
-      .gte('appointment_date', formattedStartDate)
-
-    setAppointmentsCount(totalAppointments || 0)
-    setCompletedCount(completedAppointments || 0)
-    setCancelledCount(cancelledAppointments || 0)
+    setAppointmentsCount(normalizedAppointments.length)
+    setCompletedCount(
+      normalizedAppointments.filter((item) => item.status === 'completed').length
+    )
+    setCancelledCount(
+      normalizedAppointments.filter((item) => item.status === 'cancelled').length
+    )
   }
+
+  const topProfessionals = useMemo(() => {
+    return professionalRevenue.slice(0, 5)
+  }, [professionalRevenue])
+
+  const topServices = useMemo(() => {
+    return servicesRanking.slice(0, 5)
+  }, [servicesRanking])
 
   return (
     <div>
@@ -134,10 +234,10 @@ export default function ReportsPage() {
           <button
             key={value}
             onClick={() => setPeriod(value)}
-            className={`rounded-lg px-4 py-2 ${
+            className={`rounded-lg px-4 py-2 transition ${
               period === value
                 ? 'bg-white text-black'
-                : 'bg-zinc-800'
+                : 'bg-zinc-800 text-white hover:bg-zinc-700'
             }`}
           >
             {value === '1' ? 'Hoje' : `${value} dias`}
@@ -162,9 +262,7 @@ export default function ReportsPage() {
 
         <div className="rounded-2xl bg-zinc-900 p-6">
           <p className="text-sm text-zinc-400">Agendamentos</p>
-          <strong className="mt-2 block text-4xl">
-            {appointmentsCount}
-          </strong>
+          <strong className="mt-2 block text-4xl">{appointmentsCount}</strong>
         </div>
 
         <div className="rounded-2xl bg-zinc-900 p-6">
@@ -183,57 +281,114 @@ export default function ReportsPage() {
       </div>
 
       <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
-        <h2 className="text-2xl font-bold">
-          Faturamento por dia
-        </h2>
+        <h2 className="text-2xl font-bold">Faturamento por dia</h2>
 
-        <div className="mt-6 h-[350px] w-full overflow-hidden">
-   
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData}
-              margin={{
-                top: 10,
-                right: 10,
-                left: -20,
-                bottom: 0,
-              }}
-            >
-       
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="appointment_date" />
-              <YAxis
-                tickFormatter={(value) =>
-                  `R$ ${Number(value).toFixed(0)}`
-                }
-              />
-        
-              <Tooltip
-              formatter={(value) =>
-                `R$ ${Number(value).toFixed(2)}`
-              }
-                formatter={(value) =>
-                  `R$ ${Number(value).toFixed(2)}`
-                }
-                contentStyle={{
-                  backgroundColor: '#18181b',
-                  border: '1px solid #3f3f46',
-                  borderRadius: '12px',
-                  color: '#ffffff',
-                }}
-                labelStyle={{
-                  color: '#ffffff',
-                }}
-                itemStyle={{
-                  color: '#ffffff',
-                }}
-              />
-        
-        
-              <Bar dataKey="previsto" name="Previsto" />
-              <Bar dataKey="realizado" name="Realizado" />
-            </BarChart>
-          </ResponsiveContainer>
+        {chartData.length > 0 ? (
+          <div className="mt-6 h-[350px] w-full overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="appointment_date" />
+                <YAxis tickFormatter={(value) => `R$ ${Number(value).toFixed(0)}`} />
+                <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+                <Bar dataKey="previsto" name="Previsto" fill="#3b82f6" />
+                <Bar dataKey="realizado" name="Realizado" fill="#22c55e" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="mt-6 text-zinc-400">Nenhum dado encontrado.</p>
+        )}
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <h2 className="text-2xl font-bold">Ranking de profissionais</h2>
+
+          <div className="mt-6 space-y-4">
+            {topProfessionals.map((professional) => (
+              <div
+                key={professional.professional_name}
+                className="flex items-center justify-between rounded-xl bg-zinc-800 p-4"
+              >
+                <span className="font-medium">{professional.professional_name}</span>
+
+                <strong className="text-green-400">
+                  R$ {professional.total.toFixed(2)}
+                </strong>
+              </div>
+            ))}
+
+            {topProfessionals.length === 0 && (
+              <p className="text-zinc-400">Nenhum dado encontrado.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-zinc-900 p-6">
+          <h2 className="text-2xl font-bold">Serviços mais vendidos</h2>
+
+          {topServices.length > 0 ? (
+            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="h-[300px] min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={topServices}
+                      dataKey="total"
+                      nameKey="service_name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={95}
+                      paddingAngle={4}
+                    >
+                      {topServices.map((_, index) => (
+                        <Cell
+                          key={`service-${index}`}
+                          fill={chartColors[index % chartColors.length]}
+                        />
+                      ))}
+                    </Pie>
+
+                    <Tooltip
+                      formatter={(value, name) => [
+                        `${Number(value)} venda(s)`,
+                        name,
+                      ]}
+                    />
+
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="space-y-3">
+                {topServices.map((service, index) => (
+                  <div
+                    key={service.service_name}
+                    className="flex items-center justify-between rounded-xl bg-zinc-800 p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="h-3 w-3 rounded-full"
+                        style={{
+                          backgroundColor:
+                            chartColors[index % chartColors.length],
+                        }}
+                      />
+
+                      <span className="font-medium">{service.service_name}</span>
+                    </div>
+
+                    <strong>{service.total}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-6 text-zinc-400">Nenhum dado encontrado.</p>
+          )}
         </div>
       </div>
     </div>
