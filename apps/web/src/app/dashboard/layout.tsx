@@ -13,6 +13,7 @@ const menuItems = [
   { label: 'Profissionais', href: '/dashboard/profissionais' },
   { label: 'Financeiro', href: '/dashboard/financeiro' },
   { label: 'Relatórios', href: '/dashboard/relatorios' },
+  { label: 'Comandas', href: '/dashboard/comandas' },
   { label: 'Configurações', href: '/dashboard/configuracoes' },
 ]
 
