@@ -46,8 +46,11 @@ export default function DashboardPage() {
   const [cancelRate, setCancelRate] = useState(0)
   const [estimatedProfit, setEstimatedProfit] = useState(0)
   const [topService, setTopService] = useState('-')
-  const [monthlyGoal, setMonthlyGoal] = useState(10000)
+  const [monthlyGoal, setMonthlyGoal] = useState(0)
+  const [monthlyGoalInput, setMonthlyGoalInput] = useState('')
   const [monthlyRevenue, setMonthlyRevenue] = useState(0)
+  const [dashboardCompanyId, setDashboardCompanyId] = useState('')
+  const [savingMonthlyGoal, setSavingMonthlyGoal] = useState(false)
 
   const [period, setPeriod] = useState('30')
 
@@ -64,6 +67,39 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard()
   }, [period])
+
+  async function saveMonthlyGoal() {
+    if (!dashboardCompanyId) {
+      alert('Empresa não identificada. Atualize a página e tente novamente.')
+      return
+    }
+
+    const goalValue = Number(monthlyGoalInput)
+
+    if (!monthlyGoalInput || goalValue < 0) {
+      alert('Informe uma meta mensal válida.')
+      return
+    }
+
+    setSavingMonthlyGoal(true)
+
+    const { error } = await supabase
+      .from('company_dashboard_settings')
+      .upsert({
+        company_id: dashboardCompanyId,
+        monthly_goal: goalValue,
+        updated_at: new Date().toISOString(),
+      })
+
+    setSavingMonthlyGoal(false)
+
+    if (error) {
+      alert(`Erro ao salvar meta mensal: ${error.message}`)
+      return
+    }
+
+    setMonthlyGoal(goalValue)
+  }
 
   function getStatusLabel(status: string) {
     switch (status) {
@@ -100,6 +136,8 @@ export default function DashboardPage() {
 
     const companyId = profile.company_id
 
+    setDashboardCompanyId(companyId)
+
     const today = new Date()
       .toISOString()
       .split('T')[0]
@@ -113,6 +151,22 @@ export default function DashboardPage() {
     const formattedStartDate = startDate
       .toISOString()
       .split('T')[0]
+
+    const { data: dashboardSettings } =
+      await supabase
+        .from('company_dashboard_settings')
+        .select('monthly_goal')
+        .eq('company_id', companyId)
+        .maybeSingle()
+
+    const savedMonthlyGoal = Number(
+      dashboardSettings?.monthly_goal || 0
+    )
+
+    setMonthlyGoal(savedMonthlyGoal)
+    setMonthlyGoalInput(
+      savedMonthlyGoal > 0 ? String(savedMonthlyGoal) : ''
+    )
 
     const { count: clients } = await supabase
       .from('clients')
@@ -517,21 +571,33 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="w-full lg:max-w-xs">
+          <div className="w-full lg:max-w-md">
             <label className="text-sm text-zinc-400">
               Alterar meta mensal
             </label>
 
-            <input
-              type="number"
-              min="0"
-              step="100"
-              value={monthlyGoal}
-              onChange={(event) =>
-                setMonthlyGoal(Number(event.target.value))
-              }
-              className="mt-2 w-full rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
-            />
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+              <input
+                type="number"
+                min="0"
+                step="100"
+                value={monthlyGoalInput}
+                onChange={(event) =>
+                  setMonthlyGoalInput(event.target.value)
+                }
+                placeholder="Ex: 15000"
+                className="w-full rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={saveMonthlyGoal}
+                disabled={savingMonthlyGoal}
+                className="rounded-xl bg-green-400 px-5 py-3 font-bold text-black transition hover:bg-green-300 disabled:opacity-50"
+              >
+                {savingMonthlyGoal ? 'Salvando...' : 'Salvar meta'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -546,11 +612,15 @@ export default function DashboardPage() {
 
         <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-300 md:flex-row md:items-center md:justify-between">
           <span>
-            {monthlyGoalProgress.toFixed(1)}% da meta atingida
+            {monthlyGoal > 0
+              ? `${monthlyGoalProgress.toFixed(1)}% da meta atingida`
+              : 'Defina uma meta mensal para acompanhar o progresso'}
           </span>
 
           <span>
-            Faltam R$ {remainingToGoal.toFixed(2)} para bater a meta
+            {monthlyGoal > 0
+              ? `Faltam R$ ${remainingToGoal.toFixed(2)} para bater a meta`
+              : 'A meta ficará salva para esta empresa'}
           </span>
         </div>
       </div>
