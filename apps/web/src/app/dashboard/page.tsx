@@ -217,23 +217,22 @@ export default function DashboardPage() {
         0
       )
 
+    const { data: todayFinancialRevenue } =
+      await supabase
+        .from('financial_transactions')
+        .select('amount')
+        .eq('company_id', companyId)
+        .eq('type', 'income')
+        .neq('status', 'cancelled')
+        .eq('transaction_date', today)
+
     const todayCompletedRevenue =
-      completedAppointments
-        .filter(
-          (item) =>
-            item.appointment_date ===
-            today
-        )
-        .reduce(
-          (sum, item) =>
-            sum +
-            Number(
-              item.price ||
-                item.services?.price ||
-                0
-            ),
-          0
-        )
+      todayFinancialRevenue?.reduce(
+        (sum, item) =>
+          sum + Number(item.amount || 0),
+        0
+      ) || 0
+   
 
         const totalExpenses =
         financialExpenses?.reduce(
