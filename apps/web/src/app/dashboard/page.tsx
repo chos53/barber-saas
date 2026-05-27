@@ -519,6 +519,31 @@ export default function DashboardPage() {
 
   const remainingToGoal = Math.max(monthlyGoal - monthlyRevenue, 0)
 
+  const currentDate = new Date()
+
+const currentDay =
+  currentDate.getDate()
+
+const totalDaysInMonth =
+  new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth() + 1,
+    0
+  ).getDate()
+
+const dailyAverageRevenue =
+  currentDay > 0
+    ? monthlyRevenue / currentDay
+    : 0
+
+const projectedMonthlyRevenue =
+  dailyAverageRevenue *
+  totalDaysInMonth
+
+const projectedGoalReached =
+  projectedMonthlyRevenue >=
+  monthlyGoal
+
   return (
     <div>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -624,6 +649,44 @@ export default function DashboardPage() {
           </span>
         </div>
       </div>
+
+      <div className="mt-6 rounded-2xl border border-cyan-900 bg-cyan-950/30 p-6">
+  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <p className="text-sm text-cyan-300">
+        Projeção automática do mês
+      </p>
+
+      <h2 className="mt-2 text-3xl font-bold text-white">
+        R$ {projectedMonthlyRevenue.toFixed(2)}
+      </h2>
+
+      <p className="mt-2 text-sm text-zinc-300">
+        Média diária atual:
+        {' '}
+        R$ {dailyAverageRevenue.toFixed(2)}
+      </p>
+    </div>
+
+    <div
+      className={`rounded-2xl px-5 py-4 text-center ${
+        projectedGoalReached
+          ? 'bg-green-900/40 text-green-300'
+          : 'bg-red-900/40 text-red-300'
+      }`}
+    >
+      <p className="text-sm">
+        Status da meta
+      </p>
+
+      <strong className="mt-1 block text-lg">
+        {projectedGoalReached
+          ? 'Meta será atingida'
+          : 'Meta abaixo do esperado'}
+      </strong>
+    </div>
+  </div>
+</div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
