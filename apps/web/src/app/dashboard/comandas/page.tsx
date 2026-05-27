@@ -234,6 +234,51 @@ export default function ComandasPage() {
     await loadData()
   }
 
+  async function removeItemFromComanda(comanda: Comanda, item: ComandaItem) {
+    if (comanda.status !== 'open') {
+      alert('Somente comandas abertas podem ter itens removidos.')
+      return
+    }
+
+    const confirmRemove = confirm(
+      `Remover "${item.description}" da comanda de ${comanda.client_name}?`
+    )
+
+    if (!confirmRemove) return
+
+    const { error: itemError } = await supabase
+      .from('comanda_items')
+      .delete()
+      .eq('id', item.id)
+      .eq('comanda_id', comanda.id)
+
+    if (itemError) {
+      alert(`Erro ao remover item: ${itemError.message}`)
+      console.error(itemError)
+      return
+    }
+
+    const removedValue = Number(item.price) * Number(item.quantity)
+    const newTotal = Math.max(Number(comanda.total) - removedValue, 0)
+
+    const { error: totalError } = await supabase
+      .from('comandas')
+      .update({
+        total: newTotal,
+      })
+      .eq('id', comanda.id)
+
+    if (totalError) {
+      alert(
+        `Item removido, mas houve erro ao atualizar o total: ${totalError.message}`
+      )
+      console.error(totalError)
+      return
+    }
+
+    await loadData()
+  }
+
   async function closeComanda(comanda: Comanda) {
     const paymentMethod = paymentByComanda[comanda.id]
 
@@ -495,7 +540,7 @@ export default function ComandasPage() {
                     {comanda.items.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between rounded-xl bg-zinc-900 p-3"
+                        className="flex items-center justify-between gap-4 rounded-xl bg-zinc-900 p-3"
                       >
                         <div>
                           <p className="font-medium">{item.description}</p>
@@ -505,9 +550,23 @@ export default function ComandasPage() {
                           </p>
                         </div>
 
-                        <strong className="text-green-400">
-                          R$ {(item.price * item.quantity).toFixed(2)}
-                        </strong>
+                        <div className="flex items-center gap-3">
+                          <strong className="text-green-400">
+                            R$ {(item.price * item.quantity).toFixed(2)}
+                          </strong>
+
+                          {comanda.status === 'open' && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeItemFromComanda(comanda, item)
+                              }
+                              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-red-500"
+                            >
+                              Remover
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
