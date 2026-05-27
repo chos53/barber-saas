@@ -32,6 +32,13 @@ type ProfessionalRanking = {
   total: number
 }
 
+type ClientRanking = {
+  name: string
+  total: number
+  visits: number
+  averageTicket: number
+}
+
 export default function DashboardPage() {
   const [clientsCount, setClientsCount] = useState(0)
   const [servicesCount, setServicesCount] = useState(0)
@@ -63,6 +70,9 @@ export default function DashboardPage() {
 
   const [professionalsRanking, setProfessionalsRanking] =
     useState<ProfessionalRanking[]>([])
+
+  const [clientsRanking, setClientsRanking] =
+    useState<ClientRanking[]>([])
 
   useEffect(() => {
     loadDashboard()
@@ -217,7 +227,7 @@ export default function DashboardPage() {
     const appointments =
       appointmentsData || []
     
-      const { data: financialExpenses } =
+    const { data: financialExpenses } =
       await supabase
         .from('financial_transactions')
         .select('amount')
@@ -227,7 +237,19 @@ export default function DashboardPage() {
         .gte(
           'transaction_date',
           formattedStartDate
-        )  
+        )
+
+    const { data: financialIncomeTransactions } =
+      await supabase
+        .from('financial_transactions')
+        .select('client_id, amount')
+        .eq('company_id', companyId)
+        .eq('type', 'income')
+        .neq('status', 'cancelled')
+        .gte(
+          'transaction_date',
+          formattedStartDate
+        )
 
     const monthStartDate = new Date(
       today.substring(0, 4) + '-' + today.substring(5, 7) + '-01'
@@ -380,7 +402,64 @@ export default function DashboardPage() {
       
       setEstimatedProfit(
         estimatedProfit
-      )  
+      )
+
+    const clientIds = [
+      ...new Set(
+        (financialIncomeTransactions || [])
+          .map((transaction) => transaction.client_id)
+          .filter(Boolean)
+      ),
+    ]
+
+    const { data: rankingClients } =
+      clientIds.length > 0
+        ? await supabase
+            .from('clients')
+            .select('id, name')
+            .in('id', clientIds)
+        : { data: [] }
+
+    const clientsMap = new Map(
+      (rankingClients || []).map((client) => [client.id, client.name])
+    )
+
+    const clientSalesMap: Record<
+      string,
+      ClientRanking
+    > = {}
+
+    ;(financialIncomeTransactions || [])
+      .filter((transaction) => transaction.client_id)
+      .forEach((transaction) => {
+        const clientId = transaction.client_id as string
+        const clientName = clientsMap.get(clientId) || 'Cliente não informado'
+
+        if (!clientSalesMap[clientId]) {
+          clientSalesMap[clientId] = {
+            name: clientName,
+            total: 0,
+            visits: 0,
+            averageTicket: 0,
+          }
+        }
+
+        clientSalesMap[clientId].total += Number(transaction.amount || 0)
+        clientSalesMap[clientId].visits += 1
+      })
+
+    const clientRanking = Object.values(clientSalesMap)
+      .map((client) => ({
+        ...client,
+        averageTicket:
+          client.visits > 0
+            ? client.total / client.visits
+            : 0,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+
+    setClientsRanking(clientRanking)
 
     const revenueMap: Record<
       string,
@@ -933,6 +1012,69 @@ const projectedGoalReached =
               )
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">
+            Clientes VIP
+          </h2>
+
+          <span className="rounded-full bg-yellow-900 px-3 py-1 text-sm text-yellow-300">
+            Top {clientsRanking.length}
+          </span>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {clientsRanking.length === 0 && (
+            <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+              Nenhum cliente VIP encontrado no período.
+            </p>
+          )}
+
+          {clientsRanking.map((client, index) => (
+            <div
+              key={`${client.name}-${index}`}
+              className="rounded-2xl border border-zinc-800 bg-zinc-800 p-5"
+            >
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[auto_1fr_auto_auto]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-500 text-lg font-bold text-black">
+                  {index + 1}
+                </div>
+
+                <div>
+                  <p className="text-lg font-bold">
+                    {client.name}
+                  </p>
+
+                  <p className="mt-1 text-sm text-zinc-500">
+                    {client.visits} visita(s) no período
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-zinc-500">
+                    Total gasto
+                  </p>
+
+                  <strong className="mt-1 block text-green-400">
+                    R$ {client.total.toFixed(2)}
+                  </strong>
+                </div>
+
+                <div>
+                  <p className="text-sm text-zinc-500">
+                    Ticket médio
+                  </p>
+
+                  <strong className="mt-1 block text-blue-300">
+                    R$ {client.averageTicket.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
