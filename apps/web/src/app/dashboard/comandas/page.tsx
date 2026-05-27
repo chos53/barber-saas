@@ -18,6 +18,7 @@ type Comanda = {
   id: string
   client_id: string | null
   status: string
+  is_priority?: boolean
   total: number
   notes?: string | null
   created_at: string
@@ -52,10 +53,12 @@ export default function ComandasPage() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [priorityOnly, setPriorityOnly] = useState(false)
   const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
+  const [savingPriority, setSavingPriority] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     loadData()
@@ -73,27 +76,59 @@ export default function ComandasPage() {
         const matchesStatus =
           statusFilter === 'all' || comanda.status === statusFilter
 
-        return matchesSearch && matchesStatus
+        const matchesPriority =
+          !priorityOnly || Boolean(comanda.is_priority)
+
+        return matchesSearch && matchesStatus && matchesPriority
       })
       .sort((a, b) => {
-        const dateA = new Date(a.closed_at || a.cancelled_at || a.created_at).getTime()
-        const dateB = new Date(b.closed_at || b.cancelled_at || b.created_at).getTime()
+        if (a.is_priority !== b.is_priority) {
+          return a.is_priority ? -1 : 1
+        }
+
+        const dateA = new Date(
+          a.closed_at || a.cancelled_at || a.created_at
+        ).getTime()
+
+        const dateB = new Date(
+          b.closed_at || b.cancelled_at || b.created_at
+        ).getTime()
+
         return dateB - dateA
       })
-  }, [comandas, search, statusFilter])
+  }, [comandas, search, statusFilter, priorityOnly])
 
   const openComandas = useMemo(() => {
     return filteredComandas
       .filter((comanda) => comanda.status === 'open')
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .sort((a, b) => {
+        if (a.is_priority !== b.is_priority) {
+          return a.is_priority ? -1 : 1
+        }
+
+        return (
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+        )
+      })
   }, [filteredComandas])
 
   const historyComandas = useMemo(() => {
     return filteredComandas
       .filter((comanda) => comanda.status !== 'open')
       .sort((a, b) => {
-        const dateA = new Date(a.closed_at || a.cancelled_at || a.created_at).getTime()
-        const dateB = new Date(b.closed_at || b.cancelled_at || b.created_at).getTime()
+        if (a.is_priority !== b.is_priority) {
+          return a.is_priority ? -1 : 1
+        }
+
+        const dateA = new Date(
+          a.closed_at || a.cancelled_at || a.created_at
+        ).getTime()
+
+        const dateB = new Date(
+          b.closed_at || b.cancelled_at || b.created_at
+        ).getTime()
+
         return dateB - dateA
       })
   }, [filteredComandas])
@@ -135,6 +170,10 @@ export default function ComandasPage() {
     return comandas.filter((comanda) => Boolean(comanda.notes?.trim())).length
   }, [comandas])
 
+  const priorityCount = useMemo(() => {
+    return comandas.filter((comanda) => comanda.is_priority).length
+  }, [comandas])
+
   async function loadData() {
     const {
       data: { user },
@@ -166,7 +205,9 @@ export default function ComandasPage() {
 
     const { data: comandasData } = await supabase
       .from('comandas')
-      .select('id, client_id, status, total, notes, created_at, closed_at, cancelled_at')
+      .select(
+        'id, client_id, status, total, notes, is_priority, created_at, closed_at, cancelled_at'
+      )
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
@@ -205,6 +246,7 @@ export default function ComandasPage() {
       comandasData?.map((comanda) => ({
         ...comanda,
         total: Number(comanda.total),
+        is_priority: Boolean(comanda.is_priority),
         client_name: comanda.client_id
           ? clientsMap.get(comanda.client_id) || 'Cliente não informado'
           : 'Cliente não informado',
@@ -212,7 +254,14 @@ export default function ComandasPage() {
       })) || []
 
     setClients(clientsData || [])
-    setServices((servicesData || []).map((service) => ({ ...service, price: Number(service.price) })))
+
+    setServices(
+      (servicesData || []).map((service) => ({
+        ...service,
+        price: Number(service.price),
+      }))
+    )
+
     setComandas(normalizedComandas)
 
     const initialEditingNotes: Record<string, string> = {}
@@ -227,17 +276,51 @@ export default function ComandasPage() {
   async function saveNotes(comandaId: string) {
     const notesValue = editingNotes[comandaId] || ''
 
-    setSavingNotes((current) => ({ ...current, [comandaId]: true }))
+    setSavingNotes((current) => ({
+      ...current,
+      [comandaId]: true,
+    }))
 
     const { error } = await supabase
       .from('comandas')
-      .update({ notes: notesValue || null })
+      .update({
+        notes: notesValue || null,
+      })
       .eq('id', comandaId)
 
-    setSavingNotes((current) => ({ ...current, [comandaId]: false }))
+    setSavingNotes((current) => ({
+      ...current,
+      [comandaId]: false,
+    }))
 
     if (error) {
       alert(`Erro ao salvar observações: ${error.message}`)
+      return
+    }
+
+    await loadData()
+  }
+
+  async function togglePriority(comanda: Comanda) {
+    setSavingPriority((current) => ({
+      ...current,
+      [comanda.id]: true,
+    }))
+
+    const { error } = await supabase
+      .from('comandas')
+      .update({
+        is_priority: !comanda.is_priority,
+      })
+      .eq('id', comanda.id)
+
+    setSavingPriority((current) => ({
+      ...current,
+      [comanda.id]: false,
+    }))
+
+    if (error) {
+      alert(`Erro ao atualizar prioridade: ${error.message}`)
       return
     }
 
@@ -260,6 +343,7 @@ export default function ComandasPage() {
       status: 'open',
       total: 0,
       notes: notes || null,
+      is_priority: false,
     })
 
     setLoading(false)
@@ -271,6 +355,7 @@ export default function ComandasPage() {
 
     setSelectedClientId('')
     setNotes('')
+
     await loadData()
   }
 
@@ -282,27 +367,34 @@ export default function ComandasPage() {
       return
     }
 
-    const service = services.find((item) => item.id === serviceId)
+    const service = services.find(
+      (item) => item.id === serviceId
+    )
 
     if (!service) {
       alert('Serviço não encontrado.')
       return
     }
 
-    const { error: itemError } = await supabase.from('comanda_items').insert({
-      comanda_id: comanda.id,
-      service_id: service.id,
-      description: service.name,
-      quantity: 1,
-      price: service.price,
-    })
+    const { error: itemError } = await supabase
+      .from('comanda_items')
+      .insert({
+        comanda_id: comanda.id,
+        service_id: service.id,
+        description: service.name,
+        quantity: 1,
+        price: service.price,
+      })
 
     if (itemError) {
-      alert(`Erro ao adicionar serviço: ${itemError.message}`)
+      alert(
+        `Erro ao adicionar serviço: ${itemError.message}`
+      )
       return
     }
 
-    const newTotal = Number(comanda.total) + Number(service.price)
+    const newTotal =
+      Number(comanda.total) + Number(service.price)
 
     const { error: totalError } = await supabase
       .from('comandas')
@@ -310,17 +402,28 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert(`Erro ao atualizar total: ${totalError.message}`)
+      alert(
+        `Erro ao atualizar total: ${totalError.message}`
+      )
       return
     }
 
-    setSelectedServices((current) => ({ ...current, [comanda.id]: '' }))
+    setSelectedServices((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
     await loadData()
   }
 
-  async function removeItemFromComanda(comanda: Comanda, item: ComandaItem) {
+  async function removeItemFromComanda(
+    comanda: Comanda,
+    item: ComandaItem
+  ) {
     if (comanda.status !== 'open') {
-      alert('Somente comandas abertas podem ter itens removidos.')
+      alert(
+        'Somente comandas abertas podem ter itens removidos.'
+      )
       return
     }
 
@@ -334,8 +437,13 @@ export default function ComandasPage() {
       return
     }
 
-    const removedValue = Number(item.price) * Number(item.quantity)
-    const newTotal = Math.max(Number(comanda.total) - removedValue, 0)
+    const removedValue =
+      Number(item.price) * Number(item.quantity)
+
+    const newTotal = Math.max(
+      Number(comanda.total) - removedValue,
+      0
+    )
 
     const { error: totalError } = await supabase
       .from('comandas')
@@ -343,7 +451,9 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert(`Erro ao atualizar total: ${totalError.message}`)
+      alert(
+        `Erro ao atualizar total: ${totalError.message}`
+      )
       return
     }
 
@@ -351,31 +461,36 @@ export default function ComandasPage() {
   }
 
   async function closeComanda(comanda: Comanda) {
-    const paymentMethod = paymentByComanda[comanda.id]
+    const paymentMethod =
+      paymentByComanda[comanda.id]
 
     if (!paymentMethod) {
       alert('Selecione a forma de pagamento.')
       return
     }
 
-    const { error: transactionError } = await supabase
-      .from('financial_transactions')
-      .insert({
-        company_id: companyId,
-        client_id: comanda.client_id,
-        appointment_id: null,
-        professional_id: null,
-        type: 'income',
-        category: 'comanda',
-        description: `Comanda - ${comanda.client_name}`,
-        amount: Number(comanda.total),
-        payment_method: paymentMethod,
-        status: 'paid',
-        transaction_date: new Date().toISOString().split('T')[0],
-      })
+    const { error: transactionError } =
+      await supabase
+        .from('financial_transactions')
+        .insert({
+          company_id: companyId,
+          client_id: comanda.client_id,
+          appointment_id: null,
+          professional_id: null,
+          type: 'income',
+          category: 'comanda',
+          description: `Comanda - ${comanda.client_name}`,
+          amount: Number(comanda.total),
+          payment_method: paymentMethod,
+          status: 'paid',
+          transaction_date:
+            new Date().toISOString().split('T')[0],
+        })
 
     if (transactionError) {
-      alert(`Erro ao gerar entrada no financeiro: ${transactionError.message}`)
+      alert(
+        `Erro ao gerar entrada no financeiro: ${transactionError.message}`
+      )
       return
     }
 
@@ -388,11 +503,17 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (comandaError) {
-      alert(`Erro ao fechar comanda: ${comandaError.message}`)
+      alert(
+        `Erro ao fechar comanda: ${comandaError.message}`
+      )
       return
     }
 
-    setPaymentByComanda((current) => ({ ...current, [comanda.id]: '' }))
+    setPaymentByComanda((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
     await loadData()
   }
 
@@ -436,24 +557,45 @@ export default function ComandasPage() {
       <div
         key={comanda.id}
         className={`rounded-2xl border p-5 ${
-          comanda.status === 'cancelled'
-            ? 'border-red-900 bg-red-950/30'
-            : 'border-zinc-800 bg-zinc-800'
+          comanda.is_priority
+            ? 'border-orange-500 bg-orange-950/20'
+            : comanda.status === 'cancelled'
+              ? 'border-red-900 bg-red-950/30'
+              : 'border-zinc-800 bg-zinc-800'
         }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-lg font-bold">{comanda.client_name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-lg font-bold">
+                {comanda.client_name}
+              </p>
+
+              {comanda.is_priority && (
+                <span className="rounded-full bg-orange-500 px-2 py-1 text-xs font-bold text-black">
+                  PRIORIDADE
+                </span>
+              )}
+            </div>
 
             <div className="mt-1 space-y-1 text-sm text-zinc-500">
-              <p>Criada em {new Date(comanda.created_at).toLocaleString('pt-BR')}</p>
+              <p>
+                Criada em{' '}
+                {new Date(comanda.created_at).toLocaleString('pt-BR')}
+              </p>
 
               {comanda.closed_at && (
-                <p>Fechada em {new Date(comanda.closed_at).toLocaleString('pt-BR')}</p>
+                <p>
+                  Fechada em{' '}
+                  {new Date(comanda.closed_at).toLocaleString('pt-BR')}
+                </p>
               )}
 
               {comanda.cancelled_at && (
-                <p>Cancelada em {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}</p>
+                <p>
+                  Cancelada em{' '}
+                  {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}
+                </p>
               )}
             </div>
           </div>
@@ -562,7 +704,9 @@ export default function ComandasPage() {
               >
                 <div>
                   <p className="font-medium">{item.description}</p>
-                  <p className="text-sm text-zinc-500">Quantidade: {item.quantity}</p>
+                  <p className="text-sm text-zinc-500">
+                    Quantidade: {item.quantity}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -585,7 +729,7 @@ export default function ComandasPage() {
           </div>
 
           {comanda.status === 'open' && (
-            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto_auto]">
+            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto_auto_auto]">
               <select
                 value={paymentByComanda[comanda.id] || ''}
                 onChange={(event) =>
@@ -604,6 +748,23 @@ export default function ComandasPage() {
                   </option>
                 ))}
               </select>
+
+              <button
+                type="button"
+                onClick={() => togglePriority(comanda)}
+                disabled={savingPriority[comanda.id]}
+                className={`rounded-xl px-5 py-3 font-bold transition ${
+                  comanda.is_priority
+                    ? 'bg-orange-500 text-black hover:bg-orange-400'
+                    : 'bg-zinc-700 text-white hover:bg-zinc-600'
+                }`}
+              >
+                {savingPriority[comanda.id]
+                  ? 'Salvando...'
+                  : comanda.is_priority
+                    ? 'Remover prioridade'
+                    : 'Marcar prioridade'}
+              </button>
 
               <button
                 type="button"
@@ -629,54 +790,97 @@ export default function ComandasPage() {
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">Comandas</h1>
+      <h1 className="text-4xl font-bold">
+        Comandas
+      </h1>
 
       <p className="mt-2 text-zinc-400">
-        Controle de comandas abertas, fechamento e histórico.
+        Controle de comandas abertas,
+        fechamento e histórico.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-7">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
-          <p className="text-sm text-blue-300">Comandas abertas</p>
+          <p className="text-sm text-blue-300">
+            Comandas abertas
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-white">
             {openCount}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
-          <p className="text-sm text-yellow-300">Valor em aberto</p>
+          <p className="text-sm text-yellow-300">
+            Valor em aberto
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {openTotal.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
-          <p className="text-sm text-green-300">Total fechado</p>
+          <p className="text-sm text-green-300">
+            Total fechado
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {closedTotal.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5">
-          <p className="text-sm text-red-300">Total cancelado</p>
+          <p className="text-sm text-red-300">
+            Total cancelado
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {cancelledTotal.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
-          <p className="text-sm text-purple-300">Itens nas comandas</p>
+          <p className="text-sm text-purple-300">
+            Itens nas comandas
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-white">
             {totalItems}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
-          <p className="text-sm text-yellow-300">Com observações</p>
+          <p className="text-sm text-yellow-300">
+            Com observações
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-white">
             {notesCount}
           </strong>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setPriorityOnly((current) => !current)}
+          className={`rounded-2xl border p-5 text-left transition ${
+            priorityOnly
+              ? 'border-orange-500 bg-orange-500 text-black'
+              : 'border-orange-900 bg-orange-950/30 text-white hover:bg-orange-950/50'
+          }`}
+        >
+          <p className={priorityOnly ? 'text-sm text-black' : 'text-sm text-orange-300'}>
+            Prioritárias
+          </p>
+
+          <strong className="mt-2 block text-3xl font-bold">
+            {priorityCount}
+          </strong>
+
+          <span className="mt-2 block text-xs font-bold">
+            {priorityOnly ? 'Filtro ativo' : 'Clique para filtrar'}
+          </span>
+        </button>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -684,20 +888,31 @@ export default function ComandasPage() {
           onSubmit={createComanda}
           className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
         >
-          <h2 className="text-2xl font-bold">Nova comanda</h2>
+          <h2 className="text-2xl font-bold">
+            Nova comanda
+          </h2>
 
           <div className="mt-6">
-            <label className="text-sm text-zinc-400">Cliente</label>
+            <label className="text-sm text-zinc-400">
+              Cliente
+            </label>
 
             <select
               value={selectedClientId}
-              onChange={(event) => setSelectedClientId(event.target.value)}
+              onChange={(event) =>
+                setSelectedClientId(event.target.value)
+              }
               className="mt-2 w-full rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
             >
-              <option value="">Cliente não informado</option>
+              <option value="">
+                Cliente não informado
+              </option>
 
               {clients.map((client) => (
-                <option key={client.id} value={client.id}>
+                <option
+                  key={client.id}
+                  value={client.id}
+                >
                   {client.name}
                 </option>
               ))}
@@ -705,11 +920,15 @@ export default function ComandasPage() {
           </div>
 
           <div className="mt-4">
-            <label className="text-sm text-zinc-400">Observações</label>
+            <label className="text-sm text-zinc-400">
+              Observações
+            </label>
 
             <textarea
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
+              onChange={(event) =>
+                setNotes(event.target.value)
+              }
               placeholder="Ex: cliente prefere pagar no pix"
               className="mt-2 h-28 w-full resize-none rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
             />
@@ -720,39 +939,70 @@ export default function ComandasPage() {
             disabled={loading}
             className="mt-6 w-full rounded-xl bg-white p-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
           >
-            {loading ? 'Criando...' : 'Abrir comanda'}
+            {loading
+              ? 'Criando...'
+              : 'Abrir comanda'}
           </button>
         </form>
 
         <div className="space-y-6 xl:col-span-2">
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="text-2xl font-bold">Filtros</h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-2xl font-bold">
+                Filtros
+              </h2>
+
+              {priorityOnly && (
+                <button
+                  type="button"
+                  onClick={() => setPriorityOnly(false)}
+                  className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-black transition hover:bg-orange-400"
+                >
+                  Limpar prioritárias
+                </button>
+              )}
+            </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
                 placeholder="Buscar por cliente..."
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               />
 
               <select
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
+                onChange={(event) =>
+                  setStatusFilter(
+                    event.target.value
+                  )
+                }
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               >
                 {statusFilters.map((filter) => (
-                  <option key={filter.value} value={filter.value}>
+                  <option
+                    key={filter.value}
+                    value={filter.value}
+                  >
                     {filter.label}
                   </option>
                 ))}
               </select>
             </div>
+
+            <p className="mt-3 text-sm text-zinc-500">
+              Exibindo {filteredComandas.length} de {comandas.length} comanda(s).
+            </p>
           </section>
 
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Comandas abertas</h2>
+              <h2 className="text-2xl font-bold">
+                Comandas abertas
+              </h2>
 
               <span className="rounded-full bg-blue-900 px-3 py-1 text-sm text-blue-300">
                 {openComandas.length} aberta(s)
@@ -766,13 +1016,17 @@ export default function ComandasPage() {
                 </p>
               )}
 
-              {openComandas.map((comanda) => renderComandaCard(comanda))}
+              {openComandas.map((comanda) =>
+                renderComandaCard(comanda)
+              )}
             </div>
           </section>
 
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Histórico de comandas</h2>
+              <h2 className="text-2xl font-bold">
+                Histórico de comandas
+              </h2>
 
               <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">
                 {historyComandas.length} registro(s)
@@ -786,7 +1040,9 @@ export default function ComandasPage() {
                 </p>
               )}
 
-              {historyComandas.map((comanda) => renderComandaCard(comanda))}
+              {historyComandas.map((comanda) =>
+                renderComandaCard(comanda)
+              )}
             </div>
           </section>
         </div>
