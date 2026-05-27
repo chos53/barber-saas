@@ -46,6 +46,8 @@ export default function DashboardPage() {
   const [cancelRate, setCancelRate] = useState(0)
   const [estimatedProfit, setEstimatedProfit] = useState(0)
   const [topService, setTopService] = useState('-')
+  const [monthlyGoal, setMonthlyGoal] = useState(10000)
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0)
 
   const [period, setPeriod] = useState('30')
 
@@ -173,6 +175,22 @@ export default function DashboardPage() {
           formattedStartDate
         )  
 
+    const monthStartDate = new Date(
+      today.substring(0, 4) + '-' + today.substring(5, 7) + '-01'
+    )
+      .toISOString()
+      .split('T')[0]
+
+    const { data: monthlyFinancialRevenue } =
+      await supabase
+        .from('financial_transactions')
+        .select('amount')
+        .eq('company_id', companyId)
+        .eq('type', 'income')
+        .neq('status', 'cancelled')
+        .gte('transaction_date', monthStartDate)
+        .lte('transaction_date', today)
+
     const totalAppointments =
       appointments.length
 
@@ -232,6 +250,15 @@ export default function DashboardPage() {
           sum + Number(item.amount || 0),
         0
       ) || 0
+
+    const currentMonthRevenue =
+      monthlyFinancialRevenue?.reduce(
+        (sum, item) =>
+          sum + Number(item.amount || 0),
+        0
+      ) || 0
+
+    setMonthlyRevenue(currentMonthRevenue)
    
 
         const totalExpenses =
@@ -431,6 +458,13 @@ export default function DashboardPage() {
       return professionalsRanking[0]
     }, [professionalsRanking])
 
+  const monthlyGoalProgress =
+    monthlyGoal > 0
+      ? Math.min((monthlyRevenue / monthlyGoal) * 100, 100)
+      : 0
+
+  const remainingToGoal = Math.max(monthlyGoal - monthlyRevenue, 0)
+
   return (
     <div>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -464,6 +498,60 @@ export default function DashboardPage() {
               </button>
             )
           )}
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-green-900 bg-green-950/30 p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm text-green-300">
+              Meta mensal da barbearia
+            </p>
+
+            <h2 className="mt-2 text-3xl font-bold">
+              R$ {monthlyGoal.toFixed(2)}
+            </h2>
+
+            <p className="mt-2 text-sm text-zinc-400">
+              Realizado no mês: R$ {monthlyRevenue.toFixed(2)}
+            </p>
+          </div>
+
+          <div className="w-full lg:max-w-xs">
+            <label className="text-sm text-zinc-400">
+              Alterar meta mensal
+            </label>
+
+            <input
+              type="number"
+              min="0"
+              step="100"
+              value={monthlyGoal}
+              onChange={(event) =>
+                setMonthlyGoal(Number(event.target.value))
+              }
+              className="mt-2 w-full rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 h-4 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-green-400 transition-all"
+            style={{
+              width: `${monthlyGoalProgress}%`,
+            }}
+          />
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-300 md:flex-row md:items-center md:justify-between">
+          <span>
+            {monthlyGoalProgress.toFixed(1)}% da meta atingida
+          </span>
+
+          <span>
+            Faltam R$ {remainingToGoal.toFixed(2)} para bater a meta
+          </span>
         </div>
       </div>
 
