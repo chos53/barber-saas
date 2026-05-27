@@ -3,16 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-type Client = {
-  id: string
-  name: string
-}
-
-type Service = {
-  id: string
-  name: string
-  price: number
-}
+type Client = { id: string; name: string }
+type Service = { id: string; name: string; price: number }
 
 type ComandaItem = {
   id: string
@@ -60,7 +52,6 @@ export default function ComandasPage() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-
   const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
@@ -85,14 +76,8 @@ export default function ComandasPage() {
         return matchesSearch && matchesStatus
       })
       .sort((a, b) => {
-        const dateA = new Date(
-          a.closed_at || a.cancelled_at || a.created_at
-        ).getTime()
-
-        const dateB = new Date(
-          b.closed_at || b.cancelled_at || b.created_at
-        ).getTime()
-
+        const dateA = new Date(a.closed_at || a.cancelled_at || a.created_at).getTime()
+        const dateB = new Date(b.closed_at || b.cancelled_at || b.created_at).getTime()
         return dateB - dateA
       })
   }, [comandas, search, statusFilter])
@@ -100,25 +85,15 @@ export default function ComandasPage() {
   const openComandas = useMemo(() => {
     return filteredComandas
       .filter((comanda) => comanda.status === 'open')
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-      )
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
   }, [filteredComandas])
 
   const historyComandas = useMemo(() => {
     return filteredComandas
       .filter((comanda) => comanda.status !== 'open')
       .sort((a, b) => {
-        const dateA = new Date(
-          a.closed_at || a.cancelled_at || a.created_at
-        ).getTime()
-
-        const dateB = new Date(
-          b.closed_at || b.cancelled_at || b.created_at
-        ).getTime()
-
+        const dateA = new Date(a.closed_at || a.cancelled_at || a.created_at).getTime()
+        const dateB = new Date(b.closed_at || b.cancelled_at || b.created_at).getTime()
         return dateB - dateA
       })
   }, [filteredComandas])
@@ -156,6 +131,10 @@ export default function ComandasPage() {
     }, 0)
   }, [comandas])
 
+  const notesCount = useMemo(() => {
+    return comandas.filter((comanda) => Boolean(comanda.notes?.trim())).length
+  }, [comandas])
+
   async function loadData() {
     const {
       data: { user },
@@ -187,39 +166,29 @@ export default function ComandasPage() {
 
     const { data: comandasData } = await supabase
       .from('comandas')
-      .select(
-        'id, client_id, status, total, notes, created_at, closed_at, cancelled_at'
-      )
+      .select('id, client_id, status, total, notes, created_at, closed_at, cancelled_at')
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
-    const comandaIds = (comandasData || []).map(
-      (comanda) => comanda.id
-    )
+    const comandaIds = (comandasData || []).map((comanda) => comanda.id)
 
     const { data: itemsData } =
       comandaIds.length > 0
         ? await supabase
             .from('comanda_items')
-            .select(
-              'id, comanda_id, description, quantity, price'
-            )
+            .select('id, comanda_id, description, quantity, price')
             .in('comanda_id', comandaIds)
             .order('created_at', { ascending: true })
         : { data: [] }
 
     const clientsMap = new Map(
-      (clientsData || []).map((client) => [
-        client.id,
-        client.name,
-      ])
+      (clientsData || []).map((client) => [client.id, client.name])
     )
 
     const itemsByComanda = new Map<string, ComandaItem[]>()
 
     ;(itemsData || []).forEach((item) => {
-      const currentItems =
-        itemsByComanda.get(item.comanda_id) || []
+      const currentItems = itemsByComanda.get(item.comanda_id) || []
 
       currentItems.push({
         id: item.id,
@@ -237,51 +206,35 @@ export default function ComandasPage() {
         ...comanda,
         total: Number(comanda.total),
         client_name: comanda.client_id
-          ? clientsMap.get(comanda.client_id) ||
-            'Cliente não informado'
+          ? clientsMap.get(comanda.client_id) || 'Cliente não informado'
           : 'Cliente não informado',
         items: itemsByComanda.get(comanda.id) || [],
       })) || []
 
     setClients(clientsData || [])
-
-    setServices(
-      (servicesData || []).map((service) => ({
-        ...service,
-        price: Number(service.price),
-      }))
-    )
-
+    setServices((servicesData || []).map((service) => ({ ...service, price: Number(service.price) })))
     setComandas(normalizedComandas)
 
     const initialEditingNotes: Record<string, string> = {}
 
     normalizedComandas.forEach((comanda) => {
-      initialEditingNotes[comanda.id] =
-        comanda.notes || ''
+      initialEditingNotes[comanda.id] = comanda.notes || ''
     })
 
     setEditingNotes(initialEditingNotes)
   }
+
   async function saveNotes(comandaId: string) {
     const notesValue = editingNotes[comandaId] || ''
 
-    setSavingNotes((current) => ({
-      ...current,
-      [comandaId]: true,
-    }))
+    setSavingNotes((current) => ({ ...current, [comandaId]: true }))
 
     const { error } = await supabase
       .from('comandas')
-      .update({
-        notes: notesValue || null,
-      })
+      .update({ notes: notesValue || null })
       .eq('id', comandaId)
 
-    setSavingNotes((current) => ({
-      ...current,
-      [comandaId]: false,
-    }))
+    setSavingNotes((current) => ({ ...current, [comandaId]: false }))
 
     if (error) {
       alert(`Erro ao salvar observações: ${error.message}`)
@@ -301,15 +254,13 @@ export default function ComandasPage() {
 
     setLoading(true)
 
-    const { error } = await supabase
-      .from('comandas')
-      .insert({
-        company_id: companyId,
-        client_id: selectedClientId || null,
-        status: 'open',
-        total: 0,
-        notes: notes || null,
-      })
+    const { error } = await supabase.from('comandas').insert({
+      company_id: companyId,
+      client_id: selectedClientId || null,
+      status: 'open',
+      total: 0,
+      notes: notes || null,
+    })
 
     setLoading(false)
 
@@ -320,7 +271,6 @@ export default function ComandasPage() {
 
     setSelectedClientId('')
     setNotes('')
-
     await loadData()
   }
 
@@ -332,34 +282,27 @@ export default function ComandasPage() {
       return
     }
 
-    const service = services.find(
-      (item) => item.id === serviceId
-    )
+    const service = services.find((item) => item.id === serviceId)
 
     if (!service) {
       alert('Serviço não encontrado.')
       return
     }
 
-    const { error: itemError } = await supabase
-      .from('comanda_items')
-      .insert({
-        comanda_id: comanda.id,
-        service_id: service.id,
-        description: service.name,
-        quantity: 1,
-        price: service.price,
-      })
+    const { error: itemError } = await supabase.from('comanda_items').insert({
+      comanda_id: comanda.id,
+      service_id: service.id,
+      description: service.name,
+      quantity: 1,
+      price: service.price,
+    })
 
     if (itemError) {
-      alert(
-        `Erro ao adicionar serviço: ${itemError.message}`
-      )
+      alert(`Erro ao adicionar serviço: ${itemError.message}`)
       return
     }
 
-    const newTotal =
-      Number(comanda.total) + Number(service.price)
+    const newTotal = Number(comanda.total) + Number(service.price)
 
     const { error: totalError } = await supabase
       .from('comandas')
@@ -367,28 +310,17 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert(
-        `Erro ao atualizar total: ${totalError.message}`
-      )
+      alert(`Erro ao atualizar total: ${totalError.message}`)
       return
     }
 
-    setSelectedServices((current) => ({
-      ...current,
-      [comanda.id]: '',
-    }))
-
+    setSelectedServices((current) => ({ ...current, [comanda.id]: '' }))
     await loadData()
   }
 
-  async function removeItemFromComanda(
-    comanda: Comanda,
-    item: ComandaItem
-  ) {
+  async function removeItemFromComanda(comanda: Comanda, item: ComandaItem) {
     if (comanda.status !== 'open') {
-      alert(
-        'Somente comandas abertas podem ter itens removidos.'
-      )
+      alert('Somente comandas abertas podem ter itens removidos.')
       return
     }
 
@@ -402,13 +334,8 @@ export default function ComandasPage() {
       return
     }
 
-    const removedValue =
-      Number(item.price) * Number(item.quantity)
-
-    const newTotal = Math.max(
-      Number(comanda.total) - removedValue,
-      0
-    )
+    const removedValue = Number(item.price) * Number(item.quantity)
+    const newTotal = Math.max(Number(comanda.total) - removedValue, 0)
 
     const { error: totalError } = await supabase
       .from('comandas')
@@ -416,9 +343,7 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert(
-        `Erro ao atualizar total: ${totalError.message}`
-      )
+      alert(`Erro ao atualizar total: ${totalError.message}`)
       return
     }
 
@@ -426,36 +351,31 @@ export default function ComandasPage() {
   }
 
   async function closeComanda(comanda: Comanda) {
-    const paymentMethod =
-      paymentByComanda[comanda.id]
+    const paymentMethod = paymentByComanda[comanda.id]
 
     if (!paymentMethod) {
       alert('Selecione a forma de pagamento.')
       return
     }
 
-    const { error: transactionError } =
-      await supabase
-        .from('financial_transactions')
-        .insert({
-          company_id: companyId,
-          client_id: comanda.client_id,
-          appointment_id: null,
-          professional_id: null,
-          type: 'income',
-          category: 'comanda',
-          description: `Comanda - ${comanda.client_name}`,
-          amount: Number(comanda.total),
-          payment_method: paymentMethod,
-          status: 'paid',
-          transaction_date:
-            new Date().toISOString().split('T')[0],
-        })
+    const { error: transactionError } = await supabase
+      .from('financial_transactions')
+      .insert({
+        company_id: companyId,
+        client_id: comanda.client_id,
+        appointment_id: null,
+        professional_id: null,
+        type: 'income',
+        category: 'comanda',
+        description: `Comanda - ${comanda.client_name}`,
+        amount: Number(comanda.total),
+        payment_method: paymentMethod,
+        status: 'paid',
+        transaction_date: new Date().toISOString().split('T')[0],
+      })
 
     if (transactionError) {
-      alert(
-        `Erro ao gerar entrada no financeiro: ${transactionError.message}`
-      )
+      alert(`Erro ao gerar entrada no financeiro: ${transactionError.message}`)
       return
     }
 
@@ -468,17 +388,11 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (comandaError) {
-      alert(
-        `Erro ao fechar comanda: ${comandaError.message}`
-      )
+      alert(`Erro ao fechar comanda: ${comandaError.message}`)
       return
     }
 
-    setPaymentByComanda((current) => ({
-      ...current,
-      [comanda.id]: '',
-    }))
-
+    setPaymentByComanda((current) => ({ ...current, [comanda.id]: '' }))
     await loadData()
   }
 
@@ -511,6 +425,7 @@ export default function ComandasPage() {
         return status
     }
   }
+
   function renderComandaCard(comanda: Comanda) {
     const itemsCount = comanda.items.reduce(
       (sum, item) => sum + Number(item.quantity),
@@ -531,23 +446,14 @@ export default function ComandasPage() {
             <p className="text-lg font-bold">{comanda.client_name}</p>
 
             <div className="mt-1 space-y-1 text-sm text-zinc-500">
-              <p>
-                Criada em{' '}
-                {new Date(comanda.created_at).toLocaleString('pt-BR')}
-              </p>
+              <p>Criada em {new Date(comanda.created_at).toLocaleString('pt-BR')}</p>
 
               {comanda.closed_at && (
-                <p>
-                  Fechada em{' '}
-                  {new Date(comanda.closed_at).toLocaleString('pt-BR')}
-                </p>
+                <p>Fechada em {new Date(comanda.closed_at).toLocaleString('pt-BR')}</p>
               )}
 
               {comanda.cancelled_at && (
-                <p>
-                  Cancelada em{' '}
-                  {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}
-                </p>
+                <p>Cancelada em {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}</p>
               )}
             </div>
           </div>
@@ -576,9 +482,17 @@ export default function ComandasPage() {
         </div>
 
         <div className="mt-4 rounded-xl border border-yellow-900 bg-yellow-950/30 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-yellow-400">
-            Observações
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-yellow-400">
+              Observações
+            </p>
+
+            {comanda.notes?.trim() && (
+              <span className="rounded-full bg-yellow-400 px-2 py-1 text-xs font-bold text-black">
+                Com observação
+              </span>
+            )}
+          </div>
 
           <textarea
             value={editingNotes[comanda.id] || ''}
@@ -648,10 +562,7 @@ export default function ComandasPage() {
               >
                 <div>
                   <p className="font-medium">{item.description}</p>
-
-                  <p className="text-sm text-zinc-500">
-                    Quantidade: {item.quantity}
-                  </p>
+                  <p className="text-sm text-zinc-500">Quantidade: {item.quantity}</p>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -714,7 +625,8 @@ export default function ComandasPage() {
         </div>
       </div>
     )
-  }  
+  }
+
   return (
     <div>
       <h1 className="text-4xl font-bold">Comandas</h1>
@@ -723,7 +635,7 @@ export default function ComandasPage() {
         Controle de comandas abertas, fechamento e histórico.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
           <p className="text-sm text-blue-300">Comandas abertas</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
@@ -756,6 +668,13 @@ export default function ComandasPage() {
           <p className="text-sm text-purple-300">Itens nas comandas</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             {totalItems}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
+          <p className="text-sm text-yellow-300">Com observações</p>
+          <strong className="mt-2 block text-3xl font-bold text-white">
+            {notesCount}
           </strong>
         </div>
       </div>
