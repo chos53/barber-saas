@@ -42,6 +42,10 @@ export default function DashboardPage() {
   const [realizedRevenue, setRealizedRevenue] = useState(0)
 
   const [todayRevenue, setTodayRevenue] = useState(0)
+  const [ticketAverage, setTicketAverage] = useState(0)
+  const [cancelRate, setCancelRate] = useState(0)
+  const [estimatedProfit, setEstimatedProfit] = useState(0)
+  const [topService, setTopService] = useState('-')
 
   const [period, setPeriod] = useState('30')
 
@@ -156,6 +160,18 @@ export default function DashboardPage() {
 
     const appointments =
       appointmentsData || []
+    
+      const { data: financialExpenses } =
+      await supabase
+        .from('financial_transactions')
+        .select('amount')
+        .eq('company_id', companyId)
+        .eq('type', 'expense')
+        .neq('status', 'cancelled')
+        .gte(
+          'transaction_date',
+          formattedStartDate
+        )  
 
     const totalAppointments =
       appointments.length
@@ -218,6 +234,73 @@ export default function DashboardPage() {
             ),
           0
         )
+
+        const totalExpenses =
+        financialExpenses?.reduce(
+          (sum, item) =>
+            sum + Number(item.amount || 0),
+          0
+        ) || 0
+      
+      const estimatedProfit =
+        totalRealizedRevenue - totalExpenses
+      
+      const ticketAverage =
+        completedAppointments.length > 0
+          ? totalRealizedRevenue /
+            completedAppointments.length
+          : 0
+      
+      const cancelRate =
+        totalAppointments > 0
+          ? (cancelledAppointments.length /
+              totalAppointments) *
+            100
+          : 0
+      
+      const serviceSalesMap: Record<
+        string,
+        number
+      > = {}
+      
+      appointments
+        .filter(
+          (item) =>
+            item.status !== 'cancelled'
+        )
+        .forEach((appointment) => {
+          const serviceName =
+            appointment.services?.name ||
+            'Não informado'
+      
+          if (
+            !serviceSalesMap[serviceName]
+          ) {
+            serviceSalesMap[
+              serviceName
+            ] = 0
+          }
+      
+          serviceSalesMap[
+            serviceName
+          ] += 1
+        })
+      
+      const topServiceEntry =
+        Object.entries(serviceSalesMap)
+          .sort((a, b) => b[1] - a[1])[0]
+      
+      setTopService(
+        topServiceEntry?.[0] || '-'
+      )
+      
+      setTicketAverage(ticketAverage)
+      
+      setCancelRate(cancelRate)
+      
+      setEstimatedProfit(
+        estimatedProfit
+      )  
 
     const revenueMap: Record<
       string,
@@ -435,6 +518,48 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+  <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
+    <p className="text-sm text-blue-300">
+      Ticket médio
+    </p>
+
+    <strong className="mt-3 block text-3xl text-white">
+      R$ {ticketAverage.toFixed(2)}
+    </strong>
+  </div>
+
+  <div className="rounded-2xl border border-red-900 bg-red-950/30 p-6">
+    <p className="text-sm text-red-300">
+      Taxa cancelamento
+    </p>
+
+    <strong className="mt-3 block text-3xl text-white">
+      {cancelRate.toFixed(1)}%
+    </strong>
+  </div>
+
+  <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
+    <p className="text-sm text-green-300">
+      Lucro estimado
+    </p>
+
+    <strong className="mt-3 block text-3xl text-white">
+      R$ {estimatedProfit.toFixed(2)}
+    </strong>
+  </div>
+
+  <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-6">
+    <p className="text-sm text-yellow-300">
+      Serviço destaque
+    </p>
+
+    <strong className="mt-3 block text-xl text-white">
+      {topService}
+    </strong>
+  </div>
+</div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
