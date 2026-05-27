@@ -63,6 +63,8 @@ export default function ComandasPage() {
 
   const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
+  const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     loadData()
@@ -251,6 +253,42 @@ export default function ComandasPage() {
     )
 
     setComandas(normalizedComandas)
+
+    const initialEditingNotes: Record<string, string> = {}
+
+    normalizedComandas.forEach((comanda) => {
+      initialEditingNotes[comanda.id] =
+        comanda.notes || ''
+    })
+
+    setEditingNotes(initialEditingNotes)
+  }
+  async function saveNotes(comandaId: string) {
+    const notesValue = editingNotes[comandaId] || ''
+
+    setSavingNotes((current) => ({
+      ...current,
+      [comandaId]: true,
+    }))
+
+    const { error } = await supabase
+      .from('comandas')
+      .update({
+        notes: notesValue || null,
+      })
+      .eq('id', comandaId)
+
+    setSavingNotes((current) => ({
+      ...current,
+      [comandaId]: false,
+    }))
+
+    if (error) {
+      alert(`Erro ao salvar observações: ${error.message}`)
+      return
+    }
+
+    await loadData()
   }
 
   async function createComanda(event: React.FormEvent) {
@@ -473,7 +511,6 @@ export default function ComandasPage() {
         return status
     }
   }
-
   function renderComandaCard(comanda: Comanda) {
     const itemsCount = comanda.items.reduce(
       (sum, item) => sum + Number(item.quantity),
@@ -491,33 +528,25 @@ export default function ComandasPage() {
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-lg font-bold">
-              {comanda.client_name}
-            </p>
+            <p className="text-lg font-bold">{comanda.client_name}</p>
 
             <div className="mt-1 space-y-1 text-sm text-zinc-500">
               <p>
                 Criada em{' '}
-                {new Date(
-                  comanda.created_at
-                ).toLocaleString('pt-BR')}
+                {new Date(comanda.created_at).toLocaleString('pt-BR')}
               </p>
 
               {comanda.closed_at && (
                 <p>
                   Fechada em{' '}
-                  {new Date(
-                    comanda.closed_at
-                  ).toLocaleString('pt-BR')}
+                  {new Date(comanda.closed_at).toLocaleString('pt-BR')}
                 </p>
               )}
 
               {comanda.cancelled_at && (
                 <p>
                   Cancelada em{' '}
-                  {new Date(
-                    comanda.cancelled_at
-                  ).toLocaleString('pt-BR')}
+                  {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}
                 </p>
               )}
             </div>
@@ -546,54 +575,58 @@ export default function ComandasPage() {
           </div>
         </div>
 
-        {comanda.notes && (
-          <div className="mt-4 rounded-xl border border-yellow-900 bg-yellow-950/30 p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-yellow-400">
-              Observações
-            </p>
+        <div className="mt-4 rounded-xl border border-yellow-900 bg-yellow-950/30 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-yellow-400">
+            Observações
+          </p>
 
-            <p className="mt-2 text-sm text-yellow-100">
-              {comanda.notes}
-            </p>
-          </div>
-        )}
+          <textarea
+            value={editingNotes[comanda.id] || ''}
+            onChange={(event) =>
+              setEditingNotes((current) => ({
+                ...current,
+                [comanda.id]: event.target.value,
+              }))
+            }
+            placeholder="Adicionar observações..."
+            className="mt-2 h-24 w-full resize-none rounded-xl border border-yellow-900 bg-black/40 p-3 text-sm text-yellow-100 outline-none"
+          />
+
+          <button
+            type="button"
+            onClick={() => saveNotes(comanda.id)}
+            disabled={savingNotes[comanda.id]}
+            className="mt-3 rounded-xl bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300 disabled:opacity-50"
+          >
+            {savingNotes[comanda.id] ? 'Salvando...' : 'Salvar observação'}
+          </button>
+        </div>
 
         <div className="mt-5 border-t border-zinc-700 pt-5">
           {comanda.status === 'open' && (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
               <select
-                value={
-                  selectedServices[comanda.id] || ''
-                }
+                value={selectedServices[comanda.id] || ''}
                 onChange={(event) =>
                   setSelectedServices((current) => ({
                     ...current,
-                    [comanda.id]:
-                      event.target.value,
+                    [comanda.id]: event.target.value,
                   }))
                 }
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               >
-                <option value="">
-                  Selecionar serviço
-                </option>
+                <option value="">Selecionar serviço</option>
 
                 {services.map((service) => (
-                  <option
-                    key={service.id}
-                    value={service.id}
-                  >
-                    {service.name} - R${' '}
-                    {service.price.toFixed(2)}
+                  <option key={service.id} value={service.id}>
+                    {service.name} - R$ {service.price.toFixed(2)}
                   </option>
                 ))}
               </select>
 
               <button
                 type="button"
-                onClick={() =>
-                  addServiceToComanda(comanda)
-                }
+                onClick={() => addServiceToComanda(comanda)}
                 className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
               >
                 Adicionar
@@ -614,9 +647,7 @@ export default function ComandasPage() {
                 className="flex items-center justify-between gap-4 rounded-xl bg-zinc-900 p-3"
               >
                 <div>
-                  <p className="font-medium">
-                    {item.description}
-                  </p>
+                  <p className="font-medium">{item.description}</p>
 
                   <p className="text-sm text-zinc-500">
                     Quantidade: {item.quantity}
@@ -625,21 +656,13 @@ export default function ComandasPage() {
 
                 <div className="flex items-center gap-3">
                   <strong className="text-green-400">
-                    R${' '}
-                    {(
-                      item.price * item.quantity
-                    ).toFixed(2)}
+                    R$ {(item.price * item.quantity).toFixed(2)}
                   </strong>
 
                   {comanda.status === 'open' && (
                     <button
                       type="button"
-                      onClick={() =>
-                        removeItemFromComanda(
-                          comanda,
-                          item
-                        )
-                      }
+                      onClick={() => removeItemFromComanda(comanda, item)}
                       className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-red-500"
                     >
                       Remover
@@ -653,27 +676,19 @@ export default function ComandasPage() {
           {comanda.status === 'open' && (
             <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto_auto]">
               <select
-                value={
-                  paymentByComanda[comanda.id] || ''
-                }
+                value={paymentByComanda[comanda.id] || ''}
                 onChange={(event) =>
                   setPaymentByComanda((current) => ({
                     ...current,
-                    [comanda.id]:
-                      event.target.value,
+                    [comanda.id]: event.target.value,
                   }))
                 }
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               >
-                <option value="">
-                  Forma de pagamento
-                </option>
+                <option value="">Forma de pagamento</option>
 
                 {paymentMethods.map((method) => (
-                  <option
-                    key={method.value}
-                    value={method.value}
-                  >
+                  <option key={method.value} value={method.value}>
                     {method.label}
                   </option>
                 ))}
@@ -681,9 +696,7 @@ export default function ComandasPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  closeComanda(comanda)
-                }
+                onClick={() => closeComanda(comanda)}
                 className="rounded-xl bg-green-500 px-5 py-3 font-bold text-black transition hover:bg-green-400"
               >
                 Fechar comanda
@@ -691,9 +704,7 @@ export default function ComandasPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  cancelComanda(comanda)
-                }
+                onClick={() => cancelComanda(comanda)}
                 className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition hover:bg-red-500"
               >
                 Cancelar
@@ -703,65 +714,46 @@ export default function ComandasPage() {
         </div>
       </div>
     )
-  }
-
+  }  
   return (
     <div>
-      <h1 className="text-4xl font-bold">
-        Comandas
-      </h1>
+      <h1 className="text-4xl font-bold">Comandas</h1>
 
       <p className="mt-2 text-zinc-400">
-        Controle de comandas abertas,
-        fechamento e histórico.
+        Controle de comandas abertas, fechamento e histórico.
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
-          <p className="text-sm text-blue-300">
-            Comandas abertas
-          </p>
-
+          <p className="text-sm text-blue-300">Comandas abertas</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             {openCount}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
-          <p className="text-sm text-yellow-300">
-            Valor em aberto
-          </p>
-
+          <p className="text-sm text-yellow-300">Valor em aberto</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {openTotal.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
-          <p className="text-sm text-green-300">
-            Total fechado
-          </p>
-
+          <p className="text-sm text-green-300">Total fechado</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {closedTotal.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5">
-          <p className="text-sm text-red-300">
-            Total cancelado
-          </p>
-
+          <p className="text-sm text-red-300">Total cancelado</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {cancelledTotal.toFixed(2)}
           </strong>
         </div>
 
         <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
-          <p className="text-sm text-purple-300">
-            Itens nas comandas
-          </p>
-
+          <p className="text-sm text-purple-300">Itens nas comandas</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             {totalItems}
           </strong>
@@ -773,33 +765,20 @@ export default function ComandasPage() {
           onSubmit={createComanda}
           className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6"
         >
-          <h2 className="text-2xl font-bold">
-            Nova comanda
-          </h2>
+          <h2 className="text-2xl font-bold">Nova comanda</h2>
 
           <div className="mt-6">
-            <label className="text-sm text-zinc-400">
-              Cliente
-            </label>
+            <label className="text-sm text-zinc-400">Cliente</label>
 
             <select
               value={selectedClientId}
-              onChange={(event) =>
-                setSelectedClientId(
-                  event.target.value
-                )
-              }
+              onChange={(event) => setSelectedClientId(event.target.value)}
               className="mt-2 w-full rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
             >
-              <option value="">
-                Cliente não informado
-              </option>
+              <option value="">Cliente não informado</option>
 
               {clients.map((client) => (
-                <option
-                  key={client.id}
-                  value={client.id}
-                >
+                <option key={client.id} value={client.id}>
                   {client.name}
                 </option>
               ))}
@@ -807,15 +786,11 @@ export default function ComandasPage() {
           </div>
 
           <div className="mt-4">
-            <label className="text-sm text-zinc-400">
-              Observações
-            </label>
+            <label className="text-sm text-zinc-400">Observações</label>
 
             <textarea
               value={notes}
-              onChange={(event) =>
-                setNotes(event.target.value)
-              }
+              onChange={(event) => setNotes(event.target.value)}
               placeholder="Ex: cliente prefere pagar no pix"
               className="mt-2 h-28 w-full resize-none rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
             />
@@ -826,42 +801,29 @@ export default function ComandasPage() {
             disabled={loading}
             className="mt-6 w-full rounded-xl bg-white p-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
           >
-            {loading
-              ? 'Criando...'
-              : 'Abrir comanda'}
+            {loading ? 'Criando...' : 'Abrir comanda'}
           </button>
         </form>
 
         <div className="space-y-6 xl:col-span-2">
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="text-2xl font-bold">
-              Filtros
-            </h2>
+            <h2 className="text-2xl font-bold">Filtros</h2>
 
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
               <input
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar por cliente..."
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               />
 
               <select
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setStatusFilter(event.target.value)}
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               >
                 {statusFilters.map((filter) => (
-                  <option
-                    key={filter.value}
-                    value={filter.value}
-                  >
+                  <option key={filter.value} value={filter.value}>
                     {filter.label}
                   </option>
                 ))}
@@ -871,9 +833,7 @@ export default function ComandasPage() {
 
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">
-                Comandas abertas
-              </h2>
+              <h2 className="text-2xl font-bold">Comandas abertas</h2>
 
               <span className="rounded-full bg-blue-900 px-3 py-1 text-sm text-blue-300">
                 {openComandas.length} aberta(s)
@@ -881,17 +841,19 @@ export default function ComandasPage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              {openComandas.map((comanda) =>
-                renderComandaCard(comanda)
+              {openComandas.length === 0 && (
+                <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+                  Nenhuma comanda aberta encontrada.
+                </p>
               )}
+
+              {openComandas.map((comanda) => renderComandaCard(comanda))}
             </div>
           </section>
 
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">
-                Histórico de comandas
-              </h2>
+              <h2 className="text-2xl font-bold">Histórico de comandas</h2>
 
               <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">
                 {historyComandas.length} registro(s)
@@ -899,9 +861,13 @@ export default function ComandasPage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              {historyComandas.map((comanda) =>
-                renderComandaCard(comanda)
+              {historyComandas.length === 0 && (
+                <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+                  Nenhuma comanda fechada ou cancelada encontrada.
+                </p>
               )}
+
+              {historyComandas.map((comanda) => renderComandaCard(comanda))}
             </div>
           </section>
         </div>
