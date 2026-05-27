@@ -44,6 +44,10 @@ export default function ReportsPage() {
   const [chartData, setChartData] = useState<RevenueItem[]>([])
   const [professionalRevenue, setProfessionalRevenue] = useState<ProfessionalRevenue[]>([])
   const [servicesRanking, setServicesRanking] = useState<ServiceRanking[]>([])
+  const [cashRevenue, setCashRevenue] = useState(0)
+  const [pixRevenue, setPixRevenue] = useState(0)
+  const [creditRevenue, setCreditRevenue] = useState(0)
+  const [debitRevenue, setDebitRevenue] = useState(0)
 
   useEffect(() => {
     loadData()
@@ -68,6 +72,13 @@ export default function ReportsPage() {
     startDate.setDate(startDate.getDate() - Number(period))
 
     const formattedStartDate = startDate.toISOString().split('T')[0]
+
+    const { data: financialTransactions } = await supabase
+      .from('financial_transactions')
+      .select('*')
+      .eq('company_id', profile.company_id)
+      .eq('type', 'income')
+      .gte('transaction_date', formattedStartDate)
 
     const { data: appointments } = await supabase
       .from('appointments')
@@ -192,7 +203,30 @@ export default function ReportsPage() {
 
         soldServicesMap[item.service_name] += 1
       })
-
+      const cashTotal =
+      financialTransactions
+        ?.filter((item) => item.payment_method === 'cash')
+        .reduce((sum, item) => sum + Number(item.amount), 0) || 0
+    
+    const pixTotal =
+      financialTransactions
+        ?.filter((item) => item.payment_method === 'pix')
+        .reduce((sum, item) => sum + Number(item.amount), 0) || 0
+    
+    const creditTotal =
+      financialTransactions
+        ?.filter((item) => item.payment_method === 'credit_card')
+        .reduce((sum, item) => sum + Number(item.amount), 0) || 0
+    
+    const debitTotal =
+      financialTransactions
+        ?.filter((item) => item.payment_method === 'debit_card')
+        .reduce((sum, item) => sum + Number(item.amount), 0) || 0
+    
+    setCashRevenue(cashTotal)
+    setPixRevenue(pixTotal)
+    setCreditRevenue(creditTotal)
+    setDebitRevenue(debitTotal)
     setServicesRanking(
       Object.entries(soldServicesMap)
         .map(([service_name, total]) => ({
@@ -279,6 +313,47 @@ export default function ReportsPage() {
           </strong>
         </div>
       </div>
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-4">
+  <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
+    <p className="text-sm text-green-300">
+      Dinheiro
+    </p>
+
+    <strong className="mt-2 block text-3xl text-white">
+      R$ {cashRevenue.toFixed(2)}
+    </strong>
+  </div>
+
+  <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-6">
+    <p className="text-sm text-cyan-300">
+      Pix
+    </p>
+
+    <strong className="mt-2 block text-3xl text-white">
+      R$ {pixRevenue.toFixed(2)}
+    </strong>
+  </div>
+
+  <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
+    <p className="text-sm text-blue-300">
+      Crédito
+    </p>
+
+    <strong className="mt-2 block text-3xl text-white">
+      R$ {creditRevenue.toFixed(2)}
+    </strong>
+  </div>
+
+  <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-6">
+    <p className="text-sm text-purple-300">
+      Débito
+    </p>
+
+    <strong className="mt-2 block text-3xl text-white">
+      R$ {debitRevenue.toFixed(2)}
+    </strong>
+  </div>
+</div>
 
       <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">Faturamento por dia</h2>
