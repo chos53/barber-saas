@@ -64,6 +64,32 @@ export default function ComandasPage() {
     loadData()
   }, [])
 
+  function getSortGroup(comanda: Comanda) {
+    if (comanda.status === 'open' && comanda.is_priority) return 1
+    if (comanda.status === 'open') return 2
+    if (comanda.status === 'closed' && comanda.is_priority) return 3
+    if (comanda.status === 'closed') return 4
+    if (comanda.status === 'cancelled') return 5
+    return 6
+  }
+
+  function getSortDate(comanda: Comanda) {
+    return new Date(
+      comanda.closed_at || comanda.cancelled_at || comanda.created_at
+    ).getTime()
+  }
+
+  function sortComandas(a: Comanda, b: Comanda) {
+    const groupA = getSortGroup(a)
+    const groupB = getSortGroup(b)
+
+    if (groupA !== groupB) {
+      return groupA - groupB
+    }
+
+    return getSortDate(b) - getSortDate(a)
+  }
+
   const filteredComandas = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()
 
@@ -81,21 +107,7 @@ export default function ComandasPage() {
 
         return matchesSearch && matchesStatus && matchesPriority
       })
-      .sort((a, b) => {
-        if (a.is_priority !== b.is_priority) {
-          return a.is_priority ? -1 : 1
-        }
-
-        const dateA = new Date(
-          a.closed_at || a.cancelled_at || a.created_at
-        ).getTime()
-
-        const dateB = new Date(
-          b.closed_at || b.cancelled_at || b.created_at
-        ).getTime()
-
-        return dateB - dateA
-      })
+      .sort(sortComandas)
   }, [comandas, search, statusFilter, priorityOnly])
 
   const openComandas = useMemo(() => {
