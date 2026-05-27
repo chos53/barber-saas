@@ -33,7 +33,6 @@ const paymentMethods = [
   { value: 'pix', label: 'Pix' },
   { value: 'credit_card', label: 'Crédito' },
   { value: 'debit_card', label: 'Débito' },
-  { value: 'bank_transfer', label: 'Transferência' },
 ]
 
 const statusFilters = [
@@ -59,6 +58,15 @@ export default function ComandasPage() {
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
   const [savingPriority, setSavingPriority] = useState<Record<string, boolean>>({})
+  const [, forceClock] = useState(0)
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    forceClock(Date.now())
+  }, 60000)
+
+  return () => clearInterval(interval)
+}, [])
 
   useEffect(() => {
     loadData()
@@ -545,6 +553,48 @@ export default function ComandasPage() {
 
     await loadData()
   }
+  function getOpenTime(comanda: Comanda) {
+    if (comanda.status !== 'open') return null
+  
+    const created = new Date(comanda.created_at).getTime()
+    const now = Date.now()
+  
+    const diffMinutes = Math.floor(
+      (now - created) / 1000 / 60
+    )
+  
+    const hours = Math.floor(diffMinutes / 60)
+    const minutes = diffMinutes % 60
+  
+    if (hours <= 0) {
+      return `${minutes} min aberta`
+    }
+  
+    return `${hours}h ${minutes.toString().padStart(2, '0')}m aberta`
+  }
+  
+  function getOpenTimeStyle(comanda: Comanda) {
+    if (comanda.status !== 'open') {
+      return 'bg-zinc-800 text-zinc-300'
+    }
+  
+    const created = new Date(comanda.created_at).getTime()
+    const now = Date.now()
+  
+    const diffMinutes = Math.floor(
+      (now - created) / 1000 / 60
+    )
+  
+    if (diffMinutes >= 60) {
+      return 'bg-red-600 text-white'
+    }
+  
+    if (diffMinutes >= 30) {
+      return 'bg-yellow-500 text-black'
+    }
+  
+    return 'bg-green-600 text-white'
+  }
 
   function getStatusLabel(status: string) {
     switch (status) {
@@ -620,7 +670,13 @@ export default function ComandasPage() {
             <p className="mt-1 text-sm text-zinc-400">
               {itemsCount} item(ns)
             </p>
-
+            {comanda.status === 'open' && (
+  <span
+    className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getOpenTimeStyle(comanda)}`}
+  >
+    {getOpenTime(comanda)}
+  </span>
+)}
             <span
               className={`mt-3 inline-block rounded-full px-3 py-1 text-sm font-medium ${
                 comanda.status === 'open'
