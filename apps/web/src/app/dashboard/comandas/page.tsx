@@ -131,6 +131,17 @@ export default function ComandasPage() {
       .reduce((sum, comanda) => sum + Number(comanda.total), 0)
   }, [comandas])
 
+  const totalItems = useMemo(() => {
+    return comandas.reduce((sum, comanda) => {
+      const itemsCount = comanda.items.reduce(
+        (itemsSum, item) => itemsSum + Number(item.quantity),
+        0
+      )
+
+      return sum + itemsCount
+    }, 0)
+  }, [comandas])
+
   async function loadData() {
     const {
       data: { user },
@@ -451,6 +462,11 @@ export default function ComandasPage() {
   }
 
   function renderComandaCard(comanda: Comanda) {
+    const itemsCount = comanda.items.reduce(
+      (sum, item) => sum + Number(item.quantity),
+      0
+    )
+
     return (
       <div
         key={comanda.id}
@@ -490,6 +506,10 @@ export default function ComandasPage() {
             <strong className="block text-xl text-green-400">
               R$ {Number(comanda.total).toFixed(2)}
             </strong>
+
+            <p className="mt-1 text-sm text-zinc-400">
+              {itemsCount} item(ns)
+            </p>
 
             <span
               className={`mt-3 inline-block rounded-full px-3 py-1 text-sm font-medium ${
@@ -639,7 +659,7 @@ export default function ComandasPage() {
         Controle de comandas abertas, fechamento e histórico.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
           <p className="text-sm text-blue-300">Comandas abertas</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
@@ -665,6 +685,13 @@ export default function ComandasPage() {
           <p className="text-sm text-red-300">Total cancelado</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {cancelledTotal.toFixed(2)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
+          <p className="text-sm text-purple-300">Itens nas comandas</p>
+          <strong className="mt-2 block text-3xl font-bold text-white">
+            {totalItems}
           </strong>
         </div>
       </div>
