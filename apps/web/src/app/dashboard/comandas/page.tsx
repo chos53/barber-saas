@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Client = {
@@ -60,6 +60,14 @@ export default function ComandasPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  const openComandas = useMemo(() => {
+    return comandas.filter((comanda) => comanda.status === 'open')
+  }, [comandas])
+
+  const historyComandas = useMemo(() => {
+    return comandas.filter((comanda) => comanda.status !== 'open')
+  }, [comandas])
 
   async function loadData() {
     const {
@@ -389,6 +397,172 @@ export default function ComandasPage() {
     }
   }
 
+  function renderComandaCard(comanda: Comanda) {
+    return (
+      <div
+        key={comanda.id}
+        className={`rounded-2xl border p-5 ${
+          comanda.status === 'cancelled'
+            ? 'border-red-900 bg-red-950/30'
+            : 'border-zinc-800 bg-zinc-800'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-lg font-bold">{comanda.client_name}</p>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Criada em{' '}
+              {new Date(comanda.created_at).toLocaleDateString('pt-BR')}
+            </p>
+          </div>
+
+          <div className="text-right">
+            <strong className="block text-xl text-green-400">
+              R$ {Number(comanda.total).toFixed(2)}
+            </strong>
+
+            <span
+              className={`mt-3 inline-block rounded-full px-3 py-1 text-sm font-medium ${
+                comanda.status === 'open'
+                  ? 'bg-blue-900 text-blue-300'
+                  : comanda.status === 'closed'
+                    ? 'bg-green-900 text-green-300'
+                    : 'bg-red-900 text-red-300'
+              }`}
+            >
+              {getStatusLabel(comanda.status)}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 border-t border-zinc-700 pt-5">
+          {comanda.status === 'open' && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+              <select
+                value={selectedServices[comanda.id] || ''}
+                onChange={(event) =>
+                  setSelectedServices((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value,
+                  }))
+                }
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+              >
+                <option value="">Selecionar serviço</option>
+
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name} - R$ {service.price.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => addServiceToComanda(comanda)}
+                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
+              >
+                Adicionar
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 space-y-2">
+            {comanda.items.length === 0 && (
+              <p className="rounded-xl bg-zinc-900 p-3 text-sm text-zinc-500">
+                Nenhum item adicionado.
+              </p>
+            )}
+
+            {comanda.items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-4 rounded-xl bg-zinc-900 p-3"
+              >
+                <div>
+                  <p className="font-medium">{item.description}</p>
+
+                  <p className="text-sm text-zinc-500">
+                    Quantidade: {item.quantity}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <strong className="text-green-400">
+                    R$ {(item.price * item.quantity).toFixed(2)}
+                  </strong>
+
+                  {comanda.status === 'open' && (
+                    <button
+                      type="button"
+                      onClick={() => removeItemFromComanda(comanda, item)}
+                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-red-500"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {comanda.status === 'open' && (
+            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto_auto]">
+              <select
+                value={paymentByComanda[comanda.id] || ''}
+                onChange={(event) =>
+                  setPaymentByComanda((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value,
+                  }))
+                }
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+              >
+                <option value="">Forma de pagamento</option>
+
+                {paymentMethods.map((method) => (
+                  <option key={method.value} value={method.value}>
+                    {method.label}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => closeComanda(comanda)}
+                className="rounded-xl bg-green-500 px-5 py-3 font-bold text-black transition hover:bg-green-400"
+              >
+                Fechar comanda
+              </button>
+
+              <button
+                type="button"
+                onClick={() => cancelComanda(comanda)}
+                className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition hover:bg-red-500"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+
+          {comanda.status === 'cancelled' && (
+            <p className="mt-5 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+              Esta comanda foi cancelada e não pode mais ser editada ou
+              fechada.
+            </p>
+          )}
+
+          {comanda.status === 'closed' && (
+            <p className="mt-5 rounded-xl border border-green-900 bg-green-950/40 p-3 text-sm text-green-300">
+              Esta comanda já foi fechada e lançada no financeiro.
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <h1 className="text-4xl font-bold">Comandas</h1>
@@ -442,190 +616,46 @@ export default function ComandasPage() {
           </button>
         </form>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 xl:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Comandas</h2>
+        <div className="space-y-6 xl:col-span-2">
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Comandas abertas</h2>
 
-            <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">
-              {comandas.length} registro(s)
-            </span>
-          </div>
+              <span className="rounded-full bg-blue-900 px-3 py-1 text-sm text-blue-300">
+                {openComandas.length} aberta(s)
+              </span>
+            </div>
 
-          <div className="mt-6 space-y-4">
-            {comandas.length === 0 && (
-              <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
-                Nenhuma comanda encontrada.
-              </p>
-            )}
+            <div className="mt-6 space-y-4">
+              {openComandas.length === 0 && (
+                <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+                  Nenhuma comanda aberta.
+                </p>
+              )}
 
-            {comandas.map((comanda) => (
-              <div
-                key={comanda.id}
-                className={`rounded-2xl border p-5 ${
-                  comanda.status === 'cancelled'
-                    ? 'border-red-900 bg-red-950/30'
-                    : 'border-zinc-800 bg-zinc-800'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-lg font-bold">{comanda.client_name}</p>
+              {openComandas.map((comanda) => renderComandaCard(comanda))}
+            </div>
+          </section>
 
-                    <p className="mt-1 text-sm text-zinc-500">
-                      Criada em{' '}
-                      {new Date(comanda.created_at).toLocaleDateString(
-                        'pt-BR'
-                      )}
-                    </p>
-                  </div>
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Histórico de comandas</h2>
 
-                  <div className="text-right">
-                    <strong className="block text-xl text-green-400">
-                      R$ {Number(comanda.total).toFixed(2)}
-                    </strong>
+              <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">
+                {historyComandas.length} registro(s)
+              </span>
+            </div>
 
-                    <span
-                      className={`mt-3 inline-block rounded-full px-3 py-1 text-sm font-medium ${
-                        comanda.status === 'open'
-                          ? 'bg-blue-900 text-blue-300'
-                          : comanda.status === 'closed'
-                            ? 'bg-green-900 text-green-300'
-                            : 'bg-red-900 text-red-300'
-                      }`}
-                    >
-                      {getStatusLabel(comanda.status)}
-                    </span>
-                  </div>
-                </div>
+            <div className="mt-6 space-y-4">
+              {historyComandas.length === 0 && (
+                <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+                  Nenhuma comanda fechada ou cancelada.
+                </p>
+              )}
 
-                <div className="mt-5 border-t border-zinc-700 pt-5">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
-                    <select
-                      value={selectedServices[comanda.id] || ''}
-                      onChange={(event) =>
-                        setSelectedServices((current) => ({
-                          ...current,
-                          [comanda.id]: event.target.value,
-                        }))
-                      }
-                      disabled={comanda.status !== 'open'}
-                      className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Selecionar serviço</option>
-
-                      {services.map((service) => (
-                        <option key={service.id} value={service.id}>
-                          {service.name} - R$ {service.price.toFixed(2)}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => addServiceToComanda(comanda)}
-                      disabled={comanda.status !== 'open'}
-                      className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    {comanda.items.length === 0 && (
-                      <p className="rounded-xl bg-zinc-900 p-3 text-sm text-zinc-500">
-                        Nenhum item adicionado.
-                      </p>
-                    )}
-
-                    {comanda.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-4 rounded-xl bg-zinc-900 p-3"
-                      >
-                        <div>
-                          <p className="font-medium">{item.description}</p>
-
-                          <p className="text-sm text-zinc-500">
-                            Quantidade: {item.quantity}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <strong className="text-green-400">
-                            R$ {(item.price * item.quantity).toFixed(2)}
-                          </strong>
-
-                          {comanda.status === 'open' && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeItemFromComanda(comanda, item)
-                              }
-                              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-red-500"
-                            >
-                              Remover
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {comanda.status === 'open' && (
-                    <div className="mt-5 grid grid-cols-1 gap-3 border-t border-zinc-700 pt-5 md:grid-cols-[1fr_auto_auto]">
-                      <select
-                        value={paymentByComanda[comanda.id] || ''}
-                        onChange={(event) =>
-                          setPaymentByComanda((current) => ({
-                            ...current,
-                            [comanda.id]: event.target.value,
-                          }))
-                        }
-                        className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
-                      >
-                        <option value="">Forma de pagamento</option>
-
-                        {paymentMethods.map((method) => (
-                          <option key={method.value} value={method.value}>
-                            {method.label}
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => closeComanda(comanda)}
-                        className="rounded-xl bg-green-500 px-5 py-3 font-bold text-black transition hover:bg-green-400"
-                      >
-                        Fechar comanda
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => cancelComanda(comanda)}
-                        className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition hover:bg-red-500"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  )}
-
-                  {comanda.status === 'cancelled' && (
-                    <p className="mt-5 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
-                      Esta comanda foi cancelada e não pode mais ser editada ou
-                      fechada.
-                    </p>
-                  )}
-
-                  {comanda.status === 'closed' && (
-                    <p className="mt-5 rounded-xl border border-green-900 bg-green-950/40 p-3 text-sm text-green-300">
-                      Esta comanda já foi fechada e lançada no financeiro.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              {historyComandas.map((comanda) => renderComandaCard(comanda))}
+            </div>
+          </section>
         </div>
       </div>
     </div>
