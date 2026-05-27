@@ -28,6 +28,8 @@ type Comanda = {
   status: string
   total: number
   created_at: string
+  closed_at?: string | null
+  cancelled_at?: string | null
   client_name: string
   items: ComandaItem[]
 }
@@ -141,7 +143,8 @@ export default function ComandasPage() {
 
     const { data: comandasData } = await supabase
       .from('comandas')
-      .select('id, client_id, status, total, created_at')
+      .select('id, client_id, status, total, created_at, closed_at, cancelled_at')
+  
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
@@ -401,7 +404,11 @@ export default function ComandasPage() {
 
     const { error } = await supabase
       .from('comandas')
-      .update({ status: 'cancelled' })
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+      })
+ 
       .eq('id', comanda.id)
 
     if (error) {
@@ -440,10 +447,21 @@ export default function ComandasPage() {
           <div>
             <p className="text-lg font-bold">{comanda.client_name}</p>
 
-            <p className="mt-1 text-sm text-zinc-500">
-              Criada em{' '}
-              {new Date(comanda.created_at).toLocaleDateString('pt-BR')}
-            </p>
+            <div className="mt-1 space-y-1 text-sm text-zinc-500">
+              <p>
+                Criada em{' '}
+                {new Date(comanda.created_at).toLocaleDateString('pt-BR')}
+              </p>
+
+              {comanda.cancelled_at && (
+                <p>
+                  Cancelada em{' '}
+                  {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}
+                </p>
+              )}
+         
+            </div>
+       
           </div>
 
           <div className="text-right">
