@@ -12,6 +12,9 @@ type Professional = {
   role: string | null
   active: boolean
   photo_url: string | null
+  commission_percentage: number | null
+  monthly_revenue?: number
+  monthly_commission?: number
 }
 
 export default function ProfessionalsPage() {
@@ -23,17 +26,17 @@ export default function ProfessionalsPage() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('')
+  const [commissionPercentage, setCommissionPercentage] = useState('40')
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
 
-  const [editingProfessionalId, setEditingProfessionalId] =
-    useState('')
-
+  const [editingProfessionalId, setEditingProfessionalId] = useState('')
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editRole, setEditRole] = useState('')
+  const [editCommissionPercentage, setEditCommissionPercentage] = useState('40')
 
   useEffect(() => {
     loadData()
@@ -41,11 +44,27 @@ export default function ProfessionalsPage() {
 
   const filteredProfessionals = useMemo(() => {
     return professionals.filter((professional) =>
-      professional.name
-        .toLowerCase()
-        .includes(search.toLowerCase())
+      professional.name.toLowerCase().includes(search.toLowerCase())
     )
   }, [professionals, search])
+
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value)
+  }
+
+  function getCurrentMonthStartDate() {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+      .toISOString()
+      .split('T')[0]
+  }
+
+  function getTodayDate() {
+    return new Date().toISOString().split('T')[0]
+  }
 
   async function loadData() {
     const {
@@ -67,22 +86,75 @@ export default function ProfessionalsPage() {
 
     setCompanyId(profile.company_id)
 
-    const { data } = await supabase
+    const { data: professionalsData, error: professionalsError } = await supabase
       .from('professionals')
       .select(
-        'id, name, phone, email, role, active, photo_url'
+        'id, name, phone, email, role, active, photo_url, commission_percentage'
       )
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
-    setProfessionals(data || [])
+    if (professionalsError) {
+      alert(professionalsError.message)
+      return
+    }
+
+    const monthStartDate = getCurrentMonthStartDate()
+    const todayDate = getTodayDate()
+
+    const { data: appointmentsData } = await supabase
+      .from('appointments')
+      .select(`
+        id,
+        professional_id,
+        appointment_date,
+        status,
+        price,
+        services (
+          price
+        )
+      `)
+      .eq('company_id', profile.company_id)
+      .eq('status', 'completed')
+      .gte('appointment_date', monthStartDate)
+      .lte('appointment_date', todayDate)
+
+    const revenueByProfessional = new Map<string, number>()
+
+    ;(appointmentsData || []).forEach((appointment) => {
+      if (!appointment.professional_id) return
+
+      const price = Number(
+        appointment.price || appointment.services?.price || 0
+      )
+
+      revenueByProfessional.set(
+        appointment.professional_id,
+        (revenueByProfessional.get(appointment.professional_id) || 0) + price
+      )
+    })
+
+    const normalizedProfessionals = (professionalsData || []).map(
+      (professional) => {
+        const percentage = Number(professional.commission_percentage || 0)
+        const monthlyRevenue = revenueByProfessional.get(professional.id) || 0
+
+        return {
+          ...professional,
+          commission_percentage: percentage,
+          monthly_revenue: monthlyRevenue,
+          monthly_commission: (monthlyRevenue * percentage) / 100,
+        }
+      }
+    )
+
+    setProfessionals(normalizedProfessionals)
   }
 
   async function uploadPhoto() {
     if (!photoFile) return ''
 
     const fileExt = photoFile.name.split('.').pop()
-
     const fileName = `${uuidv4()}.${fileExt}`
 
     const { error } = await supabase.storage
@@ -96,9 +168,7 @@ export default function ProfessionalsPage() {
 
     const {
       data: { publicUrl },
-    } = supabase.storage
-      .from('professionals')
-      .getPublicUrl(fileName)
+    } = supabase.storage.from('professionals').getPublicUrl(fileName)
 
     return publicUrl
   }
@@ -115,17 +185,16 @@ export default function ProfessionalsPage() {
       photoUrl = await uploadPhoto()
     }
 
-    const { error } = await supabase
-      .from('professionals')
-      .insert({
-        company_id: companyId,
-        name: name.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        role: role.trim(),
-        photo_url: photoUrl || null,
-        active: true,
-      })
+    const { error } = await supabase.from('professionals').insert({
+      company_id: companyId,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      role: role.trim(),
+      commission_percentage: Number(commissionPercentage || 0),
+      photo_url: photoUrl || null,
+      active: true,
+    })
 
     if (error) {
       alert(error.message)
@@ -136,6 +205,7 @@ export default function ProfessionalsPage() {
     setPhone('')
     setEmail('')
     setRole('')
+    setCommissionPercentage('40')
     setPhotoFile(null)
     setPhotoPreview('')
 
@@ -144,12 +214,11 @@ export default function ProfessionalsPage() {
 
   function startEditing(professional: Professional) {
     setEditingProfessionalId(professional.id)
-
     setEditName(professional.name)
     setEditPhone(professional.phone || '')
     setEditEmail(professional.email || '')
     setEditRole(professional.role || '')
-
+    setEditCommissionPercentage(String(professional.commission_percentage ?? 0))
     setPhotoPreview(professional.photo_url || '')
   }
 
@@ -159,11 +228,12 @@ export default function ProfessionalsPage() {
     setEditPhone('')
     setEditEmail('')
     setEditRole('')
+    setEditCommissionPercentage('40')
+    setPhotoFile(null)
+    setPhotoPreview('')
   }
 
-  async function updateProfessional(
-    professionalId: string
-  ) {
+  async function updateProfessional(professionalId: string) {
     if (!editName.trim()) {
       alert('Digite o nome do profissional.')
       return
@@ -182,6 +252,7 @@ export default function ProfessionalsPage() {
         phone: editPhone.trim(),
         email: editEmail.trim(),
         role: editRole.trim(),
+        commission_percentage: Number(editCommissionPercentage || 0),
         photo_url: photoUrl || null,
       })
       .eq('id', professionalId)
@@ -191,22 +262,14 @@ export default function ProfessionalsPage() {
       return
     }
 
-    setPhotoFile(null)
-    setPhotoPreview('')
-
     cancelEditing()
     loadData()
   }
 
-  async function toggleProfessionalActive(
-    professionalId: string,
-    active: boolean
-  ) {
+  async function toggleProfessionalActive(professionalId: string, active: boolean) {
     const { error } = await supabase
       .from('professionals')
-      .update({
-        active: !active,
-      })
+      .update({ active: !active })
       .eq('id', professionalId)
 
     if (error) {
@@ -219,11 +282,15 @@ export default function ProfessionalsPage() {
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">
-        Profissionais
-      </h1>
+      <h1 className="text-4xl font-bold">Profissionais</h1>
+
+      <p className="mt-2 text-zinc-400">
+        Cadastro, edição e comissão mensal dos profissionais.
+      </p>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-2xl font-bold">Cadastrar profissional</h2>
+
         <input
           placeholder="Nome"
           className="rounded-lg bg-zinc-800 p-3"
@@ -254,13 +321,28 @@ export default function ProfessionalsPage() {
 
         <div>
           <label className="mb-2 block text-sm text-zinc-400">
+            Comissão sobre serviços concluídos (%)
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            placeholder="Ex: 40"
+            className="w-full rounded-lg bg-zinc-800 p-3"
+            value={commissionPercentage}
+            onChange={(e) => setCommissionPercentage(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
             Foto do profissional
           </label>
 
           <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
-            <span className="font-medium">
-              Escolher foto
-            </span>
+            <span className="font-medium">Escolher foto</span>
 
             <input
               type="file"
@@ -268,19 +350,14 @@ export default function ProfessionalsPage() {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-
                 if (!file) return
-
                 setPhotoFile(file)
-
-                setPhotoPreview(
-                  URL.createObjectURL(file)
-                )
+                setPhotoPreview(URL.createObjectURL(file))
               }}
             />
           </label>
 
-          {photoPreview && (
+          {photoPreview && !editingProfessionalId && (
             <div className="mt-4 flex justify-center">
               <img
                 src={photoPreview}
@@ -310,47 +387,51 @@ export default function ProfessionalsPage() {
 
       <div className="mt-8 space-y-3">
         {filteredProfessionals.map((professional) => {
-          const isEditing =
-            editingProfessionalId === professional.id
+          const isEditing = editingProfessionalId === professional.id
 
           return (
-            <div
-              key={professional.id}
-              className="rounded-xl bg-zinc-900 p-4"
-            >
+            <div key={professional.id} className="rounded-xl bg-zinc-900 p-4">
               {isEditing ? (
                 <div className="grid gap-3">
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editName}
-                    onChange={(e) =>
-                      setEditName(e.target.value)
-                    }
+                    onChange={(e) => setEditName(e.target.value)}
                   />
 
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editPhone}
-                    onChange={(e) =>
-                      setEditPhone(e.target.value)
-                    }
+                    onChange={(e) => setEditPhone(e.target.value)}
                   />
 
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editEmail}
-                    onChange={(e) =>
-                      setEditEmail(e.target.value)
-                    }
+                    onChange={(e) => setEditEmail(e.target.value)}
                   />
 
                   <input
                     className="rounded-lg bg-zinc-800 p-3"
                     value={editRole}
-                    onChange={(e) =>
-                      setEditRole(e.target.value)
-                    }
+                    onChange={(e) => setEditRole(e.target.value)}
                   />
+
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
+                      Comissão sobre serviços concluídos (%)
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-full rounded-lg bg-zinc-800 p-3"
+                      value={editCommissionPercentage}
+                      onChange={(e) => setEditCommissionPercentage(e.target.value)}
+                    />
+                  </div>
 
                   <div>
                     <label className="mb-2 block text-sm text-zinc-400">
@@ -358,21 +439,17 @@ export default function ProfessionalsPage() {
                     </label>
 
                     <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
-                      <span className="font-medium">
-                        Trocar foto
-                      </span>
+                      <span className="font-medium">Trocar foto</span>
 
                       <input
                         type="file"
                         accept="image/*"
                         className="hidden"
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setPhotoFile(file);
-                          setPhotoPreview(
-                            URL.createObjectURL(file)
-                          );
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          setPhotoFile(file)
+                          setPhotoPreview(URL.createObjectURL(file))
                         }}
                       />
                     </label>
@@ -387,13 +464,10 @@ export default function ProfessionalsPage() {
                       </div>
                     )}
                   </div>
-           
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() =>
-                        updateProfessional(professional.id)
-                      }
+                      onClick={() => updateProfessional(professional.id)}
                       className="rounded-lg bg-green-600 px-4 py-2 font-bold"
                     >
                       Salvar
@@ -409,58 +483,68 @@ export default function ProfessionalsPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-4">
-                    {professional.photo_url ? (
-                      <img
-                        src={professional.photo_url}
-                        alt={professional.name}
-                        className="h-20 w-20 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800 text-2xl font-bold">
-                        {professional.name.charAt(0)}
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-4">
+                      {professional.photo_url ? (
+                        <img
+                          src={professional.photo_url}
+                          alt={professional.name}
+                          className="h-20 w-20 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800 text-2xl font-bold">
+                          {professional.name.charAt(0)}
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="font-bold">{professional.name}</p>
+                        <p className="text-zinc-400">{professional.role}</p>
+                        <p className="text-zinc-500">{professional.phone}</p>
+                        <p className="text-zinc-500">{professional.email}</p>
+
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Status:{' '}
+                          <span
+                            className={
+                              professional.active
+                                ? 'text-green-400'
+                                : 'text-yellow-400'
+                            }
+                          >
+                            {professional.active ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </p>
                       </div>
-                    )}
+                    </div>
 
-                    <div>
-                      <p className="font-bold">
-                        {professional.name}
-                      </p>
+                    <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-right md:min-w-[260px]">
+                      <div>
+                        <p className="text-sm text-zinc-500">Comissão</p>
+                        <strong className="text-xl text-yellow-400">
+                          {Number(professional.commission_percentage || 0).toFixed(2)}%
+                        </strong>
+                      </div>
 
-                      <p className="text-zinc-400">
-                        {professional.role}
-                      </p>
+                      <div>
+                        <p className="text-sm text-zinc-500">Faturamento no mês</p>
+                        <strong className="text-green-400">
+                          {formatCurrency(professional.monthly_revenue || 0)}
+                        </strong>
+                      </div>
 
-                      <p className="text-zinc-500">
-                        {professional.phone}
-                      </p>
-
-                      <p className="text-zinc-500">
-                        {professional.email}
-                      </p>
-
-                      <p className="mt-2 text-sm text-zinc-500">
-                        Status:{' '}
-                        <span
-                          className={
-                            professional.active
-                              ? 'text-green-400'
-                              : 'text-yellow-400'
-                          }
-                        >
-                          {professional.active
-                            ? 'Ativo'
-                            : 'Inativo'}
-                        </span>
-                      </p>
+                      <div>
+                        <p className="text-sm text-zinc-500">Comissão estimada</p>
+                        <strong className="text-blue-400">
+                          {formatCurrency(professional.monthly_commission || 0)}
+                        </strong>
+                      </div>
                     </div>
                   </div>
 
                   <div className="mt-4 flex gap-2">
                     <button
-                      onClick={() =>
-                        startEditing(professional)
-                      }
+                      onClick={() => startEditing(professional)}
                       className="rounded-lg bg-white px-4 py-2 font-bold text-black"
                     >
                       Editar
@@ -475,9 +559,7 @@ export default function ProfessionalsPage() {
                       }
                       className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
                     >
-                      {professional.active
-                        ? 'Inativar'
-                        : 'Ativar'}
+                      {professional.active ? 'Inativar' : 'Ativar'}
                     </button>
                   </div>
                 </>
