@@ -40,6 +40,13 @@ const paymentMethods = [
   { value: 'bank_transfer', label: 'Transferência' },
 ]
 
+const statusFilters = [
+  { value: 'all', label: 'Todas' },
+  { value: 'open', label: 'Abertas' },
+  { value: 'closed', label: 'Fechadas' },
+  { value: 'cancelled', label: 'Canceladas' },
+]
+
 export default function ComandasPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
@@ -48,26 +55,38 @@ export default function ComandasPage() {
   const [notes, setNotes] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
 
-  const [selectedServices, setSelectedServices] = useState<
-    Record<string, string>
-  >({})
-
-  const [paymentByComanda, setPaymentByComanda] = useState<
-    Record<string, string>
-  >({})
+  const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
+  const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
 
   useEffect(() => {
     loadData()
   }, [])
 
+  const filteredComandas = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+
+    return comandas.filter((comanda) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        comanda.client_name.toLowerCase().includes(normalizedSearch)
+
+      const matchesStatus =
+        statusFilter === 'all' || comanda.status === statusFilter
+
+      return matchesSearch && matchesStatus
+    })
+  }, [comandas, search, statusFilter])
+
   const openComandas = useMemo(() => {
-    return comandas.filter((comanda) => comanda.status === 'open')
-  }, [comandas])
+    return filteredComandas.filter((comanda) => comanda.status === 'open')
+  }, [filteredComandas])
 
   const historyComandas = useMemo(() => {
-    return comandas.filter((comanda) => comanda.status !== 'open')
-  }, [comandas])
+    return filteredComandas.filter((comanda) => comanda.status !== 'open')
+  }, [filteredComandas])
 
   async function loadData() {
     const {
@@ -221,15 +240,11 @@ export default function ComandasPage() {
 
     const { error: totalError } = await supabase
       .from('comandas')
-      .update({
-        total: newTotal,
-      })
+      .update({ total: newTotal })
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert(
-        `Serviço adicionado, mas houve erro ao atualizar o total: ${totalError.message}`
-      )
+      alert(`Serviço adicionado, mas houve erro ao atualizar o total: ${totalError.message}`)
       console.error(totalError)
       return
     }
@@ -271,15 +286,11 @@ export default function ComandasPage() {
 
     const { error: totalError } = await supabase
       .from('comandas')
-      .update({
-        total: newTotal,
-      })
+      .update({ total: newTotal })
       .eq('id', comanda.id)
 
     if (totalError) {
-      alert(
-        `Item removido, mas houve erro ao atualizar o total: ${totalError.message}`
-      )
+      alert(`Item removido, mas houve erro ao atualizar o total: ${totalError.message}`)
       console.error(totalError)
       return
     }
@@ -339,9 +350,7 @@ export default function ComandasPage() {
       .eq('id', comanda.id)
 
     if (comandaError) {
-      alert(
-        `Entrada financeira criada, mas houve erro ao fechar a comanda: ${comandaError.message}`
-      )
+      alert(`Entrada financeira criada, mas houve erro ao fechar a comanda: ${comandaError.message}`)
       console.error(comandaError)
       return
     }
@@ -370,9 +379,7 @@ export default function ComandasPage() {
 
     const { error } = await supabase
       .from('comandas')
-      .update({
-        status: 'cancelled',
-      })
+      .update({ status: 'cancelled' })
       .eq('id', comanda.id)
 
     if (error) {
@@ -548,8 +555,7 @@ export default function ComandasPage() {
 
           {comanda.status === 'cancelled' && (
             <p className="mt-5 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
-              Esta comanda foi cancelada e não pode mais ser editada ou
-              fechada.
+              Esta comanda foi cancelada e não pode mais ser editada ou fechada.
             </p>
           )}
 
@@ -618,6 +624,35 @@ export default function ComandasPage() {
 
         <div className="space-y-6 xl:col-span-2">
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <h2 className="text-2xl font-bold">Filtros</h2>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por cliente..."
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+              />
+
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+              >
+                {statusFilters.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <p className="mt-3 text-sm text-zinc-500">
+              Exibindo {filteredComandas.length} de {comandas.length} comanda(s).
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">Comandas abertas</h2>
 
@@ -629,7 +664,7 @@ export default function ComandasPage() {
             <div className="mt-6 space-y-4">
               {openComandas.length === 0 && (
                 <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
-                  Nenhuma comanda aberta.
+                  Nenhuma comanda aberta encontrada.
                 </p>
               )}
 
@@ -649,7 +684,7 @@ export default function ComandasPage() {
             <div className="mt-6 space-y-4">
               {historyComandas.length === 0 && (
                 <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
-                  Nenhuma comanda fechada ou cancelada.
+                  Nenhuma comanda fechada ou cancelada encontrada.
                 </p>
               )}
 
