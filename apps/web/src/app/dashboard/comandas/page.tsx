@@ -70,24 +70,43 @@ export default function ComandasPage() {
   const filteredComandas = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()
 
-    return comandas.filter((comanda) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        comanda.client_name.toLowerCase().includes(normalizedSearch)
+    return comandas
+      .filter((comanda) => {
+        const matchesSearch =
+          !normalizedSearch ||
+          comanda.client_name.toLowerCase().includes(normalizedSearch)
 
-      const matchesStatus =
-        statusFilter === 'all' || comanda.status === statusFilter
+        const matchesStatus =
+          statusFilter === 'all' || comanda.status === statusFilter
 
-      return matchesSearch && matchesStatus
-    })
+        return matchesSearch && matchesStatus
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.closed_at || a.cancelled_at || a.created_at).getTime()
+        const dateB = new Date(b.closed_at || b.cancelled_at || b.created_at).getTime()
+
+        return dateB - dateA
+      })
   }, [comandas, search, statusFilter])
 
   const openComandas = useMemo(() => {
-    return filteredComandas.filter((comanda) => comanda.status === 'open')
+    return filteredComandas
+      .filter((comanda) => comanda.status === 'open')
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
   }, [filteredComandas])
 
   const historyComandas = useMemo(() => {
-    return filteredComandas.filter((comanda) => comanda.status !== 'open')
+    return filteredComandas
+      .filter((comanda) => comanda.status !== 'open')
+      .sort((a, b) => {
+        const dateA = new Date(a.closed_at || a.cancelled_at || a.created_at).getTime()
+        const dateB = new Date(b.closed_at || b.cancelled_at || b.created_at).getTime()
+
+        return dateB - dateA
+      })
   }, [filteredComandas])
 
   const openCount = useMemo(() => {
@@ -144,7 +163,6 @@ export default function ComandasPage() {
     const { data: comandasData } = await supabase
       .from('comandas')
       .select('id, client_id, status, total, created_at, closed_at, cancelled_at')
-  
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
@@ -408,7 +426,6 @@ export default function ComandasPage() {
         status: 'cancelled',
         cancelled_at: new Date().toISOString(),
       })
- 
       .eq('id', comanda.id)
 
     if (error) {
@@ -450,8 +467,15 @@ export default function ComandasPage() {
             <div className="mt-1 space-y-1 text-sm text-zinc-500">
               <p>
                 Criada em{' '}
-                {new Date(comanda.created_at).toLocaleDateString('pt-BR')}
+                {new Date(comanda.created_at).toLocaleString('pt-BR')}
               </p>
+
+              {comanda.closed_at && (
+                <p>
+                  Fechada em{' '}
+                  {new Date(comanda.closed_at).toLocaleString('pt-BR')}
+                </p>
+              )}
 
               {comanda.cancelled_at && (
                 <p>
@@ -459,9 +483,7 @@ export default function ComandasPage() {
                   {new Date(comanda.cancelled_at).toLocaleString('pt-BR')}
                 </p>
               )}
-         
             </div>
-       
           </div>
 
           <div className="text-right">
@@ -624,18 +646,21 @@ export default function ComandasPage() {
             {openCount}
           </strong>
         </div>
+
         <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
           <p className="text-sm text-yellow-300">Valor em aberto</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {openTotal.toFixed(2)}
           </strong>
         </div>
+
         <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
           <p className="text-sm text-green-300">Total fechado</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
             R$ {closedTotal.toFixed(2)}
           </strong>
         </div>
+
         <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5">
           <p className="text-sm text-red-300">Total cancelado</p>
           <strong className="mt-2 block text-3xl font-bold text-white">
@@ -653,12 +678,14 @@ export default function ComandasPage() {
 
           <div className="mt-6">
             <label className="text-sm text-zinc-400">Cliente</label>
+
             <select
               value={selectedClientId}
               onChange={(event) => setSelectedClientId(event.target.value)}
               className="mt-2 w-full rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
             >
               <option value="">Cliente não informado</option>
+
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
@@ -669,6 +696,7 @@ export default function ComandasPage() {
 
           <div className="mt-4">
             <label className="text-sm text-zinc-400">Observações</label>
+
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
@@ -689,6 +717,7 @@ export default function ComandasPage() {
         <div className="space-y-6 xl:col-span-2">
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <h2 className="text-2xl font-bold">Filtros</h2>
+
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
               <input
                 value={search}
@@ -696,6 +725,7 @@ export default function ComandasPage() {
                 placeholder="Buscar por cliente..."
                 className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
               />
+
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
@@ -708,6 +738,7 @@ export default function ComandasPage() {
                 ))}
               </select>
             </div>
+
             <p className="mt-3 text-sm text-zinc-500">
               Exibindo {filteredComandas.length} de {comandas.length} comanda(s).
             </p>
@@ -716,16 +747,19 @@ export default function ComandasPage() {
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">Comandas abertas</h2>
+
               <span className="rounded-full bg-blue-900 px-3 py-1 text-sm text-blue-300">
                 {openComandas.length} aberta(s)
               </span>
             </div>
+
             <div className="mt-6 space-y-4">
               {openComandas.length === 0 && (
                 <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
                   Nenhuma comanda aberta encontrada.
                 </p>
               )}
+
               {openComandas.map((comanda) => renderComandaCard(comanda))}
             </div>
           </section>
@@ -733,22 +767,24 @@ export default function ComandasPage() {
           <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">Histórico de comandas</h2>
+
               <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">
                 {historyComandas.length} registro(s)
               </span>
             </div>
+
             <div className="mt-6 space-y-4">
               {historyComandas.length === 0 && (
                 <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
                   Nenhuma comanda fechada ou cancelada encontrada.
                 </p>
               )}
+
               {historyComandas.map((comanda) => renderComandaCard(comanda))}
             </div>
           </section>
         </div>
       </div>
     </div>
-)
-
+  )
 }
