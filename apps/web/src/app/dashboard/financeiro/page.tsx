@@ -708,6 +708,279 @@ export default function FinanceiroPage() {
     })
   }, [transactions, transactionFilter, paymentFilter])
 
+  function generateCashRegisterPdf() {
+    if (!cashSession) {
+      alert('Abra um caixa antes de gerar o PDF.')
+      return
+    }
+
+    const reportDate = new Date().toLocaleDateString('pt-BR')
+
+    const movementRows =
+      cashMovements.length > 0
+        ? cashMovements
+            .map(
+              (movement) => `
+                <tr>
+                  <td>${movement.type === 'withdrawal' ? 'Sangria' : 'Reforço'}</td>
+                  <td>${formatCurrency(Number(movement.amount || 0))}</td>
+                  <td>${movement.reason || '-'}</td>
+                  <td>${new Date(movement.created_at).toLocaleString('pt-BR')}</td>
+                </tr>
+              `
+            )
+            .join('')
+        : `
+          <tr>
+            <td colspan="4">Nenhuma sangria ou reforço registrado.</td>
+          </tr>
+        `
+
+    const transactionRows =
+      filteredTransactions.length > 0
+        ? filteredTransactions
+            .filter((transaction) => transaction.status !== 'cancelled')
+            .map(
+              (transaction) => `
+                <tr>
+                  <td>${transaction.transaction_date}</td>
+                  <td>${getTypeLabel(transaction.type)}</td>
+                  <td>${getCategoryLabel(transaction.category)}</td>
+                  <td>${transaction.description || 'Sem descrição'}</td>
+                  <td>${getPaymentMethodLabel(transaction.payment_method)}</td>
+                  <td>${formatCurrency(Number(transaction.amount || 0))}</td>
+                </tr>
+              `
+            )
+            .join('')
+        : `
+          <tr>
+            <td colspan="6">Nenhuma movimentação encontrada.</td>
+          </tr>
+        `
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Fechamento de Caixa</title>
+
+          <style>
+            * { box-sizing: border-box; }
+
+            body {
+              font-family: Arial, sans-serif;
+              margin: 32px;
+              color: #111827;
+            }
+
+            h1 {
+              margin: 0;
+              font-size: 28px;
+            }
+
+            h2 {
+              margin-top: 28px;
+              border-bottom: 1px solid #d1d5db;
+              padding-bottom: 8px;
+              font-size: 20px;
+            }
+
+            p { color: #4b5563; }
+
+            .header {
+              display: flex;
+              justify-content: space-between;
+              gap: 20px;
+              border-bottom: 2px solid #111827;
+              padding-bottom: 16px;
+              margin-bottom: 24px;
+            }
+
+            .grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 12px;
+              margin-top: 16px;
+            }
+
+            .card {
+              border: 1px solid #d1d5db;
+              border-radius: 12px;
+              padding: 14px;
+            }
+
+            .label {
+              font-size: 12px;
+              color: #6b7280;
+              margin-bottom: 6px;
+            }
+
+            .value {
+              font-size: 22px;
+              font-weight: 700;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 12px;
+            }
+
+            th, td {
+              border: 1px solid #d1d5db;
+              padding: 10px;
+              text-align: left;
+              font-size: 13px;
+            }
+
+            th { background: #f3f4f6; }
+
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 32px;
+              margin-top: 60px;
+            }
+
+            .signature {
+              border-top: 1px solid #111827;
+              padding-top: 8px;
+              text-align: center;
+              font-size: 13px;
+            }
+
+            @media print {
+              body { margin: 20px; }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="header">
+            <div>
+              <h1>Fechamento de Caixa</h1>
+              <p>Emitido em ${reportDate}</p>
+              <p>Período: ${startDate} até ${endDate}</p>
+            </div>
+          </div>
+
+          <h2>Resumo do caixa</h2>
+
+          <div class="grid">
+            <div class="card">
+              <div class="label">Status</div>
+              <div class="value">${cashSession.status === 'open' ? 'Aberto' : 'Fechado'}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Abertura</div>
+              <div class="value">${formatCurrency(Number(cashSession.opening_amount || 0))}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Entradas líquidas</div>
+              <div class="value">${formatCurrency(totals.balance)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Sangrias</div>
+              <div class="value">${formatCurrency(cashWithdrawalsTotal)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Reforços</div>
+              <div class="value">${formatCurrency(cashReinforcementsTotal)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Saldo esperado</div>
+              <div class="value">${formatCurrency(cashExpectedAmount)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Valor contado</div>
+              <div class="value">${formatCurrency(Number(cashSession.closing_amount || 0))}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Diferença</div>
+              <div class="value">${formatCurrency(Number(cashSession.difference_amount || 0))}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Fechado em</div>
+              <div class="value">
+                ${
+                  cashSession.closed_at
+                    ? new Date(cashSession.closed_at).toLocaleString('pt-BR')
+                    : '-'
+                }
+              </div>
+            </div>
+          </div>
+
+          <h2>Sangrias e reforços</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Motivo</th>
+                <th>Data/Hora</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${movementRows}
+            </tbody>
+          </table>
+
+          <h2>Movimentações do período</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Categoria</th>
+                <th>Descrição</th>
+                <th>Pagamento</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${transactionRows}
+            </tbody>
+          </table>
+
+          <div class="signature-grid">
+            <div class="signature">Responsável pelo caixa</div>
+            <div class="signature">Conferência / Gerência</div>
+          </div>
+        </body>
+      </html>
+    `
+
+    const reportWindow = window.open('', '_blank')
+
+    if (!reportWindow) {
+      alert('Não foi possível abrir a janela do PDF. Verifique se o navegador bloqueou pop-ups.')
+      return
+    }
+
+    reportWindow.document.write(html)
+    reportWindow.document.close()
+    reportWindow.focus()
+
+    setTimeout(() => {
+      reportWindow.print()
+    }, 300)
+  }
+
   return (
     <div>
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -719,27 +992,52 @@ export default function FinanceiroPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            loadTransactions()
-            loadMonthlyTransactions()
-          }}
-          className="rounded-xl bg-white px-5 py-3 font-bold text-black"
-        >
-          Atualizar
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={generateCashRegisterPdf}
+            className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white"
+          >
+            Gerar PDF
+          </button>
+
+          <button
+            onClick={() => {
+              loadTransactions()
+              loadMonthlyTransactions()
+              loadCashRegister()
+              loadCashHistory()
+            }}
+            className="rounded-xl bg-white px-5 py-3 font-bold text-black"
+          >
+            Atualizar
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <div className="flex flex-col justify-between gap-6 lg:flex-row">
           <div className="flex-1">
-            <h2 className="text-2xl font-bold">
-              Caixa diário
-            </h2>
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <div>
+                <h2 className="text-2xl font-bold">
+                  Caixa diário
+                </h2>
 
-            <p className="mt-1 text-sm text-zinc-500">
-              Controle de abertura, fechamento e conferência do caixa.
-            </p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Controle de abertura, fechamento e conferência do caixa.
+                </p>
+              </div>
+
+              {cashSession && (
+                <button
+                  type="button"
+                  onClick={generateCashRegisterPdf}
+                  className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white"
+                >
+                  Gerar PDF do caixa
+                </button>
+              )}
+            </div>
 
             {!cashSession && (
               <div className="mt-5 flex flex-col gap-3 md:flex-row">
