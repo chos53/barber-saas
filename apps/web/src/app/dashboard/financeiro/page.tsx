@@ -34,6 +34,9 @@ type CashRegisterSession = {
   difference_amount: number | null
   opened_at: string
   closed_at: string | null
+  created_at?: string
+  session_date?: string
+  opened_by_name?: string | null
   status: 'open' | 'closed'
 }
 
@@ -79,6 +82,9 @@ export default function FinanceiroPage() {
   const [openingCash, setOpeningCash] = useState(false)
   const [closingCash, setClosingCash] = useState(false)
 
+  const [cashHistory, setCashHistory] = useState<CashRegisterSession[]>([])
+  const [cashHistoryLoading, setCashHistoryLoading] = useState(false)
+
   useEffect(() => {
     const now = new Date()
     const currentDate = formatDate(now)
@@ -107,6 +113,10 @@ export default function FinanceiroPage() {
   useEffect(() => {
     loadCashRegister()
   }, [])
+
+  useEffect(() => {
+    loadCashHistory()
+  }, [startDate, endDate])
 
   function formatDate(date: Date) {
     return date.toISOString().split('T')[0]
@@ -343,6 +353,33 @@ export default function FinanceiroPage() {
     }
   }
 
+
+  async function loadCashHistory() {
+    const currentCompanyId = companyId || (await getCompanyId())
+
+    if (!currentCompanyId || !startDate || !endDate) return
+
+    setCashHistoryLoading(true)
+
+    const { data, error } = await supabase
+      .from('cash_register_sessions')
+      .select('*')
+      .eq('company_id', currentCompanyId)
+      .gte('session_date', startDate)
+      .lte('session_date', endDate)
+      .order('session_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    setCashHistoryLoading(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setCashHistory((data || []) as CashRegisterSession[])
+  }
+
   async function openCashRegister() {
     if (!companyId) {
       alert('Empresa não identificada.')
@@ -376,6 +413,8 @@ export default function FinanceiroPage() {
 
     setCashSession(data as CashRegisterSession)
     setOpeningAmount('')
+
+    loadCashHistory()
   }
 
   async function closeCashRegister() {
@@ -415,6 +454,8 @@ export default function FinanceiroPage() {
 
     setCashSession(data as CashRegisterSession)
     setClosingAmount('')
+
+    loadCashHistory()
   }
 
   function formatCurrency(value: number) {
@@ -997,6 +1038,121 @@ export default function FinanceiroPage() {
           <p className="mt-3 text-2xl font-bold text-orange-300">
             {formatCurrency(sumPayment('debit_card'))}
           </p>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-2xl font-bold">
+              Histórico de caixas
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Auditoria diária de abertura e fechamento de caixa.
+            </p>
+          </div>
+
+          <div className="rounded-full bg-zinc-800 px-4 py-2 text-sm text-zinc-400">
+            {cashHistory.length} caixa(s)
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[1100px] text-left">
+            <thead>
+              <tr className="border-b border-zinc-800 text-sm text-zinc-500">
+                <th className="py-3">Data</th>
+                <th>Status</th>
+                <th>Abertura</th>
+                <th>Fechamento</th>
+                <th>Esperado</th>
+                <th>Diferença</th>
+                <th>Abertura em</th>
+                <th>Fechamento em</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {cashHistoryLoading && (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-zinc-500">
+                    Carregando histórico...
+                  </td>
+                </tr>
+              )}
+
+              {!cashHistoryLoading && cashHistory.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-zinc-500">
+                    Nenhum caixa encontrado no período.
+                  </td>
+                </tr>
+              )}
+
+              {!cashHistoryLoading &&
+                cashHistory.map((cash) => (
+                  <tr
+                    key={cash.id}
+                    className="border-b border-zinc-800 text-sm"
+                  >
+                    <td className="py-4">
+                      {cash.session_date || '-'}
+                    </td>
+
+                    <td>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          cash.status === 'open'
+                            ? 'bg-green-900 text-green-300'
+                            : 'bg-red-900 text-red-300'
+                        }`}
+                      >
+                        {cash.status === 'open'
+                          ? 'Aberto'
+                          : 'Fechado'}
+                      </span>
+                    </td>
+
+                    <td className="text-green-300 font-bold">
+                      {formatCurrency(Number(cash.opening_amount || 0))}
+                    </td>
+
+                    <td className="text-blue-300 font-bold">
+                      {formatCurrency(Number(cash.closing_amount || 0))}
+                    </td>
+
+                    <td className="text-yellow-300 font-bold">
+                      {formatCurrency(Number(cash.expected_amount || 0))}
+                    </td>
+
+                    <td
+                      className={`font-bold ${
+                        Number(cash.difference_amount || 0) === 0
+                          ? 'text-blue-300'
+                          : Number(cash.difference_amount || 0) > 0
+                            ? 'text-green-300'
+                            : 'text-red-300'
+                      }`}
+                    >
+                      {formatCurrency(Number(cash.difference_amount || 0))}
+                    </td>
+
+                    <td>
+                      {cash.opened_at
+                        ? new Date(cash.opened_at).toLocaleString('pt-BR')
+                        : '-'}
+                    </td>
+
+                    <td>
+                      {cash.closed_at
+                        ? new Date(cash.closed_at).toLocaleString('pt-BR')
+                        : '-'}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
