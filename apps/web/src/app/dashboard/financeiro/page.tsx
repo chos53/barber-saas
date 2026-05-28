@@ -305,6 +305,20 @@ export default function FinanceiroPage() {
       return
     }
 
+    const { data: closedDay } = await supabase
+      .from('daily_financial_closings')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('closing_date', expenseDate)
+      .maybeSingle()
+
+    if (closedDay) {
+      alert(
+        'Este dia já foi fechado financeiramente. Reabra o fechamento do dia para lançar novas despesas.'
+      )
+      return
+    }
+
     if (savingExpense) return
 
     setSavingExpense(true)
@@ -347,6 +361,29 @@ export default function FinanceiroPage() {
   }
 
   async function cancelTransaction(transactionId: string) {
+    const transaction = transactions.find(
+      (item) => item.id === transactionId
+    )
+
+    if (!transaction) {
+      alert('Movimentação não encontrada.')
+      return
+    }
+
+    const { data: closedDay } = await supabase
+      .from('daily_financial_closings')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('closing_date', transaction.transaction_date)
+      .maybeSingle()
+
+    if (closedDay) {
+      alert(
+        'Este dia já foi fechado financeiramente. Reabra o fechamento do dia antes de cancelar movimentações.'
+      )
+      return
+    }
+
     const confirmCancel = window.confirm(
       'Tem certeza que deseja cancelar esta movimentação? Ela continuará no histórico, mas não entrará mais nos cálculos.'
     )
