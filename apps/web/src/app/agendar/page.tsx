@@ -17,6 +17,14 @@ type Professional = {
   photo_url: string | null
 }
 
+type ProfessionalBlock = {
+  id: string
+  start_date: string
+  end_date: string
+  reason: string | null
+  block_type: string
+}
+
 export default function PublicBookingPage() {
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -43,6 +51,7 @@ export default function PublicBookingPage() {
   const [notes, setNotes] = useState('')
 
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+  const [professionalBlock, setProfessionalBlock] = useState<ProfessionalBlock | null>(null)
 
   const [loading, setLoading] = useState(false)
 
@@ -171,8 +180,25 @@ export default function PublicBookingPage() {
   async function loadOccupiedTimes() {
     if (!date || !selectedProfessionalId) {
       setOccupiedTimes([])
+      setProfessionalBlock(null)
       return
     }
+
+    const { data: block } = await supabase
+      .from('professional_time_blocks')
+      .select('id,start_date,end_date,reason,block_type')
+      .eq('professional_id', selectedProfessionalId)
+      .lte('start_date', date)
+      .gte('end_date', date)
+      .maybeSingle()
+
+    if (block) {
+      setProfessionalBlock(block as ProfessionalBlock)
+      setOccupiedTimes(availableTimes)
+      return
+    }
+
+    setProfessionalBlock(null)
 
     const { data } = await supabase
       .from('appointments')
@@ -242,6 +268,11 @@ export default function PublicBookingPage() {
 
     if (date === today && time < currentTime) {
       alert('Não é possível agendar em um horário que já passou.')
+      return
+    }
+
+    if (professionalBlock) {
+      alert('Este profissional está indisponível nesta data.')
       return
     }
 
@@ -480,6 +511,18 @@ export default function PublicBookingPage() {
                 <p className="mb-3 text-sm text-zinc-400">
                   Escolha um horário
                 </p>
+
+                {professionalBlock && (
+                  <div className="mb-4 rounded-2xl border border-orange-800 bg-orange-950 p-4 text-orange-300">
+                    <strong>Profissional indisponível</strong>
+                    <p className="mt-2">
+                      {professionalBlock.reason || professionalBlock.block_type}
+                    </p>
+                    <p>
+                      {professionalBlock.start_date} até {professionalBlock.end_date}
+                    </p>
+                  </div>
+                )}
 
                 {availableTimes.filter((availableTime) => {
                   const isOccupied = occupiedTimes.includes(availableTime)
