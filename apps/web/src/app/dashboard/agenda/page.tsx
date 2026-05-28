@@ -30,6 +30,15 @@ type Appointment = {
   professionals: { name: string } | null
 }
 
+type ProfessionalTimeBlock = {
+  id: string
+  professional_id: string
+  start_date: string
+  end_date: string
+  reason: string | null
+  block_type: string
+}
+
 type ProfessionalAvailability = {
   id: string
   professional_id: string
@@ -77,6 +86,9 @@ export default function AgendaPage() {
   const [professionalAvailability, setProfessionalAvailability] =
     useState<ProfessionalAvailability | null>(null)
   const [availabilityWarning, setAvailabilityWarning] = useState('')
+  const [professionalBlock, setProfessionalBlock] = useState<ProfessionalTimeBlock | null>(null)
+  const [visualProfessionalBlock, setVisualProfessionalBlock] =
+    useState<ProfessionalTimeBlock | null>(null)
 
   useEffect(() => {
     loadData()
@@ -98,6 +110,10 @@ export default function AgendaPage() {
     loadOccupiedTimes()
     loadProfessionalAvailability()
   }, [date, professionalId, serviceId, intervalMinutes])
+
+  useEffect(() => {
+    loadVisualProfessionalBlock()
+  }, [companyId, visualProfessionalId, filterDate, today])
 
   function generateAvailableTimes(
     opening: string,
@@ -159,11 +175,68 @@ export default function AgendaPage() {
     return appointmentDateTime < new Date()
   }
 
+  function getBlockTypeLabel(blockType: string) {
+    switch (blockType) {
+      case 'vacation':
+        return 'Férias'
+      case 'temporary':
+        return 'Bloqueio temporário'
+      case 'day_off':
+        return 'Folga'
+      default:
+        return 'Bloqueio'
+    }
+  }
+
+  async function loadVisualProfessionalBlock() {
+    const targetDate = filterDate || today
+    const targetProfessionalId =
+      visualProfessionalId || professionals[0]?.id || ''
+
+    if (!companyId || !targetDate || !targetProfessionalId) {
+      setVisualProfessionalBlock(null)
+      return
+    }
+
+    const { data } = await supabase
+      .from('professional_time_blocks')
+      .select('id, professional_id, start_date, end_date, reason, block_type')
+      .eq('company_id', companyId)
+      .eq('professional_id', targetProfessionalId)
+      .lte('start_date', targetDate)
+      .gte('end_date', targetDate)
+      .limit(1)
+      .maybeSingle()
+
+    setVisualProfessionalBlock((data || null) as ProfessionalTimeBlock | null)
+  }
+
   async function loadProfessionalAvailability() {
     if (!companyId || !date || !professionalId) {
       setProfessionalAvailability(null)
       setAvailabilityWarning('')
       setPauseTimes([])
+      setProfessionalBlock(null)
+      return
+    }
+
+    const { data: activeBlock } = await supabase
+      .from('professional_time_blocks')
+      .select('id, professional_id, start_date, end_date, reason, block_type')
+      .eq('company_id', companyId)
+      .eq('professional_id', professionalId)
+      .lte('start_date', date)
+      .gte('end_date', date)
+      .limit(1)
+      .maybeSingle()
+
+    if (activeBlock) {
+      setProfessionalBlock(activeBlock as ProfessionalTimeBlock)
+      setProfessionalAvailability(null)
+      setPauseTimes([])
+      setAvailabilityWarning(
+        `Profissional indisponível (${activeBlock.block_type}). ${activeBlock.reason || 'Período bloqueado.'}`
+      )
       return
     }
 
@@ -335,6 +408,11 @@ export default function AgendaPage() {
   function handleVisualSlotClick(availableTime: string) {
     if (!visualDate || !selectedVisualProfessionalId) return
 
+    if (visualProfessionalBlock) {
+      alert('Este profissional está ausente nesta data.')
+      return
+    }
+
     setDate(visualDate)
     setProfessionalId(selectedVisualProfessionalId)
     setTime(availableTime)
@@ -461,6 +539,11 @@ export default function AgendaPage() {
 
     if (date === today && time < currentTime) {
       alert('Não é possível criar agendamento em horário passado.')
+      return
+    }
+
+    if (professionalBlock) {
+      alert('Este profissional possui férias, folga ou bloqueio nesta data.')
       return
     }
 
@@ -697,6 +780,27 @@ export default function AgendaPage() {
           </span>
         </div>
 
+        {visualProfessionalBlock && (
+          <div className="mt-6 rounded-2xl border border-orange-800 bg-orange-950/40 p-5 text-orange-200">
+            <p className="text-sm uppercase tracking-wide text-orange-300">
+              Profissional ausente
+            </p>
+
+            <h3 className="mt-2 text-xl font-bold">
+              {getBlockTypeLabel(visualProfessionalBlock.block_type)}
+            </h3>
+
+            <p className="mt-1 text-sm">
+              Período: {visualProfessionalBlock.start_date} até{' '}
+              {visualProfessionalBlock.end_date}
+            </p>
+
+            <p className="mt-1 text-sm">
+              {visualProfessionalBlock.reason || 'Período bloqueado para agendamentos.'}
+            </p>
+          </div>
+        )}
+
         <div className="mt-6 max-h-[620px] overflow-y-auto rounded-2xl border border-zinc-800">
           <div className="grid grid-cols-[90px_1fr] border-b border-zinc-800 bg-zinc-950 text-sm font-bold text-zinc-400">
             <div className="border-r border-zinc-800 p-3">Hora</div>
@@ -752,6 +856,10 @@ export default function AgendaPage() {
                         </span>
                       </div>
                     </button>
+                  ) : visualProfessionalBlock ? (
+                    <div className="rounded-xl border border-orange-800 bg-orange-950/40 p-3 text-sm font-bold text-orange-300">
+                      Profissional ausente — {getBlockTypeLabel(visualProfessionalBlock.block_type)}
+                    </div>
                   ) : isPauseInForm ? (
                     <div className="rounded-xl border border-yellow-800 bg-yellow-950/40 p-3 text-sm font-bold text-yellow-300">
                       Pausa do profissional
@@ -861,6 +969,7 @@ export default function AgendaPage() {
             {availableTimes.map((availableTime) => {
               const isOccupied = occupiedTimes.includes(availableTime)
               const isPause = pauseTimes.includes(availableTime)
+              const isBlockedDay = Boolean(professionalBlock)
               const isUnavailableDay =
                 professionalAvailability && !professionalAvailability.available
               const isPastTime =
@@ -870,12 +979,14 @@ export default function AgendaPage() {
                 <button
                   key={availableTime}
                   type="button"
-                  disabled={Boolean(isOccupied || isPastTime || isPause || isUnavailableDay)}
+                  disabled={Boolean(isOccupied || isPastTime || isPause || isUnavailableDay || isBlockedDay)}
                   onClick={() => setTime(availableTime)}
                   className={`rounded-xl p-3 text-sm font-medium transition ${
-                    isUnavailableDay
-                      ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
-                      : isOccupied
+                    isBlockedDay
+                      ? 'cursor-not-allowed bg-orange-950 text-orange-300 opacity-70'
+                      : isUnavailableDay
+                        ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                        : isOccupied
                         ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
                         : isPause
                           ? 'cursor-not-allowed bg-yellow-900 text-yellow-300 opacity-70'
@@ -901,6 +1012,9 @@ export default function AgendaPage() {
             </span>
             <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-400">
               Indisponível/passado
+            </span>
+            <span className="rounded-full bg-orange-900 px-3 py-1 text-orange-300">
+              Férias/folga/bloqueio
             </span>
           </div>
         </div>
