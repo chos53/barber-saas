@@ -24,7 +24,7 @@ type Professional = {
   user_access_role?: UserAccessRole | null
   monthly_revenue?: number
   monthly_commission?: number
-  commission_payment_status?: 'pending' | 'paid'
+  commission_payment_status?: 'pending' | 'released' | 'paid'
   commission_payment_date?: string | null
 }
 
@@ -102,10 +102,11 @@ export default function ProfessionalsPage() {
   const [editCommissionPercentage, setEditCommissionPercentage] = useState('40')
   const [payingCommissionId, setPayingCommissionId] = useState('')
   const [savingPermissionId, setSavingPermissionId] = useState('')
+  const [monthReference, setMonthReference] = useState(getCurrentMonthReference())
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [monthReference])
 
   const filteredProfessionals = useMemo(() => {
     return professionals.filter((professional) =>
@@ -144,9 +145,31 @@ export default function ProfessionalsPage() {
       )
   }, [professionals])
 
+  const totalCommissionReleased = useMemo(() => {
+    return professionals
+      .filter(
+        (professional) =>
+          professional.commission_payment_status === 'released'
+      )
+      .reduce(
+        (sum, professional) =>
+          sum + Number(professional.monthly_commission || 0),
+        0
+      )
+  }, [professionals])
+
   const totalCommissionPending = useMemo(() => {
-    return totalCommissionToPay - totalCommissionPaid
-  }, [totalCommissionToPay, totalCommissionPaid])
+    return professionals
+      .filter(
+        (professional) =>
+          professional.commission_payment_status !== 'paid'
+      )
+      .reduce(
+        (sum, professional) =>
+          sum + Number(professional.monthly_commission || 0),
+        0
+      )
+  }, [professionals])
 
   function formatCurrency(value: number) {
     return new Intl.NumberFormat('pt-BR', {
@@ -156,10 +179,12 @@ export default function ProfessionalsPage() {
   }
 
   function getCurrentMonthStartDate() {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), 1)
-      .toISOString()
-      .split('T')[0]
+    return `${monthReference}-01`
+  }
+
+  function getCurrentMonthEndDate() {
+    const [year, month] = monthReference.split('-').map(Number)
+    return new Date(year, month, 0).toISOString().split('T')[0]
   }
 
   function getTodayDate() {
@@ -169,6 +194,28 @@ export default function ProfessionalsPage() {
   function getCurrentMonthReference() {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  function getCommissionStatusLabel(status: Professional['commission_payment_status']) {
+    switch (status) {
+      case 'paid':
+        return 'Pago'
+      case 'released':
+        return 'Liberada'
+      default:
+        return 'Pendente'
+    }
+  }
+
+  function getCommissionStatusClass(status: Professional['commission_payment_status']) {
+    switch (status) {
+      case 'paid':
+        return 'text-green-400'
+      case 'released':
+        return 'text-blue-400'
+      default:
+        return 'text-red-400'
+    }
   }
 
   function generateProfessionalPdf(professional: Professional) {
@@ -216,6 +263,7 @@ export default function ProfessionalsPage() {
           <p><strong>Profissional:</strong> ${professional.name}</p>
           <p><strong>Função:</strong> ${professional.role || '-'}</p>
           <p><strong>Emitido em:</strong> ${today}</p>
+          <p><strong>Mês de referência:</strong> ${monthReference}</p>
 
           <div class="card">
             <div class="label">Comissão (%)</div>
@@ -251,7 +299,7 @@ export default function ProfessionalsPage() {
           <div class="card">
             <div class="label">Status do pagamento</div>
             <div class="value">
-              ${professional.commission_payment_status === 'paid' ? 'Pago' : 'Pendente'}
+              ${getCommissionStatusLabel(professional.commission_payment_status)}
             </div>
           </div>
 
@@ -330,7 +378,7 @@ export default function ProfessionalsPage() {
     )
 
     const monthStartDate = getCurrentMonthStartDate()
-    const todayDate = getTodayDate()
+    const todayDate = getCurrentMonthEndDate()
 
     const { data: appointmentsData } = await supabase
       .from('appointments')
@@ -366,8 +414,6 @@ export default function ProfessionalsPage() {
       .eq('comandas.status', 'closed')
       .gte('comandas.closed_at', `${monthStartDate}T00:00:00`)
       .lte('comandas.closed_at', `${todayDate}T23:59:59`)
-
-    const monthReference = getCurrentMonthReference()
 
     const { data: commissionPaymentsData } = await supabase
       .from('professional_commission_payments')
@@ -428,7 +474,11 @@ export default function ProfessionalsPage() {
           monthly_revenue: monthlyRevenue,
           monthly_commission: (monthlyRevenue * percentage) / 100,
           commission_payment_status:
-            payment?.status === 'paid' ? 'paid' : 'pending',
+            payment?.status === 'paid'
+              ? 'paid'
+              : payment?.status === 'released'
+                ? 'released'
+                : 'pending',
           commission_payment_date: payment?.paid_at || null,
         }
       }
@@ -660,6 +710,53 @@ export default function ProfessionalsPage() {
     loadData()
   }
 
+  async function releaseCommission(professional: Professional) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    if (!professional.monthly_commission || professional.monthly_commission <= 0) {
+      alert('Este profissional não possui comissão para liberar no mês.')
+      return
+    }
+
+    const confirmRelease = window.confirm(
+      `Liberar comissão de ${professional.name} para pagamento?`
+    )
+
+    if (!confirmRelease) return
+
+    setPayingCommissionId(professional.id)
+
+    const { error } = await supabase
+      .from('professional_commission_payments')
+      .upsert(
+        {
+        company_id: companyId,
+        professional_id: professional.id,
+        month_reference: monthReference,
+        commission_amount: Number(professional.monthly_commission || 0),
+        revenue_amount: Number(professional.monthly_revenue || 0),
+        status: 'released',
+        paid_at: null,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'company_id,professional_id,month_reference',
+      }
+      )
+
+    setPayingCommissionId('')
+
+    if (error) {
+      alert(`Erro ao liberar comissão: ${error.message}`)
+      return
+    }
+
+    loadData()
+  }
+
   async function markCommissionAsPaid(professional: Professional) {
     if (!companyId) {
       alert('Empresa não identificada.')
@@ -681,21 +778,68 @@ export default function ProfessionalsPage() {
 
     const { error } = await supabase
       .from('professional_commission_payments')
-      .upsert({
+      .upsert(
+        {
         company_id: companyId,
         professional_id: professional.id,
-        month_reference: getCurrentMonthReference(),
+        month_reference: monthReference,
         commission_amount: Number(professional.monthly_commission || 0),
         revenue_amount: Number(professional.monthly_revenue || 0),
         status: 'paid',
         paid_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      })
+      },
+      {
+        onConflict: 'company_id,professional_id,month_reference',
+      }
+      )
 
     setPayingCommissionId('')
 
     if (error) {
       alert(`Erro ao marcar comissão como paga: ${error.message}`)
+      return
+    }
+
+    loadData()
+  }
+
+  async function reopenCommissionPayment(professional: Professional) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    const confirmReopen = window.confirm(
+      `Reabrir pagamento da comissão de ${professional.name}?`
+    )
+
+    if (!confirmReopen) return
+
+    setPayingCommissionId(professional.id)
+
+    const { error } = await supabase
+      .from('professional_commission_payments')
+      .upsert(
+        {
+        company_id: companyId,
+        professional_id: professional.id,
+        month_reference: monthReference,
+        commission_amount: Number(professional.monthly_commission || 0),
+        revenue_amount: Number(professional.monthly_revenue || 0),
+        status: 'pending',
+        paid_at: null,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'company_id,professional_id,month_reference',
+      }
+      )
+
+    setPayingCommissionId('')
+
+    if (error) {
+      alert(`Erro ao reabrir comissão: ${error.message}`)
       return
     }
 
@@ -711,7 +855,24 @@ export default function ProfessionalsPage() {
         barbearias, estética, esmalterias e negócios de beleza.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-5">
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <label className="mb-2 block text-sm text-zinc-400">
+          Mês de referência da comissão
+        </label>
+
+        <input
+          type="month"
+          value={monthReference}
+          onChange={(event) => setMonthReference(event.target.value)}
+          className="rounded-lg bg-zinc-800 p-3 text-white outline-none"
+        />
+
+        <p className="mt-2 text-xs text-zinc-500">
+          Os cálculos usam agendamentos concluídos e comandas fechadas do mês selecionado.
+        </p>
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
           <p className="text-sm text-green-300">
             Total produzido no mês
@@ -749,6 +910,16 @@ export default function ProfessionalsPage() {
 
           <strong className="mt-2 block text-3xl text-white">
             {formatCurrency(totalCommissionPaid)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
+          <p className="text-sm text-blue-300">
+            Comissão liberada
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {formatCurrency(totalCommissionReleased)}
           </strong>
         </div>
 
@@ -882,6 +1053,16 @@ export default function ProfessionalsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
+        <h2 className="text-xl font-bold text-white">
+          Fluxo profissional da comissão
+        </h2>
+
+        <p className="mt-2 text-sm text-blue-100">
+          Pendente: comissão calculada automaticamente. Liberada: conferida e pronta para pagamento. Pago: pagamento confirmado com data registrada.
+        </p>
       </div>
 
       <div className="mt-8 space-y-3">
@@ -1098,15 +1279,13 @@ export default function ProfessionalsPage() {
                       <div>
                         <p className="text-sm text-zinc-500">Pagamento</p>
                         <strong
-                          className={
-                            professional.commission_payment_status === 'paid'
-                              ? 'text-green-400'
-                              : 'text-red-400'
-                          }
+                          className={getCommissionStatusClass(
+                            professional.commission_payment_status
+                          )}
                         >
-                          {professional.commission_payment_status === 'paid'
-                            ? 'Pago'
-                            : 'Pendente'}
+                          {getCommissionStatusLabel(
+                            professional.commission_payment_status
+                          )}
                         </strong>
 
                         {professional.commission_payment_date && (
@@ -1129,6 +1308,18 @@ export default function ProfessionalsPage() {
                       Editar
                     </button>
 
+                    {professional.commission_payment_status === 'pending' && (
+                      <button
+                        onClick={() => releaseCommission(professional)}
+                        disabled={payingCommissionId === professional.id}
+                        className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50"
+                      >
+                        {payingCommissionId === professional.id
+                          ? 'Salvando...'
+                          : 'Liberar comissão'}
+                      </button>
+                    )}
+
                     {professional.commission_payment_status !== 'paid' && (
                       <button
                         onClick={() => markCommissionAsPaid(professional)}
@@ -1138,6 +1329,18 @@ export default function ProfessionalsPage() {
                         {payingCommissionId === professional.id
                           ? 'Salvando...'
                           : 'Marcar como pago'}
+                      </button>
+                    )}
+
+                    {professional.commission_payment_status === 'paid' && (
+                      <button
+                        onClick={() => reopenCommissionPayment(professional)}
+                        disabled={payingCommissionId === professional.id}
+                        className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white disabled:opacity-50"
+                      >
+                        {payingCommissionId === professional.id
+                          ? 'Salvando...'
+                          : 'Reabrir comissão'}
                       </button>
                     )}
 
