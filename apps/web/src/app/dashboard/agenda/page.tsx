@@ -20,6 +20,7 @@ type Professional = {
 
 type Appointment = {
   id: string
+  professional_id: string | null
   appointment_date: string
   appointment_time: string
   status: string
@@ -61,6 +62,7 @@ export default function AgendaPage() {
   const [notes, setNotes] = useState('')
 
   const [filterDate, setFilterDate] = useState('')
+  const [visualProfessionalId, setVisualProfessionalId] = useState('')
 
   const [openingTime, setOpeningTime] = useState('08:00')
   const [closingTime, setClosingTime] = useState('20:00')
@@ -298,6 +300,51 @@ export default function AgendaPage() {
     })
   }, [appointments, search])
 
+  const visualDate = filterDate || today
+  const selectedVisualProfessionalId =
+    visualProfessionalId || professionals[0]?.id || ''
+
+  const visualAppointments = useMemo(() => {
+    return appointments.filter(
+      (appointment) =>
+        appointment.appointment_date === visualDate &&
+        (!selectedVisualProfessionalId ||
+          appointment.professional_id === selectedVisualProfessionalId)
+    )
+  }, [appointments, selectedVisualProfessionalId, visualDate])
+
+  function getAppointmentByTime(availableTime: string) {
+    return visualAppointments.find(
+      (appointment) => appointment.appointment_time.slice(0, 5) === availableTime
+    )
+  }
+
+  function getStatusCardClass(status: string) {
+    switch (status) {
+      case 'completed':
+        return 'border-green-800 bg-green-950/50 text-green-200'
+      case 'cancelled':
+        return 'border-red-800 bg-red-950/50 text-red-200'
+      case 'no_show':
+        return 'border-yellow-800 bg-yellow-950/50 text-yellow-200'
+      default:
+        return 'border-blue-800 bg-blue-950/50 text-blue-200'
+    }
+  }
+
+  function handleVisualSlotClick(availableTime: string) {
+    if (!visualDate || !selectedVisualProfessionalId) return
+
+    setDate(visualDate)
+    setProfessionalId(selectedVisualProfessionalId)
+    setTime(availableTime)
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    })
+  }
+
   function getStatusLabel(status: string) {
     switch (status) {
       case 'scheduled':
@@ -367,6 +414,7 @@ export default function AgendaPage() {
       .from('appointments')
       .select(`
         id,
+        professional_id,
         appointment_date,
         appointment_time,
         status,
@@ -392,6 +440,11 @@ export default function AgendaPage() {
     setClients(clientsData || [])
     setServices(servicesData || [])
     setProfessionals(professionalsData || [])
+
+    if (!visualProfessionalId && professionalsData?.[0]?.id) {
+      setVisualProfessionalId(professionalsData[0].id)
+    }
+
     setAppointments((appointmentsData || []) as Appointment[])
   }
 
@@ -577,6 +630,154 @@ export default function AgendaPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">
+              Agenda visual do dia
+            </h2>
+
+            <p className="mt-2 text-sm text-zinc-400">
+              Visualize horários livres, ocupados e bloqueios por profissional.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm text-zinc-400">
+                Profissional
+              </label>
+
+              <select
+                value={selectedVisualProfessionalId}
+                onChange={(event) => setVisualProfessionalId(event.target.value)}
+                className="w-full rounded-lg bg-zinc-800 p-3"
+              >
+                {professionals.map((professional) => (
+                  <option key={professional.id} value={professional.id}>
+                    {professional.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm text-zinc-400">
+                Data visual
+              </label>
+
+              <input
+                type="date"
+                min={today}
+                value={visualDate}
+                onChange={(event) => setFilterDate(event.target.value)}
+                className="w-full rounded-lg bg-zinc-800 p-3"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-300">
+            Livre
+          </span>
+          <span className="rounded-full bg-blue-900 px-3 py-1 text-blue-300">
+            Agendado
+          </span>
+          <span className="rounded-full bg-green-900 px-3 py-1 text-green-300">
+            Concluído
+          </span>
+          <span className="rounded-full bg-yellow-900 px-3 py-1 text-yellow-300">
+            Pausa / não compareceu
+          </span>
+          <span className="rounded-full bg-red-900 px-3 py-1 text-red-300">
+            Cancelado / ocupado
+          </span>
+        </div>
+
+        <div className="mt-6 max-h-[620px] overflow-y-auto rounded-2xl border border-zinc-800">
+          <div className="grid grid-cols-[90px_1fr] border-b border-zinc-800 bg-zinc-950 text-sm font-bold text-zinc-400">
+            <div className="border-r border-zinc-800 p-3">Hora</div>
+            <div className="p-3">
+              {getProfessionalName(selectedVisualProfessionalId) || 'Profissional'}
+            </div>
+          </div>
+
+          {availableTimes.map((availableTime) => {
+            const appointment = getAppointmentByTime(availableTime)
+            const isPastTime = visualDate === today && availableTime < currentTime
+            const isSameProfessionalSelected =
+              professionalId === selectedVisualProfessionalId && date === visualDate
+            const isOccupiedInForm =
+              isSameProfessionalSelected && occupiedTimes.includes(availableTime)
+            const isPauseInForm =
+              isSameProfessionalSelected && pauseTimes.includes(availableTime)
+
+            return (
+              <div
+                key={`visual-${availableTime}`}
+                className="grid min-h-[72px] grid-cols-[90px_1fr] border-b border-zinc-800 last:border-b-0"
+              >
+                <div className="border-r border-zinc-800 bg-zinc-950 p-3 text-sm font-bold text-zinc-400">
+                  {availableTime}
+                </div>
+
+                <div className="p-2">
+                  {appointment ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAppointment(appointment)
+                        setSelectedPaymentMethod('cash')
+                      }}
+                      className={`w-full rounded-xl border p-3 text-left transition hover:border-white ${getStatusCardClass(
+                        appointment.status
+                      )}`}
+                    >
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="font-bold">
+                            {appointment.clients?.name || 'Cliente não informado'}
+                          </p>
+
+                          <p className="mt-1 text-sm opacity-90">
+                            {appointment.services?.name || 'Serviço não informado'}
+                          </p>
+                        </div>
+
+                        <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-bold">
+                          {getStatusLabel(appointment.status)}
+                        </span>
+                      </div>
+                    </button>
+                  ) : isPauseInForm ? (
+                    <div className="rounded-xl border border-yellow-800 bg-yellow-950/40 p-3 text-sm font-bold text-yellow-300">
+                      Pausa do profissional
+                    </div>
+                  ) : isOccupiedInForm ? (
+                    <div className="rounded-xl border border-red-800 bg-red-950/40 p-3 text-sm font-bold text-red-300">
+                      Horário ocupado
+                    </div>
+                  ) : isPastTime ? (
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-600">
+                      Horário passado
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleVisualSlotClick(availableTime)}
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-left text-sm text-zinc-400 transition hover:border-white hover:text-white"
+                    >
+                      Livre — clicar para preencher o horário no formulário
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
