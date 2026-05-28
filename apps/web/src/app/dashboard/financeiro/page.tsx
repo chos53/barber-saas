@@ -49,6 +49,22 @@ type CashMovement = {
   created_at: string
 }
 
+type DailyFinancialClosing = {
+  id: string
+  closing_date: string
+  income_amount: number
+  expense_amount: number
+  net_profit: number
+  cash_opening_amount: number
+  cash_closing_amount: number
+  cash_expected_amount: number
+  cash_difference_amount: number
+  withdrawals_amount: number
+  reinforcements_amount: number
+  status: 'closed'
+  created_at: string
+}
+
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
@@ -101,6 +117,9 @@ export default function FinanceiroPage() {
   const [cashMovementReason, setCashMovementReason] = useState('')
   const [savingCashMovement, setSavingCashMovement] = useState(false)
 
+  const [dailyClosings, setDailyClosings] = useState<DailyFinancialClosing[]>([])
+  const [closingDay, setClosingDay] = useState(false)
+
   useEffect(() => {
     const now = new Date()
     const currentDate = formatDate(now)
@@ -132,6 +151,10 @@ export default function FinanceiroPage() {
 
   useEffect(() => {
     loadCashHistory()
+  }, [startDate, endDate])
+
+  useEffect(() => {
+    loadDailyClosings()
   }, [startDate, endDate])
 
   function formatDate(date: Date) {
@@ -460,6 +483,91 @@ export default function FinanceiroPage() {
     }
 
     setCashHistory((data || []) as CashRegisterSession[])
+  }
+
+  async function loadDailyClosings() {
+    const currentCompanyId = companyId || (await getCompanyId())
+
+    if (!currentCompanyId || !startDate || !endDate) return
+
+    const { data, error } = await supabase
+      .from('daily_financial_closings')
+      .select('*')
+      .eq('company_id', currentCompanyId)
+      .gte('closing_date', startDate)
+      .lte('closing_date', endDate)
+      .order('closing_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setDailyClosings((data || []) as DailyFinancialClosing[])
+  }
+
+  async function closeFinancialDay() {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    if (!cashSession) {
+      alert('Abra e feche um caixa antes de fechar o dia.')
+      return
+    }
+
+    if (cashSession.status !== 'closed') {
+      alert('Feche o caixa antes de fechar o dia.')
+      return
+    }
+
+    const closingDate = cashSession.session_date || today || formatDate(new Date())
+
+    const alreadyClosed = dailyClosings.some(
+      (closing) => closing.closing_date === closingDate
+    )
+
+    if (alreadyClosed) {
+      alert('Este dia já foi fechado.')
+      return
+    }
+
+    const confirmClose = window.confirm(
+      `Fechar financeiramente o dia ${closingDate}?`
+    )
+
+    if (!confirmClose) return
+
+    setClosingDay(true)
+
+    const { error } = await supabase
+      .from('daily_financial_closings')
+      .insert({
+        company_id: companyId,
+        cash_session_id: cashSession.id,
+        closing_date: closingDate,
+        income_amount: totals.income,
+        expense_amount: totals.expenses,
+        net_profit: totals.balance,
+        cash_opening_amount: Number(cashSession.opening_amount || 0),
+        cash_closing_amount: Number(cashSession.closing_amount || 0),
+        cash_expected_amount: Number(cashSession.expected_amount || cashExpectedAmount || 0),
+        cash_difference_amount: Number(cashSession.difference_amount || 0),
+        withdrawals_amount: cashWithdrawalsTotal,
+        reinforcements_amount: cashReinforcementsTotal,
+        status: 'closed',
+      })
+
+    setClosingDay(false)
+
+    if (error) {
+      alert(`Erro ao fechar o dia: ${error.message}`)
+      return
+    }
+
+    await loadDailyClosings()
   }
 
   async function openCashRegister() {
@@ -994,6 +1102,14 @@ export default function FinanceiroPage() {
 
         <div className="flex flex-wrap gap-2">
           <button
+            onClick={closeFinancialDay}
+            disabled={closingDay}
+            className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-50"
+          >
+            {closingDay ? 'Fechando...' : 'Fechar dia'}
+          </button>
+
+          <button
             onClick={generateCashRegisterPdf}
             className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white"
           >
@@ -1006,6 +1122,7 @@ export default function FinanceiroPage() {
               loadMonthlyTransactions()
               loadCashRegister()
               loadCashHistory()
+              loadDailyClosings()
             }}
             className="rounded-xl bg-white px-5 py-3 font-bold text-black"
           >
@@ -1567,6 +1684,126 @@ export default function FinanceiroPage() {
           <p className="mt-3 text-2xl font-bold text-orange-300">
             {formatCurrency(sumPayment('debit_card'))}
           </p>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-2xl font-bold">
+              Fechamentos financeiros do dia
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Snapshot consolidado e auditável do resultado diário.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeFinancialDay}
+            disabled={closingDay}
+            className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-50"
+          >
+            {closingDay ? 'Fechando...' : 'Fechar dia'}
+          </button>
+        </div>
+
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[1200px] text-left">
+            <thead>
+              <tr className="border-b border-zinc-800 text-sm text-zinc-500">
+                <th className="py-3">Data</th>
+                <th>Entradas</th>
+                <th>Despesas</th>
+                <th>Lucro líquido</th>
+                <th>Abertura</th>
+                <th>Contado</th>
+                <th>Esperado</th>
+                <th>Sangrias</th>
+                <th>Reforços</th>
+                <th>Diferença</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {dailyClosings.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="py-8 text-center text-zinc-500">
+                    Nenhum fechamento diário encontrado no período.
+                  </td>
+                </tr>
+              )}
+
+              {dailyClosings.map((closing) => (
+                <tr
+                  key={closing.id}
+                  className="border-b border-zinc-800 text-sm"
+                >
+                  <td className="py-4">
+                    {closing.closing_date}
+                  </td>
+
+                  <td className="font-bold text-green-300">
+                    {formatCurrency(Number(closing.income_amount || 0))}
+                  </td>
+
+                  <td className="font-bold text-red-300">
+                    {formatCurrency(Number(closing.expense_amount || 0))}
+                  </td>
+
+                  <td
+                    className={`font-bold ${
+                      Number(closing.net_profit || 0) >= 0
+                        ? 'text-blue-300'
+                        : 'text-red-300'
+                    }`}
+                  >
+                    {formatCurrency(Number(closing.net_profit || 0))}
+                  </td>
+
+                  <td>
+                    {formatCurrency(Number(closing.cash_opening_amount || 0))}
+                  </td>
+
+                  <td>
+                    {formatCurrency(Number(closing.cash_closing_amount || 0))}
+                  </td>
+
+                  <td>
+                    {formatCurrency(Number(closing.cash_expected_amount || 0))}
+                  </td>
+
+                  <td className="text-red-300">
+                    {formatCurrency(Number(closing.withdrawals_amount || 0))}
+                  </td>
+
+                  <td className="text-green-300">
+                    {formatCurrency(Number(closing.reinforcements_amount || 0))}
+                  </td>
+
+                  <td
+                    className={`font-bold ${
+                      Number(closing.cash_difference_amount || 0) === 0
+                        ? 'text-blue-300'
+                        : Number(closing.cash_difference_amount || 0) > 0
+                          ? 'text-green-300'
+                          : 'text-red-300'
+                    }`}
+                  >
+                    {formatCurrency(Number(closing.cash_difference_amount || 0))}
+                  </td>
+
+                  <td>
+                    <span className="rounded-full bg-green-900 px-3 py-1 text-xs font-bold text-green-300">
+                      Fechado
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
