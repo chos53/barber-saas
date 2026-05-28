@@ -119,6 +119,7 @@ export default function FinanceiroPage() {
 
   const [dailyClosings, setDailyClosings] = useState<DailyFinancialClosing[]>([])
   const [closingDay, setClosingDay] = useState(false)
+  const [reopeningClosingId, setReopeningClosingId] = useState('')
 
   useEffect(() => {
     const now = new Date()
@@ -513,17 +514,27 @@ export default function FinanceiroPage() {
       return
     }
 
-    if (!cashSession) {
+    const closingDate = today || formatDate(new Date())
+
+    const { data: closedCashSession, error: closedCashError } = await supabase
+      .from('cash_register_sessions')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('session_date', closingDate)
+      .eq('status', 'closed')
+      .order('closed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (closedCashError) {
+      alert(`Erro ao buscar caixa fechado: ${closedCashError.message}`)
+      return
+    }
+
+    if (!closedCashSession) {
       alert('Abra e feche um caixa antes de fechar o dia.')
       return
     }
-
-    if (cashSession.status !== 'closed') {
-      alert('Feche o caixa antes de fechar o dia.')
-      return
-    }
-
-    const closingDate = cashSession.session_date || today || formatDate(new Date())
 
     const { data: existingClosing } = await supabase
       .from('daily_financial_closings')
@@ -587,7 +598,7 @@ export default function FinanceiroPage() {
       .from('cash_register_movements')
       .select('type, amount')
       .eq('company_id', companyId)
-      .eq('cash_session_id', cashSession.id)
+      .eq('cash_session_id', closedCashSession.id)
 
     if (cashMovementsError) {
       setClosingDay(false)
@@ -609,15 +620,15 @@ export default function FinanceiroPage() {
       .from('daily_financial_closings')
       .insert({
         company_id: companyId,
-        cash_session_id: cashSession.id,
+        cash_session_id: closedCashSession.id,
         closing_date: closingDate,
         income_amount: dayIncome,
         expense_amount: dayExpenses,
         net_profit: dayNetProfit,
-        cash_opening_amount: Number(cashSession.opening_amount || 0),
-        cash_closing_amount: Number(cashSession.closing_amount || 0),
-        cash_expected_amount: Number(cashSession.expected_amount || 0),
-        cash_difference_amount: Number(cashSession.difference_amount || 0),
+        cash_opening_amount: Number(closedCashSession.opening_amount || 0),
+        cash_closing_amount: Number(closedCashSession.closing_amount || 0),
+        cash_expected_amount: Number(closedCashSession.expected_amount || 0),
+        cash_difference_amount: Number(closedCashSession.difference_amount || 0),
         withdrawals_amount: dayWithdrawals,
         reinforcements_amount: dayReinforcements,
         status: 'closed',
@@ -631,6 +642,49 @@ export default function FinanceiroPage() {
     }
 
     await loadDailyClosings()
+  }
+
+  async function reopenFinancialClosing(
+    closingId: string,
+    closingDate: string
+  ) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    const confirmReopen = window.confirm(
+      `Deseja realmente reabrir o fechamento do dia ${closingDate}?`
+    )
+
+    if (!confirmReopen) return
+
+    const secondConfirm = window.confirm(
+      'Esta ação removerá o fechamento diário salvo e permitirá fechar novamente o dia. Deseja continuar?'
+    )
+
+    if (!secondConfirm) return
+
+    setReopeningClosingId(closingId)
+
+    const { error } = await supabase
+      .from('daily_financial_closings')
+      .delete()
+      .eq('id', closingId)
+      .eq('company_id', companyId)
+
+    setReopeningClosingId('')
+
+    if (error) {
+      alert(`Erro ao reabrir fechamento: ${error.message}`)
+      return
+    }
+
+    await loadDailyClosings()
+
+    alert(
+      `Fechamento do dia ${closingDate} reaberto com sucesso. Agora você pode fechar novamente o dia com os dados atualizados.`
+    )
   }
 
   async function openCashRegister() {
@@ -1787,13 +1841,14 @@ export default function FinanceiroPage() {
                 <th>Reforços</th>
                 <th>Diferença</th>
                 <th>Status</th>
+                <th className="text-right">Ações</th>
               </tr>
             </thead>
 
             <tbody>
               {dailyClosings.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-zinc-500">
+                  <td colSpan={12} className="py-8 text-center text-zinc-500">
                     Nenhum fechamento diário encontrado no período.
                   </td>
                 </tr>
@@ -1862,6 +1917,24 @@ export default function FinanceiroPage() {
                     <span className="rounded-full bg-green-900 px-3 py-1 text-xs font-bold text-green-300">
                       Fechado
                     </span>
+                  </td>
+
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        reopenFinancialClosing(
+                          closing.id,
+                          closing.closing_date
+                        )
+                      }
+                      disabled={reopeningClosingId === closing.id}
+                      className="rounded-lg bg-yellow-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-yellow-500 disabled:opacity-50"
+                    >
+                      {reopeningClosingId === closing.id
+                        ? 'Reabrindo...'
+                        : 'Reabrir'}
+                    </button>
                   </td>
                 </tr>
               ))}
