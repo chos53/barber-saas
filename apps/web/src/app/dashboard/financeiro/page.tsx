@@ -26,6 +26,17 @@ type PaymentFilter =
   | 'credit_card'
   | 'debit_card'
 
+type CashRegisterSession = {
+  id: string
+  opening_amount: number
+  closing_amount: number | null
+  expected_amount: number | null
+  difference_amount: number | null
+  opened_at: string
+  closed_at: string | null
+  status: 'open' | 'closed'
+}
+
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
@@ -60,6 +71,14 @@ export default function FinanceiroPage() {
   const [expensePaymentMethod, setExpensePaymentMethod] = useState<PaymentFilter>('cash')
   const [expenseDate, setExpenseDate] = useState('')
 
+  const [cashSession, setCashSession] =
+    useState<CashRegisterSession | null>(null)
+
+  const [openingAmount, setOpeningAmount] = useState('')
+  const [closingAmount, setClosingAmount] = useState('')
+  const [openingCash, setOpeningCash] = useState(false)
+  const [closingCash, setClosingCash] = useState(false)
+
   useEffect(() => {
     const now = new Date()
     const currentDate = formatDate(now)
@@ -84,6 +103,10 @@ export default function FinanceiroPage() {
       loadMonthlyTransactions()
     }
   }, [monthStartDate, monthEndDate])
+
+  useEffect(() => {
+    loadCashRegister()
+  }, [])
 
   function formatDate(date: Date) {
     return date.toISOString().split('T')[0]
@@ -298,6 +321,102 @@ export default function FinanceiroPage() {
     loadMonthlyTransactions()
   }
 
+
+  async function loadCashRegister() {
+    const currentCompanyId = companyId || (await getCompanyId())
+
+    if (!currentCompanyId) return
+
+    const todayDate = formatDate(new Date())
+
+    const { data } = await supabase
+      .from('cash_register_sessions')
+      .select('*')
+      .eq('company_id', currentCompanyId)
+      .eq('session_date', todayDate)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (data) {
+      setCashSession(data as CashRegisterSession)
+    }
+  }
+
+  async function openCashRegister() {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    if (!openingAmount || Number(openingAmount) < 0) {
+      alert('Informe o valor de abertura.')
+      return
+    }
+
+    setOpeningCash(true)
+
+    const { data, error } = await supabase
+      .from('cash_register_sessions')
+      .insert({
+        company_id: companyId,
+        session_date: formatDate(new Date()),
+        opening_amount: Number(openingAmount),
+        status: 'open',
+      })
+      .select()
+      .single()
+
+    setOpeningCash(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setCashSession(data as CashRegisterSession)
+    setOpeningAmount('')
+  }
+
+  async function closeCashRegister() {
+    if (!cashSession) return
+
+    if (!closingAmount || Number(closingAmount) < 0) {
+      alert('Informe o valor contado no caixa.')
+      return
+    }
+
+    const expected =
+      Number(cashSession.opening_amount || 0) + totals.balance
+
+    const difference = Number(closingAmount) - expected
+
+    setClosingCash(true)
+
+    const { data, error } = await supabase
+      .from('cash_register_sessions')
+      .update({
+        closing_amount: Number(closingAmount),
+        expected_amount: expected,
+        difference_amount: difference,
+        status: 'closed',
+        closed_at: new Date().toISOString(),
+      })
+      .eq('id', cashSession.id)
+      .select()
+      .single()
+
+    setClosingCash(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setCashSession(data as CashRegisterSession)
+    setClosingAmount('')
+  }
+
   function formatCurrency(value: number) {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -460,6 +579,133 @@ export default function FinanceiroPage() {
         >
           Atualizar
         </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col justify-between gap-6 lg:flex-row">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold">
+              Caixa diário
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Controle de abertura, fechamento e conferência do caixa.
+            </p>
+
+            {!cashSession && (
+              <div className="mt-5 flex flex-col gap-3 md:flex-row">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={openingAmount}
+                  onChange={(event) => setOpeningAmount(event.target.value)}
+                  placeholder="Valor inicial do caixa"
+                  className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={openCashRegister}
+                  disabled={openingCash}
+                  className="rounded-xl bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-500 disabled:opacity-50"
+                >
+                  {openingCash ? 'Abrindo...' : 'Abrir caixa'}
+                </button>
+              </div>
+            )}
+
+            {cashSession && (
+              <div className="mt-5 grid gap-4 md:grid-cols-5">
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Abertura</p>
+                  <strong className="mt-2 block text-xl text-green-300">
+                    {formatCurrency(cashSession.opening_amount || 0)}
+                  </strong>
+                </div>
+
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Entradas líquidas</p>
+                  <strong className="mt-2 block text-xl text-blue-300">
+                    {formatCurrency(totals.balance)}
+                  </strong>
+                </div>
+
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Saldo esperado</p>
+                  <strong className="mt-2 block text-xl text-yellow-300">
+                    {formatCurrency(
+                      Number(cashSession.opening_amount || 0) +
+                        totals.balance
+                    )}
+                  </strong>
+                </div>
+
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Status</p>
+                  <strong
+                    className={`mt-2 block text-xl ${
+                      cashSession.status === 'open'
+                        ? 'text-green-300'
+                        : 'text-red-300'
+                    }`}
+                  >
+                    {cashSession.status === 'open'
+                      ? 'Caixa aberto'
+                      : 'Caixa fechado'}
+                  </strong>
+                </div>
+
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Diferença</p>
+                  <strong
+                    className={`mt-2 block text-xl ${
+                      Number(cashSession.difference_amount || 0) === 0
+                        ? 'text-blue-300'
+                        : Number(cashSession.difference_amount || 0) > 0
+                          ? 'text-green-300'
+                          : 'text-red-300'
+                    }`}
+                  >
+                    {formatCurrency(
+                      Number(cashSession.difference_amount || 0)
+                    )}
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            {cashSession && cashSession.status === 'open' && (
+              <div className="mt-5 flex flex-col gap-3 md:flex-row">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={closingAmount}
+                  onChange={(event) => setClosingAmount(event.target.value)}
+                  placeholder="Valor contado no caixa"
+                  className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={closeCashRegister}
+                  disabled={closingCash}
+                  className="rounded-xl bg-red-600 px-6 py-3 font-bold text-white hover:bg-red-500 disabled:opacity-50"
+                >
+                  {closingCash ? 'Fechando...' : 'Fechar caixa'}
+                </button>
+              </div>
+            )}
+
+            {cashSession?.closed_at && (
+              <p className="mt-4 text-sm text-zinc-500">
+                Caixa fechado em{' '}
+                {new Date(cashSession.closed_at).toLocaleString('pt-BR')}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
