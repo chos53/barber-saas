@@ -64,6 +64,271 @@ export default function ReportsPage() {
     loadData()
   }, [period])
 
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value)
+  }
+
+  function generatePdfReport() {
+    const today = new Date().toLocaleDateString('pt-BR')
+
+    const commissionRows =
+      commissionRanking.length > 0
+        ? commissionRanking
+            .map(
+              (professional, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${professional.professional_name}</td>
+                  <td>${professional.commission_percentage.toFixed(2)}%</td>
+                  <td>${formatCurrency(professional.revenue)}</td>
+                  <td>${formatCurrency(professional.commission)}</td>
+                </tr>
+              `
+            )
+            .join('')
+        : `
+          <tr>
+            <td colspan="5">Nenhuma comissão encontrada no mês atual.</td>
+          </tr>
+        `
+
+    const serviceRows =
+      topServices.length > 0
+        ? topServices
+            .map(
+              (service, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${service.service_name}</td>
+                  <td>${service.total}</td>
+                </tr>
+              `
+            )
+            .join('')
+        : `
+          <tr>
+            <td colspan="3">Nenhum serviço encontrado.</td>
+          </tr>
+        `
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório Gerencial</title>
+
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              margin: 32px;
+            }
+
+            h1 {
+              margin: 0;
+              font-size: 28px;
+            }
+
+            h2 {
+              margin-top: 28px;
+              border-bottom: 1px solid #d1d5db;
+              padding-bottom: 8px;
+              font-size: 20px;
+            }
+
+            p {
+              color: #4b5563;
+            }
+
+            .header {
+              display: flex;
+              justify-content: space-between;
+              gap: 20px;
+              align-items: flex-start;
+              border-bottom: 2px solid #111827;
+              padding-bottom: 16px;
+              margin-bottom: 24px;
+            }
+
+            .grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 12px;
+              margin-top: 16px;
+            }
+
+            .card {
+              border: 1px solid #d1d5db;
+              border-radius: 12px;
+              padding: 14px;
+            }
+
+            .label {
+              font-size: 12px;
+              color: #6b7280;
+              margin-bottom: 6px;
+            }
+
+            .value {
+              font-size: 22px;
+              font-weight: 700;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 12px;
+            }
+
+            th,
+            td {
+              border: 1px solid #d1d5db;
+              padding: 10px;
+              text-align: left;
+              font-size: 13px;
+            }
+
+            th {
+              background: #f3f4f6;
+            }
+
+            @media print {
+              button {
+                display: none;
+              }
+
+              body {
+                margin: 20px;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="header">
+            <div>
+              <h1>Relatório Gerencial</h1>
+              <p>Emitido em ${today} - Período: últimos ${period} dia(s)</p>
+            </div>
+          </div>
+
+          <h2>Resumo financeiro</h2>
+
+          <div class="grid">
+            <div class="card">
+              <div class="label">Faturamento previsto</div>
+              <div class="value">${formatCurrency(expectedRevenue)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Faturamento realizado</div>
+              <div class="value">${formatCurrency(realizedRevenue)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Agendamentos</div>
+              <div class="value">${appointmentsCount}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Concluídos</div>
+              <div class="value">${completedCount}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Cancelados</div>
+              <div class="value">${cancelledCount}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Comissão total do mês</div>
+              <div class="value">${formatCurrency(totalCommission)}</div>
+            </div>
+          </div>
+
+          <h2>Formas de pagamento</h2>
+
+          <div class="grid">
+            <div class="card">
+              <div class="label">Dinheiro</div>
+              <div class="value">${formatCurrency(cashRevenue)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Pix</div>
+              <div class="value">${formatCurrency(pixRevenue)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Crédito</div>
+              <div class="value">${formatCurrency(creditRevenue)}</div>
+            </div>
+
+            <div class="card">
+              <div class="label">Débito</div>
+              <div class="value">${formatCurrency(debitRevenue)}</div>
+            </div>
+          </div>
+
+          <h2>Relatório mensal de comissões</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Profissional</th>
+                <th>% Comissão</th>
+                <th>Faturamento</th>
+                <th>Comissão</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${commissionRows}
+            </tbody>
+          </table>
+
+          <h2>Serviços mais vendidos</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Serviço</th>
+                <th>Vendas</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${serviceRows}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `
+
+    const reportWindow = window.open('', '_blank')
+
+    if (!reportWindow) {
+      alert('Não foi possível abrir a janela do PDF. Verifique se o navegador bloqueou pop-ups.')
+      return
+    }
+
+    reportWindow.document.write(html)
+    reportWindow.document.close()
+    reportWindow.focus()
+
+    setTimeout(() => {
+      reportWindow.print()
+    }, 300)
+  }
+
   async function loadData() {
     const {
       data: { user },
@@ -361,11 +626,23 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">Relatórios</h1>
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="text-4xl font-bold">Relatórios</h1>
 
-      <p className="mt-2 text-zinc-400">
-        Indicadores financeiros e operacionais.
-      </p>
+          <p className="mt-2 text-zinc-400">
+            Indicadores financeiros e operacionais.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={generatePdfReport}
+          className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
+        >
+          Gerar PDF
+        </button>
+      </div>
 
       <div className="mt-4 flex gap-2">
         {['1', '7', '30'].map((value) => (
