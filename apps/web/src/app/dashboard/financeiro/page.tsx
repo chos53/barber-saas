@@ -525,11 +525,14 @@ export default function FinanceiroPage() {
 
     const closingDate = cashSession.session_date || today || formatDate(new Date())
 
-    const alreadyClosed = dailyClosings.some(
-      (closing) => closing.closing_date === closingDate
-    )
+    const { data: existingClosing } = await supabase
+      .from('daily_financial_closings')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('closing_date', closingDate)
+      .maybeSingle()
 
-    if (alreadyClosed) {
+    if (existingClosing) {
       alert('Este dia já foi fechado.')
       return
     }
@@ -542,21 +545,81 @@ export default function FinanceiroPage() {
 
     setClosingDay(true)
 
+    const { data: dayTransactions, error: transactionsError } = await supabase
+      .from('financial_transactions')
+      .select('type, amount, status')
+      .eq('company_id', companyId)
+      .eq('transaction_date', closingDate)
+
+    if (transactionsError) {
+      setClosingDay(false)
+      alert(`Erro ao buscar movimentações do dia: ${transactionsError.message}`)
+      return
+    }
+
+    const dayIncome =
+      dayTransactions
+        ?.filter(
+          (transaction) =>
+            transaction.type === 'income' &&
+            transaction.status !== 'cancelled'
+        )
+        .reduce(
+          (sum, transaction) => sum + Number(transaction.amount || 0),
+          0
+        ) || 0
+
+    const dayExpenses =
+      dayTransactions
+        ?.filter(
+          (transaction) =>
+            transaction.type === 'expense' &&
+            transaction.status !== 'cancelled'
+        )
+        .reduce(
+          (sum, transaction) => sum + Number(transaction.amount || 0),
+          0
+        ) || 0
+
+    const dayNetProfit = dayIncome - dayExpenses
+
+    const { data: dayCashMovements, error: cashMovementsError } = await supabase
+      .from('cash_register_movements')
+      .select('type, amount')
+      .eq('company_id', companyId)
+      .eq('cash_session_id', cashSession.id)
+
+    if (cashMovementsError) {
+      setClosingDay(false)
+      alert(`Erro ao buscar sangrias/reforços: ${cashMovementsError.message}`)
+      return
+    }
+
+    const dayWithdrawals =
+      dayCashMovements
+        ?.filter((movement) => movement.type === 'withdrawal')
+        .reduce((sum, movement) => sum + Number(movement.amount || 0), 0) || 0
+
+    const dayReinforcements =
+      dayCashMovements
+        ?.filter((movement) => movement.type === 'reinforcement')
+        .reduce((sum, movement) => sum + Number(movement.amount || 0), 0) || 0
+
     const { error } = await supabase
       .from('daily_financial_closings')
       .insert({
         company_id: companyId,
         cash_session_id: cashSession.id,
         closing_date: closingDate,
-        income_amount: totals.income,
-        expense_amount: totals.expenses,
-        net_profit: totals.balance,
+        income_amount: dayIncome,
+        expense_amount: dayExpenses,
+        net_profit: dayNetProfit,
         cash_opening_amount: Number(cashSession.opening_amount || 0),
         cash_closing_amount: Number(cashSession.closing_amount || 0),
-        cash_expected_amount: Number(cashSession.expected_amount || cashExpectedAmount || 0),
+        cash_expected_amount: Number(cashSession.expected_amount || 0),
         cash_difference_amount: Number(cashSession.difference_amount || 0),
-        withdrawals_amount: cashWithdrawalsTotal,
-        reinforcements_amount: cashReinforcementsTotal,
+        withdrawals_amount: dayWithdrawals,
+        reinforcements_amount: dayReinforcements,
         status: 'closed',
       })
 
