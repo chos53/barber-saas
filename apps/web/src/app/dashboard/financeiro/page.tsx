@@ -40,6 +40,15 @@ type CashRegisterSession = {
   status: 'open' | 'closed'
 }
 
+type CashMovement = {
+  id: string
+  cash_session_id: string
+  type: 'withdrawal' | 'reinforcement'
+  amount: number
+  reason: string | null
+  created_at: string
+}
+
 export default function FinanceiroPage() {
   const [companyId, setCompanyId] = useState('')
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
@@ -84,6 +93,13 @@ export default function FinanceiroPage() {
 
   const [cashHistory, setCashHistory] = useState<CashRegisterSession[]>([])
   const [cashHistoryLoading, setCashHistoryLoading] = useState(false)
+
+  const [cashMovements, setCashMovements] = useState<CashMovement[]>([])
+  const [cashMovementType, setCashMovementType] =
+    useState<'withdrawal' | 'reinforcement'>('withdrawal')
+  const [cashMovementAmount, setCashMovementAmount] = useState('')
+  const [cashMovementReason, setCashMovementReason] = useState('')
+  const [savingCashMovement, setSavingCashMovement] = useState(false)
 
   useEffect(() => {
     const now = new Date()
@@ -348,11 +364,77 @@ export default function FinanceiroPage() {
       .limit(1)
       .maybeSingle()
 
-    if (data) {
+    if (data?.status === 'open') {
       setCashSession(data as CashRegisterSession)
+      await loadCashMovements(data.id)
+    } else {
+      setCashSession(null)
+      setCashMovements([])
     }
   }
 
+
+  async function loadCashMovements(cashSessionId: string) {
+    const { data, error } = await supabase
+      .from('cash_register_movements')
+      .select('*')
+      .eq('cash_session_id', cashSessionId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setCashMovements((data || []) as CashMovement[])
+  }
+
+  async function saveCashMovement() {
+    if (!companyId || !cashSession) {
+      alert('Abra o caixa antes de registrar sangria ou reforço.')
+      return
+    }
+
+    if (cashSession.status !== 'open') {
+      alert('Somente caixas abertos podem receber sangria ou reforço.')
+      return
+    }
+
+    if (!cashMovementAmount || Number(cashMovementAmount) <= 0) {
+      alert('Informe um valor válido.')
+      return
+    }
+
+    if (!cashMovementReason.trim()) {
+      alert('Informe o motivo.')
+      return
+    }
+
+    setSavingCashMovement(true)
+
+    const { error } = await supabase
+      .from('cash_register_movements')
+      .insert({
+        company_id: companyId,
+        cash_session_id: cashSession.id,
+        type: cashMovementType,
+        amount: Number(cashMovementAmount),
+        reason: cashMovementReason.trim(),
+      })
+
+    setSavingCashMovement(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setCashMovementAmount('')
+    setCashMovementReason('')
+    setCashMovementType('withdrawal')
+
+    await loadCashMovements(cashSession.id)
+  }
 
   async function loadCashHistory() {
     const currentCompanyId = companyId || (await getCompanyId())
@@ -412,6 +494,7 @@ export default function FinanceiroPage() {
     }
 
     setCashSession(data as CashRegisterSession)
+    setCashMovements([])
     setOpeningAmount('')
 
     loadCashHistory()
@@ -425,8 +508,7 @@ export default function FinanceiroPage() {
       return
     }
 
-    const expected =
-      Number(cashSession.opening_amount || 0) + totals.balance
+    const expected = cashExpectedAmount
 
     const difference = Number(closingAmount) - expected
 
@@ -581,6 +663,32 @@ export default function FinanceiroPage() {
     [monthlyTransactions]
   )
 
+  const cashWithdrawalsTotal = useMemo(() => {
+    return cashMovements
+      .filter((movement) => movement.type === 'withdrawal')
+      .reduce((sum, movement) => sum + Number(movement.amount || 0), 0)
+  }, [cashMovements])
+
+  const cashReinforcementsTotal = useMemo(() => {
+    return cashMovements
+      .filter((movement) => movement.type === 'reinforcement')
+      .reduce((sum, movement) => sum + Number(movement.amount || 0), 0)
+  }, [cashMovements])
+
+  const cashExpectedAmount = useMemo(() => {
+    return (
+      Number(cashSession?.opening_amount || 0) +
+      totals.balance +
+      cashReinforcementsTotal -
+      cashWithdrawalsTotal
+    )
+  }, [
+    cashSession,
+    totals.balance,
+    cashReinforcementsTotal,
+    cashWithdrawalsTotal,
+  ])
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
       const transactionMatches =
@@ -657,7 +765,7 @@ export default function FinanceiroPage() {
             )}
 
             {cashSession && (
-              <div className="mt-5 grid gap-4 md:grid-cols-5">
+              <div className="mt-5 grid gap-4 md:grid-cols-7">
                 <div className="rounded-xl bg-zinc-950 p-4">
                   <p className="text-sm text-zinc-500">Abertura</p>
                   <strong className="mt-2 block text-xl text-green-300">
@@ -676,9 +784,22 @@ export default function FinanceiroPage() {
                   <p className="text-sm text-zinc-500">Saldo esperado</p>
                   <strong className="mt-2 block text-xl text-yellow-300">
                     {formatCurrency(
-                      Number(cashSession.opening_amount || 0) +
-                        totals.balance
+                      cashExpectedAmount
                     )}
+                  </strong>
+                </div>
+
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Sangrias</p>
+                  <strong className="mt-2 block text-xl text-red-300">
+                    {formatCurrency(cashWithdrawalsTotal)}
+                  </strong>
+                </div>
+
+                <div className="rounded-xl bg-zinc-950 p-4">
+                  <p className="text-sm text-zinc-500">Reforços</p>
+                  <strong className="mt-2 block text-xl text-green-300">
+                    {formatCurrency(cashReinforcementsTotal)}
                   </strong>
                 </div>
 
@@ -712,6 +833,116 @@ export default function FinanceiroPage() {
                       Number(cashSession.difference_amount || 0)
                     )}
                   </strong>
+                </div>
+              </div>
+            )}
+
+            {cashSession && cashSession.status === 'open' && (
+              <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+                <h3 className="text-lg font-bold">
+                  Sangria / Reforço
+                </h3>
+
+                <p className="mt-1 text-sm text-zinc-500">
+                  Registre retirada ou entrada extra de dinheiro no caixa.
+                </p>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-[auto_1fr_2fr_auto]">
+                  <select
+                    value={cashMovementType}
+                    onChange={(event) =>
+                      setCashMovementType(
+                        event.target.value as 'withdrawal' | 'reinforcement'
+                      )
+                    }
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  >
+                    <option value="withdrawal">Sangria</option>
+                    <option value="reinforcement">Reforço</option>
+                  </select>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={cashMovementAmount}
+                    onChange={(event) =>
+                      setCashMovementAmount(event.target.value)
+                    }
+                    placeholder="Valor"
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  />
+
+                  <input
+                    value={cashMovementReason}
+                    onChange={(event) =>
+                      setCashMovementReason(event.target.value)
+                    }
+                    placeholder="Motivo. Ex: retirada para troco, reforço inicial..."
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={saveCashMovement}
+                    disabled={savingCashMovement}
+                    className={`rounded-xl px-5 py-3 font-bold text-white disabled:opacity-50 ${
+                      cashMovementType === 'withdrawal'
+                        ? 'bg-red-600 hover:bg-red-500'
+                        : 'bg-green-600 hover:bg-green-500'
+                    }`}
+                  >
+                    {savingCashMovement ? 'Salvando...' : 'Registrar'}
+                  </button>
+                </div>
+
+                <div className="mt-5 space-y-2">
+                  {cashMovements.length === 0 && (
+                    <p className="rounded-xl bg-zinc-900 p-3 text-sm text-zinc-500">
+                      Nenhuma sangria ou reforço registrado.
+                    </p>
+                  )}
+
+                  {cashMovements.map((movement) => (
+                    <div
+                      key={movement.id}
+                      className="flex flex-col justify-between gap-2 rounded-xl bg-zinc-900 p-3 text-sm md:flex-row md:items-center"
+                    >
+                      <div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            movement.type === 'withdrawal'
+                              ? 'bg-red-900 text-red-300'
+                              : 'bg-green-900 text-green-300'
+                          }`}
+                        >
+                          {movement.type === 'withdrawal'
+                            ? 'Sangria'
+                            : 'Reforço'}
+                        </span>
+
+                        <p className="mt-2 text-zinc-400">
+                          {movement.reason}
+                        </p>
+
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {new Date(movement.created_at).toLocaleString(
+                            'pt-BR'
+                          )}
+                        </p>
+                      </div>
+
+                      <strong
+                        className={
+                          movement.type === 'withdrawal'
+                            ? 'text-red-300'
+                            : 'text-green-300'
+                        }
+                      >
+                        {formatCurrency(Number(movement.amount || 0))}
+                      </strong>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
