@@ -48,6 +48,24 @@ export default function ProfessionalsPage() {
     )
   }, [professionals, search])
 
+  const totalProduced = useMemo(() => {
+    return professionals.reduce(
+      (sum, professional) => sum + Number(professional.monthly_revenue || 0),
+      0
+    )
+  }, [professionals])
+
+  const totalCommissionToPay = useMemo(() => {
+    return professionals.reduce(
+      (sum, professional) => sum + Number(professional.monthly_commission || 0),
+      0
+    )
+  }, [professionals])
+
+  const companyBalanceAfterCommission = useMemo(() => {
+    return totalProduced - totalCommissionToPay
+  }, [totalProduced, totalCommissionToPay])
+
   function formatCurrency(value: number) {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -131,6 +149,16 @@ export default function ProfessionalsPage() {
             <div class="label">Comissão estimada</div>
             <div class="value">
               ${formatCurrency(professional.monthly_commission || 0)}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Saldo da empresa após comissão</div>
+            <div class="value">
+              ${formatCurrency(
+                Number(professional.monthly_revenue || 0) -
+                  Number(professional.monthly_commission || 0)
+              )}
             </div>
           </div>
         </body>
@@ -404,6 +432,38 @@ export default function ProfessionalsPage() {
         Cadastro, edição e comissão mensal dos profissionais.
       </p>
 
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
+          <p className="text-sm text-green-300">
+            Total produzido no mês
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {formatCurrency(totalProduced)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
+          <p className="text-sm text-blue-300">
+            Comissão a pagar
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {formatCurrency(totalCommissionToPay)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-6">
+          <p className="text-sm text-yellow-300">
+            Saldo da empresa após comissão
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {formatCurrency(companyBalanceAfterCommission)}
+          </strong>
+        </div>
+      </div>
+
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">Cadastrar profissional</h2>
 
@@ -634,7 +694,7 @@ export default function ProfessionalsPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-right md:min-w-[260px]">
+                    <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-right md:min-w-[280px]">
                       <div>
                         <p className="text-sm text-zinc-500">Comissão</p>
                         <strong className="text-xl text-yellow-400">
@@ -643,16 +703,26 @@ export default function ProfessionalsPage() {
                       </div>
 
                       <div>
-                        <p className="text-sm text-zinc-500">Faturamento no mês</p>
+                        <p className="text-sm text-zinc-500">Total produzido</p>
                         <strong className="text-green-400">
                           {formatCurrency(professional.monthly_revenue || 0)}
                         </strong>
                       </div>
 
                       <div>
-                        <p className="text-sm text-zinc-500">Comissão estimada</p>
+                        <p className="text-sm text-zinc-500">Comissão a pagar</p>
                         <strong className="text-blue-400">
                           {formatCurrency(professional.monthly_commission || 0)}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-zinc-500">Saldo da empresa</p>
+                        <strong className="text-purple-400">
+                          {formatCurrency(
+                            Number(professional.monthly_revenue || 0) -
+                              Number(professional.monthly_commission || 0)
+                          )}
                         </strong>
                       </div>
                     </div>
