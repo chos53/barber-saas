@@ -29,6 +29,15 @@ type Appointment = {
   professionals: { name: string } | null
 }
 
+type ProfessionalAvailability = {
+  id: string
+  professional_id: string
+  weekday: number
+  available: boolean
+  pause_start_time: string | null
+  pause_end_time: string | null
+}
+
 export default function AgendaPage() {
   const [companyId, setCompanyId] = useState('')
 
@@ -37,6 +46,7 @@ export default function AgendaPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+  const [pauseTimes, setPauseTimes] = useState<string[]>([])
 
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null)
@@ -62,6 +72,10 @@ export default function AgendaPage() {
 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash')
 
+  const [professionalAvailability, setProfessionalAvailability] =
+    useState<ProfessionalAvailability | null>(null)
+  const [availabilityWarning, setAvailabilityWarning] = useState('')
+
   useEffect(() => {
     loadData()
 
@@ -80,7 +94,8 @@ export default function AgendaPage() {
 
   useEffect(() => {
     loadOccupiedTimes()
-  }, [date, professionalId, serviceId])
+    loadProfessionalAvailability()
+  }, [date, professionalId, serviceId, intervalMinutes])
 
   function generateAvailableTimes(
     opening: string,
@@ -109,6 +124,23 @@ export default function AgendaPage() {
     setAvailableTimes(times)
   }
 
+  function getWeekdayFromDate(dateValue: string) {
+    const [year, month, day] = dateValue.split('-').map(Number)
+    const parsedDate = new Date(year, month - 1, day)
+
+    return parsedDate.getDay()
+  }
+
+  function timeToMinutes(timeValue: string) {
+    const [hour, minute] = timeValue.slice(0, 5).split(':').map(Number)
+
+    return hour * 60 + minute
+  }
+
+  function getProfessionalName(id: string) {
+    return professionals.find((professional) => professional.id === id)?.name || ''
+  }
+
   function isExpiredAppointment(
     appointmentDate: string,
     appointmentTime: string,
@@ -123,6 +155,86 @@ export default function AgendaPage() {
     )
 
     return appointmentDateTime < new Date()
+  }
+
+  async function loadProfessionalAvailability() {
+    if (!companyId || !date || !professionalId) {
+      setProfessionalAvailability(null)
+      setAvailabilityWarning('')
+      setPauseTimes([])
+      return
+    }
+
+    const weekday = getWeekdayFromDate(date)
+
+    const { data, error } = await supabase
+      .from('professional_availability')
+      .select('id, professional_id, weekday, available, pause_start_time, pause_end_time')
+      .eq('company_id', companyId)
+      .eq('professional_id', professionalId)
+      .eq('weekday', weekday)
+      .maybeSingle()
+
+    if (error) {
+      setProfessionalAvailability(null)
+      setPauseTimes([])
+      setAvailabilityWarning(
+        'Não foi possível carregar a disponibilidade individual deste profissional.'
+      )
+      return
+    }
+
+    if (!data) {
+      setProfessionalAvailability(null)
+      setPauseTimes([])
+      setAvailabilityWarning('')
+      return
+    }
+
+    const availability = data as ProfessionalAvailability
+
+    setProfessionalAvailability(availability)
+
+    if (!availability.available) {
+      setAvailabilityWarning(
+        `${getProfessionalName(professionalId) || 'Este profissional'} não atende nesta data.`
+      )
+      setPauseTimes([])
+      return
+    }
+
+    if (availability.pause_start_time && availability.pause_end_time) {
+      const pauseStart = timeToMinutes(availability.pause_start_time)
+      const pauseEnd = timeToMinutes(availability.pause_end_time)
+      const generatedPauseTimes: string[] = []
+
+      for (
+        let current = pauseStart;
+        current < pauseEnd;
+        current += intervalMinutes
+      ) {
+        const currentHour = Math.floor(current / 60)
+        const currentMinute = current % 60
+
+        generatedPauseTimes.push(
+          `${String(currentHour).padStart(2, '0')}:${String(
+            currentMinute
+          ).padStart(2, '0')}`
+        )
+      }
+
+      setPauseTimes(generatedPauseTimes)
+      setAvailabilityWarning(
+        `Pausa de ${getProfessionalName(professionalId) || 'profissional'}: ${availability.pause_start_time.slice(
+          0,
+          5
+        )} às ${availability.pause_end_time.slice(0, 5)}.`
+      )
+      return
+    }
+
+    setPauseTimes([])
+    setAvailabilityWarning('')
   }
 
   async function loadOccupiedTimes() {
@@ -299,6 +411,16 @@ export default function AgendaPage() {
       return
     }
 
+    if (professionalAvailability && !professionalAvailability.available) {
+      alert('Este profissional não atende nesta data.')
+      return
+    }
+
+    if (pauseTimes.includes(time)) {
+      alert('Este horário está bloqueado pela pausa individual do profissional.')
+      return
+    }
+
     if (occupiedTimes.includes(time)) {
       alert('Este horário já está ocupado.')
       return
@@ -332,6 +454,9 @@ export default function AgendaPage() {
     setTime('')
     setNotes('')
     setOccupiedTimes([])
+    setPauseTimes([])
+    setProfessionalAvailability(null)
+    setAvailabilityWarning('')
 
     setFilterDate(date)
 
@@ -427,6 +552,10 @@ export default function AgendaPage() {
     <div>
       <h1 className="text-4xl font-bold">Agenda</h1>
 
+      <p className="mt-2 text-zinc-400">
+        Agendamentos com bloqueio por profissional, ocupação e pausa individual.
+      </p>
+
       <div className="mt-6 rounded-2xl bg-zinc-900 p-6">
         <label className="text-sm text-zinc-400">
           Filtrar por data
@@ -510,6 +639,18 @@ export default function AgendaPage() {
           }}
         />
 
+        {availabilityWarning && (
+          <div
+            className={`rounded-xl p-4 text-sm ${
+              professionalAvailability && !professionalAvailability.available
+                ? 'bg-red-950/60 text-red-300'
+                : 'bg-yellow-950/60 text-yellow-300'
+            }`}
+          >
+            {availabilityWarning}
+          </div>
+        )}
+
         <div>
           <p className="mb-3 text-sm text-zinc-400">
             Escolha um horário
@@ -518,6 +659,9 @@ export default function AgendaPage() {
           <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
             {availableTimes.map((availableTime) => {
               const isOccupied = occupiedTimes.includes(availableTime)
+              const isPause = pauseTimes.includes(availableTime)
+              const isUnavailableDay =
+                professionalAvailability && !professionalAvailability.available
               const isPastTime =
                 date === today && availableTime < currentTime
 
@@ -525,22 +669,38 @@ export default function AgendaPage() {
                 <button
                   key={availableTime}
                   type="button"
-                  disabled={isOccupied || isPastTime}
+                  disabled={Boolean(isOccupied || isPastTime || isPause || isUnavailableDay)}
                   onClick={() => setTime(availableTime)}
                   className={`rounded-xl p-3 text-sm font-medium transition ${
-                    isOccupied
-                      ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                      : isPastTime
-                        ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
-                        : time === availableTime
-                          ? 'bg-white text-black'
-                          : 'bg-zinc-800 hover:bg-zinc-700'
+                    isUnavailableDay
+                      ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                      : isOccupied
+                        ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                        : isPause
+                          ? 'cursor-not-allowed bg-yellow-900 text-yellow-300 opacity-70'
+                          : isPastTime
+                            ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                            : time === availableTime
+                              ? 'bg-white text-black'
+                              : 'bg-zinc-800 hover:bg-zinc-700'
                   }`}
                 >
                   {availableTime}
                 </button>
               )
             })}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-red-900 px-3 py-1 text-red-300">
+              Ocupado
+            </span>
+            <span className="rounded-full bg-yellow-900 px-3 py-1 text-yellow-300">
+              Pausa do profissional
+            </span>
+            <span className="rounded-full bg-zinc-800 px-3 py-1 text-zinc-400">
+              Indisponível/passado
+            </span>
           </div>
         </div>
 
@@ -651,7 +811,6 @@ export default function AgendaPage() {
                     <select
                       value={selectedPaymentMethod}
                       onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-                 
                       className="w-full rounded-lg bg-zinc-900 p-3 text-sm"
                     >
                       <option value="cash">Dinheiro</option>
@@ -671,7 +830,6 @@ export default function AgendaPage() {
                           'completed',
                           selectedPaymentMethod
                         )
-                   
                       }}
                       className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
                     >
