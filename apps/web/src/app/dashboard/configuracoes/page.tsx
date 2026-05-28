@@ -4,6 +4,50 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 
+type UserAccessRole =
+  | 'owner'
+  | 'administrator'
+  | 'manager'
+  | 'reception'
+  | 'barber'
+  | 'financial'
+
+type TeamUser = {
+  id: string
+  email: string | null
+  role: string | null
+}
+
+const userAccessRoles: { value: UserAccessRole; label: string }[] = [
+  { value: 'owner', label: 'Proprietário(a)' },
+  { value: 'administrator', label: 'Administrador(a)' },
+  { value: 'manager', label: 'Gerente' },
+  { value: 'reception', label: 'Recepção' },
+  { value: 'barber', label: 'Profissional' },
+  { value: 'financial', label: 'Financeiro' },
+]
+
+function normalizeUserAccessRole(role: string | null | undefined): UserAccessRole {
+  const normalized = String(role || 'barber').toLowerCase()
+
+  if (normalized === 'owner') return 'owner'
+  if (normalized === 'admin') return 'administrator'
+  if (normalized === 'administrator') return 'administrator'
+  if (normalized === 'manager') return 'manager'
+  if (normalized === 'reception') return 'reception'
+  if (normalized === 'barber') return 'barber'
+  if (normalized === 'financial') return 'financial'
+
+  return 'barber'
+}
+
+function getRoleLabel(role: string | null | undefined) {
+  const normalizedRole = normalizeUserAccessRole(role)
+  const option = userAccessRoles.find((item) => item.value === normalizedRole)
+
+  return option?.label || 'Profissional'
+}
+
 export default function SettingsPage() {
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -21,6 +65,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
 
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [currentUserRole, setCurrentUserRole] =
+    useState<UserAccessRole>('barber')
+  const [teamUsers, setTeamUsers] = useState<TeamUser[]>([])
+  const [savingRoleUserId, setSavingRoleUserId] = useState('')
+
   useEffect(() => {
     loadSettings()
   }, [])
@@ -37,13 +87,17 @@ export default function SettingsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id')
+      .select('company_id, role')
       .eq('id', user.id)
       .single()
 
     if (!profile?.company_id) return
 
     setCompanyId(profile.company_id)
+    setCurrentUserId(user.id)
+    setCurrentUserRole(normalizeUserAccessRole(profile.role))
+
+    await loadTeamUsers(profile.company_id)
 
     const { data: settings } = await supabase
       .from('company_settings')
@@ -64,6 +118,69 @@ export default function SettingsPage() {
       setLogoUrl(settings.logo_url || '')
       setLogoPreview(settings.logo_url || '')
     }
+  }
+
+  async function loadTeamUsers(currentCompanyId: string) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, role')
+      .eq('company_id', currentCompanyId)
+      .order('email', { ascending: true })
+
+    if (error) {
+      alert(`Erro ao carregar usuários da equipe: ${error.message}`)
+      return
+    }
+
+    setTeamUsers((data || []) as TeamUser[])
+  }
+
+  async function updateTeamUserRole(userId: string, nextRole: UserAccessRole) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    if (currentUserRole !== 'owner' && currentUserRole !== 'administrator') {
+      alert('Apenas proprietário ou administrador pode alterar permissões.')
+      return
+    }
+
+    if (userId === currentUserId && currentUserRole === 'owner' && nextRole !== 'owner') {
+      alert(
+        'Você não pode remover sua própria permissão de proprietário por segurança.'
+      )
+      return
+    }
+
+    const targetUser = teamUsers.find((userItem) => userItem.id === userId)
+
+    if (normalizeUserAccessRole(targetUser?.role) === 'owner' && nextRole !== 'owner') {
+      const confirmOwnerChange = window.confirm(
+        'Você está alterando um usuário proprietário. Tem certeza que deseja continuar?'
+      )
+
+      if (!confirmOwnerChange) return
+    }
+
+    setSavingRoleUserId(userId)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role: nextRole })
+      .eq('id', userId)
+      .eq('company_id', companyId)
+
+    setSavingRoleUserId('')
+
+    if (error) {
+      alert(`Erro ao atualizar permissão: ${error.message}`)
+      return
+    }
+
+    await loadTeamUsers(companyId)
+
+    alert('Permissão atualizada com sucesso.')
   }
 
   async function uploadLogo() {
@@ -251,6 +368,135 @@ export default function SettingsPage() {
         >
           {saving ? 'Salvando...' : 'Salvar configurações'}
         </button>
+      </div>
+
+      <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-2xl font-bold">Usuários da equipe</h2>
+
+            <p className="mt-2 text-zinc-400">
+              Gerencie permissões de acesso dos usuários vinculados à empresa.
+            </p>
+          </div>
+
+          <span className="rounded-full bg-zinc-800 px-4 py-2 text-sm text-zinc-400">
+            {teamUsers.length} usuário(s)
+          </span>
+        </div>
+
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left">
+            <thead>
+              <tr className="border-b border-zinc-800 text-sm text-zinc-500">
+                <th className="py-3">E-mail</th>
+                <th>Permissão atual</th>
+                <th>Alterar permissão</th>
+                <th className="text-right">Ação</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {teamUsers.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-zinc-500">
+                    Nenhum usuário encontrado para esta empresa.
+                  </td>
+                </tr>
+              )}
+
+              {teamUsers.map((teamUser) => {
+                const normalizedRole = normalizeUserAccessRole(teamUser.role)
+
+                return (
+                  <tr
+                    key={teamUser.id}
+                    className="border-b border-zinc-800 text-sm"
+                  >
+                    <td className="py-4">
+                      <div>
+                        <p className="font-medium">
+                          {teamUser.email || 'E-mail não informado'}
+                        </p>
+
+                        {teamUser.id === currentUserId && (
+                          <p className="mt-1 text-xs text-blue-400">
+                            Usuário logado
+                          </p>
+                        )}
+                      </div>
+                    </td>
+
+                    <td>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          normalizedRole === 'owner'
+                            ? 'bg-yellow-900 text-yellow-300'
+                            : normalizedRole === 'administrator'
+                              ? 'bg-purple-900 text-purple-300'
+                              : normalizedRole === 'financial'
+                                ? 'bg-green-900 text-green-300'
+                                : 'bg-blue-900 text-blue-300'
+                        }`}
+                      >
+                        {getRoleLabel(teamUser.role)}
+                      </span>
+                    </td>
+
+                    <td>
+                      <select
+                        value={normalizedRole}
+                        onChange={(event) => {
+                          setTeamUsers((currentUsers) =>
+                            currentUsers.map((item) =>
+                              item.id === teamUser.id
+                                ? {
+                                    ...item,
+                                    role: event.target.value,
+                                  }
+                                : item
+                            )
+                          )
+                        }}
+                        className="w-full rounded-lg bg-zinc-800 p-3 text-white"
+                      >
+                        {userAccessRoles.map((accessRole) => (
+                          <option key={accessRole.value} value={accessRole.value}>
+                            {accessRole.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateTeamUserRole(
+                            teamUser.id,
+                            normalizeUserAccessRole(teamUser.role)
+                          )
+                        }
+                        disabled={savingRoleUserId === teamUser.id}
+                        className="rounded-lg bg-white px-4 py-2 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                      >
+                        {savingRoleUserId === teamUser.id
+                          ? 'Salvando...'
+                          : 'Salvar'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-yellow-900 bg-yellow-950/30 p-4 text-sm text-yellow-200">
+          Para criar login de novos funcionários, primeiro crie o usuário pelo
+          fluxo de cadastro/login. Depois vincule o mesmo e-mail à empresa em
+          profiles e ajuste a permissão por aqui.
+        </div>
       </div>
     </div>
   )
