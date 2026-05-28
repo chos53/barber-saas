@@ -66,6 +66,92 @@ export default function ProfessionalsPage() {
     return new Date().toISOString().split('T')[0]
   }
 
+
+  function generateProfessionalPdf(professional: Professional) {
+    const today = new Date().toLocaleDateString('pt-BR')
+
+    const html = `
+      <html>
+        <head>
+          <title>Relatório Profissional</title>
+
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 32px;
+              color: #111827;
+            }
+
+            h1 {
+              margin-bottom: 24px;
+            }
+
+            .card {
+              border: 1px solid #d1d5db;
+              border-radius: 12px;
+              padding: 20px;
+              margin-top: 16px;
+            }
+
+            .label {
+              color: #6b7280;
+              font-size: 12px;
+              margin-bottom: 6px;
+            }
+
+            .value {
+              font-size: 24px;
+              font-weight: bold;
+            }
+          </style>
+        </head>
+
+        <body>
+          <h1>Relatório de Comissão</h1>
+
+          <p><strong>Profissional:</strong> ${professional.name}</p>
+          <p><strong>Função:</strong> ${professional.role || '-'}</p>
+          <p><strong>Emitido em:</strong> ${today}</p>
+
+          <div class="card">
+            <div class="label">Comissão (%)</div>
+            <div class="value">
+              ${Number(professional.commission_percentage || 0).toFixed(2)}%
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Faturamento no mês</div>
+            <div class="value">
+              ${formatCurrency(professional.monthly_revenue || 0)}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Comissão estimada</div>
+            <div class="value">
+              ${formatCurrency(professional.monthly_commission || 0)}
+            </div>
+          </div>
+        </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+
+    if (!printWindow) {
+      alert('Não foi possível abrir o PDF.')
+      return
+    }
+
+    printWindow.document.write(html)
+    printWindow.document.close()
+
+    setTimeout(() => {
+      printWindow.print()
+    }, 300)
+  }
+
   async function loadData() {
     const {
       data: { user },
@@ -578,6 +664,13 @@ export default function ProfessionalsPage() {
                       className="rounded-lg bg-white px-4 py-2 font-bold text-black"
                     >
                       Editar
+                    </button>
+
+                    <button
+                      onClick={() => generateProfessionalPdf(professional)}
+                      className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white"
+                    >
+                      PDF
                     </button>
 
                     <button
