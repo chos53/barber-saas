@@ -29,12 +29,31 @@ type Professional = {
 }
 
 const userAccessRoles: { value: UserAccessRole; label: string }[] = [
-  { value: 'owner', label: 'Owner' },
-  { value: 'administrator', label: 'Administrator' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'reception', label: 'Reception' },
-  { value: 'barber', label: 'Barber' },
-  { value: 'financial', label: 'Financial' },
+  { value: 'owner', label: 'Proprietário(a)' },
+  { value: 'administrator', label: 'Administrador(a)' },
+  { value: 'manager', label: 'Gerente' },
+  { value: 'reception', label: 'Recepção' },
+  { value: 'barber', label: 'Profissional' },
+  { value: 'financial', label: 'Financeiro' },
+]
+
+const professionalRoles = [
+  'Cabeleireiro(a)',
+  'Barbeiro(a)',
+  'Manicure',
+  'Pedicure',
+  'Nail Designer',
+  'Esteticista',
+  'Maquiador(a)',
+  'Depilador(a)',
+  'Designer de Sobrancelhas',
+  'Especialista em Cílios',
+  'Podólogo(a)',
+  'Massoterapeuta',
+  'Micropigmentador(a)',
+  'Trancista',
+  'Colorista',
+  'Outro',
 ]
 
 function normalizeUserAccessRole(role: string | null | undefined): UserAccessRole {
@@ -49,6 +68,12 @@ function normalizeUserAccessRole(role: string | null | undefined): UserAccessRol
   if (normalized === 'financial') return 'financial'
 
   return 'barber'
+}
+
+function getUserAccessRoleLabel(role: UserAccessRole | null | undefined) {
+  const accessRole = userAccessRoles.find((item) => item.value === role)
+
+  return accessRole?.label || 'Sem usuário vinculado'
 }
 
 export default function ProfessionalsPage() {
@@ -682,7 +707,8 @@ export default function ProfessionalsPage() {
       <h1 className="text-4xl font-bold">Profissionais</h1>
 
       <p className="mt-2 text-zinc-400">
-        Cadastro, edição e comissão mensal dos profissionais.
+        Cadastro, edição, permissões e comissão mensal da equipe para salões,
+        barbearias, estética, esmalterias e negócios de beleza.
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-5">
@@ -762,7 +788,7 @@ export default function ProfessionalsPage() {
         />
 
         <input
-          placeholder="Função. Ex: Barbeiro"
+          placeholder="Função profissional"
           className="rounded-lg bg-zinc-800 p-3"
           value={role}
           onChange={(e) => setRole(e.target.value)}
@@ -884,11 +910,24 @@ export default function ProfessionalsPage() {
                     onChange={(e) => setEditEmail(e.target.value)}
                   />
 
-                  <input
-                    className="rounded-lg bg-zinc-800 p-3"
-                    value={editRole}
-                    onChange={(e) => setEditRole(e.target.value)}
-                  />
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
+                      Função profissional
+                    </label>
+
+                    <input
+                      list="edit-professional-roles"
+                      className="w-full rounded-lg bg-zinc-800 p-3"
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value)}
+                    />
+
+                    <datalist id="edit-professional-roles">
+                      {professionalRoles.map((professionalRole) => (
+                        <option key={professionalRole} value={professionalRole} />
+                      ))}
+                    </datalist>
+                  </div>
 
                   <div>
                     <label className="mb-2 block text-sm text-zinc-400">
@@ -1005,7 +1044,7 @@ export default function ProfessionalsPage() {
                         <p className="mt-2 text-sm text-zinc-500">
                           Permissão:{' '}
                           <span className="font-bold text-blue-400">
-                            {professional.user_access_role || 'Sem usuário vinculado'}
+                            {getUserAccessRoleLabel(professional.user_access_role)}
                           </span>
                         </p>
 
