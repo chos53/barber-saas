@@ -19,6 +19,15 @@ type ProfessionalAvailability = {
   pause_end_time: string
 }
 
+type ProfessionalBlock = {
+  id: string
+  professional_id: string
+  start_date: string
+  end_date: string
+  reason: string | null
+  block_type: 'vacation' | 'day_off' | 'temporary'
+}
+
 type Professional = {
   id: string
   name: string
@@ -132,6 +141,16 @@ export default function ProfessionalsPage() {
   const [availabilityRows, setAvailabilityRows] =
     useState<ProfessionalAvailability[]>(defaultAvailability)
   const [savingAvailability, setSavingAvailability] = useState(false)
+  const [blockProfessional, setBlockProfessional] =
+    useState<Professional | null>(null)
+  const [professionalBlocks, setProfessionalBlocks] = useState<ProfessionalBlock[]>([])
+  const [blockType, setBlockType] =
+    useState<ProfessionalBlock['block_type']>('day_off')
+  const [blockStartDate, setBlockStartDate] = useState('')
+  const [blockEndDate, setBlockEndDate] = useState('')
+  const [blockReason, setBlockReason] = useState('')
+  const [savingBlock, setSavingBlock] = useState(false)
+  const [deletingBlockId, setDeletingBlockId] = useState('')
 
   useEffect(() => {
     loadData()
@@ -876,6 +895,114 @@ export default function ProfessionalsPage() {
   }
 
 
+  function getBlockTypeLabel(type: ProfessionalBlock['block_type']) {
+    switch (type) {
+      case 'vacation':
+        return 'Férias'
+      case 'temporary':
+        return 'Bloqueio temporário'
+      default:
+        return 'Folga'
+    }
+  }
+
+  async function openBlocks(professional: Professional) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    setBlockProfessional(professional)
+    setBlockType('day_off')
+    setBlockStartDate('')
+    setBlockEndDate('')
+    setBlockReason('')
+
+    const { data, error } = await supabase
+      .from('professional_time_blocks')
+      .select('id, professional_id, start_date, end_date, reason, block_type')
+      .eq('company_id', companyId)
+      .eq('professional_id', professional.id)
+      .order('start_date', { ascending: true })
+
+    if (error) {
+      alert(`Erro ao carregar bloqueios: ${error.message}`)
+      setProfessionalBlocks([])
+      return
+    }
+
+    setProfessionalBlocks((data || []) as ProfessionalBlock[])
+  }
+
+  async function saveProfessionalBlock() {
+    if (!companyId || !blockProfessional) {
+      alert('Empresa ou profissional não identificado.')
+      return
+    }
+
+    if (!blockStartDate || !blockEndDate) {
+      alert('Informe a data inicial e final do bloqueio.')
+      return
+    }
+
+    if (blockStartDate > blockEndDate) {
+      alert('A data inicial não pode ser maior que a data final.')
+      return
+    }
+
+    setSavingBlock(true)
+
+    const { error } = await supabase
+      .from('professional_time_blocks')
+      .insert({
+        company_id: companyId,
+        professional_id: blockProfessional.id,
+        start_date: blockStartDate,
+        end_date: blockEndDate,
+        block_type: blockType,
+        reason: blockReason.trim() || null,
+      })
+
+    setSavingBlock(false)
+
+    if (error) {
+      alert(`Erro ao salvar bloqueio: ${error.message}`)
+      return
+    }
+
+    setBlockType('day_off')
+    setBlockStartDate('')
+    setBlockEndDate('')
+    setBlockReason('')
+
+    await openBlocks(blockProfessional)
+  }
+
+  async function deleteProfessionalBlock(blockId: string) {
+    const confirmDelete = window.confirm('Remover este bloqueio?')
+
+    if (!confirmDelete) return
+
+    setDeletingBlockId(blockId)
+
+    const { error } = await supabase
+      .from('professional_time_blocks')
+      .delete()
+      .eq('id', blockId)
+      .eq('company_id', companyId)
+
+    setDeletingBlockId('')
+
+    if (error) {
+      alert(`Erro ao remover bloqueio: ${error.message}`)
+      return
+    }
+
+    if (blockProfessional) {
+      await openBlocks(blockProfessional)
+    }
+  }
+
   async function openAvailability(professional: Professional) {
     if (!companyId) {
       alert('Empresa não identificada.')
@@ -1458,6 +1585,13 @@ export default function ProfessionalsPage() {
                       Disponibilidade
                     </button>
 
+                    <button
+                      onClick={() => openBlocks(professional)}
+                      className="rounded-lg bg-orange-600 px-4 py-2 font-bold text-white"
+                    >
+                      Férias/Folgas
+                    </button>
+
                     {professional.commission_payment_status === 'pending' && (
                       <button
                         onClick={() => releaseCommission(professional)}
@@ -1553,6 +1687,160 @@ export default function ProfessionalsPage() {
           )
         })}
       </div>
+
+
+      {blockProfessional && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
+                  Férias, folgas e bloqueios
+                </p>
+
+                <h2 className="mt-2 text-3xl font-bold">
+                  {blockProfessional.name}
+                </h2>
+
+                <p className="mt-2 text-zinc-400">
+                  Cadastre períodos em que este profissional não poderá receber agendamentos.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setBlockProfessional(null)}
+                className="rounded-xl bg-zinc-800 px-4 py-2"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-8 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+              <h3 className="text-xl font-bold">Novo bloqueio</h3>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-sm text-zinc-400">
+                    Tipo
+                  </label>
+
+                  <select
+                    value={blockType}
+                    onChange={(event) =>
+                      setBlockType(event.target.value as ProfessionalBlock['block_type'])
+                    }
+                    className="w-full rounded-lg bg-zinc-800 p-3"
+                  >
+                    <option value="day_off">Folga</option>
+                    <option value="vacation">Férias</option>
+                    <option value="temporary">Bloqueio temporário</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-zinc-400">
+                    Data inicial
+                  </label>
+
+                  <input
+                    type="date"
+                    value={blockStartDate}
+                    onChange={(event) => {
+                      setBlockStartDate(event.target.value)
+
+                      if (!blockEndDate) {
+                        setBlockEndDate(event.target.value)
+                      }
+                    }}
+                    className="w-full rounded-lg bg-zinc-800 p-3"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-zinc-400">
+                    Data final
+                  </label>
+
+                  <input
+                    type="date"
+                    value={blockEndDate}
+                    onChange={(event) => setBlockEndDate(event.target.value)}
+                    className="w-full rounded-lg bg-zinc-800 p-3"
+                  />
+                </div>
+              </div>
+
+              <textarea
+                placeholder="Motivo opcional. Ex: férias, curso, evento pessoal..."
+                value={blockReason}
+                onChange={(event) => setBlockReason(event.target.value)}
+                className="rounded-lg bg-zinc-800 p-3"
+              />
+
+              <button
+                onClick={saveProfessionalBlock}
+                disabled={savingBlock}
+                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+              >
+                {savingBlock ? 'Salvando...' : 'Salvar bloqueio'}
+              </button>
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-xl font-bold">Bloqueios cadastrados</h3>
+
+              <div className="mt-4 space-y-3">
+                {professionalBlocks.length === 0 && (
+                  <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+                    Nenhum bloqueio cadastrado para este profissional.
+                  </p>
+                )}
+
+                {professionalBlocks.map((block) => (
+                  <div
+                    key={block.id}
+                    className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[1fr_auto]"
+                  >
+                    <div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          block.block_type === 'vacation'
+                            ? 'bg-blue-900 text-blue-300'
+                            : block.block_type === 'temporary'
+                              ? 'bg-orange-900 text-orange-300'
+                              : 'bg-yellow-900 text-yellow-300'
+                        }`}
+                      >
+                        {getBlockTypeLabel(block.block_type)}
+                      </span>
+
+                      <p className="mt-3 font-bold">
+                        {block.start_date} até {block.end_date}
+                      </p>
+
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {block.reason || 'Sem motivo informado'}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => deleteProfessionalBlock(block.id)}
+                      disabled={deletingBlockId === block.id}
+                      className="rounded-xl bg-red-600 px-4 py-2 font-bold text-white disabled:opacity-50"
+                    >
+                      {deletingBlockId === block.id ? 'Removendo...' : 'Remover'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-orange-900 bg-orange-950/30 p-4 text-sm text-orange-200">
+              No próximo ajuste, a Agenda passará a consultar esses períodos e bloquear automaticamente os dias cadastrados.
+            </div>
+          </div>
+        </div>
+      )}
 
       {availabilityProfessional && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
