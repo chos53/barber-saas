@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 
+type UserAccessRole =
+  | 'owner'
+  | 'administrator'
+  | 'manager'
+  | 'reception'
+  | 'barber'
+  | 'financial'
+
 type Professional = {
   id: string
   name: string
@@ -13,10 +21,34 @@ type Professional = {
   active: boolean
   photo_url: string | null
   commission_percentage: number | null
+  user_access_role?: UserAccessRole | null
   monthly_revenue?: number
   monthly_commission?: number
   commission_payment_status?: 'pending' | 'paid'
   commission_payment_date?: string | null
+}
+
+const userAccessRoles: { value: UserAccessRole; label: string }[] = [
+  { value: 'owner', label: 'Owner' },
+  { value: 'administrator', label: 'Administrator' },
+  { value: 'manager', label: 'Manager' },
+  { value: 'reception', label: 'Reception' },
+  { value: 'barber', label: 'Barber' },
+  { value: 'financial', label: 'Financial' },
+]
+
+function normalizeUserAccessRole(role: string | null | undefined): UserAccessRole {
+  const normalized = String(role || 'barber').toLowerCase()
+
+  if (normalized === 'owner') return 'owner'
+  if (normalized === 'admin') return 'administrator'
+  if (normalized === 'administrator') return 'administrator'
+  if (normalized === 'manager') return 'manager'
+  if (normalized === 'reception') return 'reception'
+  if (normalized === 'barber') return 'barber'
+  if (normalized === 'financial') return 'financial'
+
+  return 'barber'
 }
 
 export default function ProfessionalsPage() {
@@ -28,6 +60,8 @@ export default function ProfessionalsPage() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('')
+  const [userAccessRole, setUserAccessRole] =
+    useState<UserAccessRole>('barber')
   const [commissionPercentage, setCommissionPercentage] = useState('40')
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -38,8 +72,11 @@ export default function ProfessionalsPage() {
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editRole, setEditRole] = useState('')
+  const [editUserAccessRole, setEditUserAccessRole] =
+    useState<UserAccessRole>('barber')
   const [editCommissionPercentage, setEditCommissionPercentage] = useState('40')
   const [payingCommissionId, setPayingCommissionId] = useState('')
+  const [savingPermissionId, setSavingPermissionId] = useState('')
 
   useEffect(() => {
     loadData()
@@ -253,6 +290,20 @@ export default function ProfessionalsPage() {
       return
     }
 
+    const { data: companyProfiles } = await supabase
+      .from('profiles')
+      .select('email, role')
+      .eq('company_id', profile.company_id)
+
+    const profilesByEmail = new Map(
+      (companyProfiles || [])
+        .filter((companyProfile) => companyProfile.email)
+        .map((companyProfile) => [
+          String(companyProfile.email).toLowerCase(),
+          companyProfile,
+        ])
+    )
+
     const monthStartDate = getCurrentMonthStartDate()
     const todayDate = getTodayDate()
 
@@ -339,10 +390,16 @@ export default function ProfessionalsPage() {
         const monthlyRevenue = revenueByProfessional.get(professional.id) || 0
 
         const payment = commissionPaymentsMap.get(professional.id)
+        const linkedProfile = professional.email
+          ? profilesByEmail.get(String(professional.email).toLowerCase())
+          : null
 
         return {
           ...professional,
           commission_percentage: percentage,
+          user_access_role: linkedProfile
+            ? normalizeUserAccessRole(linkedProfile.role)
+            : null,
           monthly_revenue: monthlyRevenue,
           monthly_commission: (monthlyRevenue * percentage) / 100,
           commission_payment_status:
@@ -405,10 +462,15 @@ export default function ProfessionalsPage() {
       return
     }
 
+    if (email.trim()) {
+      await updateProfilePermissionByEmail(email.trim(), userAccessRole, false)
+    }
+
     setName('')
     setPhone('')
     setEmail('')
     setRole('')
+    setUserAccessRole('barber')
     setCommissionPercentage('40')
     setPhotoFile(null)
     setPhotoPreview('')
@@ -422,6 +484,9 @@ export default function ProfessionalsPage() {
     setEditPhone(professional.phone || '')
     setEditEmail(professional.email || '')
     setEditRole(professional.role || '')
+    setEditUserAccessRole(
+      normalizeUserAccessRole(professional.user_access_role || 'barber')
+    )
     setEditCommissionPercentage(String(professional.commission_percentage ?? 0))
     setPhotoPreview(professional.photo_url || '')
   }
@@ -432,6 +497,7 @@ export default function ProfessionalsPage() {
     setEditPhone('')
     setEditEmail('')
     setEditRole('')
+    setEditUserAccessRole('barber')
     setEditCommissionPercentage('40')
     setPhotoFile(null)
     setPhotoPreview('')
@@ -466,8 +532,93 @@ export default function ProfessionalsPage() {
       return
     }
 
+    if (editEmail.trim()) {
+      await updateProfilePermissionByEmail(
+        editEmail.trim(),
+        editUserAccessRole,
+        false
+      )
+    }
+
     cancelEditing()
     loadData()
+  }
+
+  async function updateProfilePermissionByEmail(
+    userEmail: string,
+    accessRole: UserAccessRole,
+    showSuccessAlert = true
+  ) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return false
+    }
+
+    if (!userEmail.trim()) {
+      alert('Informe o e-mail do usuário para alterar a permissão.')
+      return false
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('email', userEmail.trim().toLowerCase())
+      .maybeSingle()
+
+    if (profileError) {
+      alert(
+        `Erro ao buscar usuário. Verifique se a tabela profiles possui a coluna email. Detalhe: ${profileError.message}`
+      )
+      return false
+    }
+
+    if (!profile) {
+      if (showSuccessAlert) {
+        alert(
+          'Nenhum usuário do sistema foi encontrado com este e-mail. O profissional foi salvo, mas a permissão só será aplicada quando existir um usuário com esse e-mail em profiles.'
+        )
+      }
+
+      return false
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role: accessRole })
+      .eq('id', profile.id)
+      .eq('company_id', companyId)
+
+    if (error) {
+      alert(`Erro ao atualizar permissão: ${error.message}`)
+      return false
+    }
+
+    if (showSuccessAlert) {
+      alert('Permissão atualizada com sucesso.')
+    }
+
+    return true
+  }
+
+  async function updateProfessionalAccessRole(professional: Professional) {
+    if (!professional.email) {
+      alert('Este profissional não possui e-mail vinculado.')
+      return
+    }
+
+    setSavingPermissionId(professional.id)
+
+    const updated = await updateProfilePermissionByEmail(
+      professional.email,
+      normalizeUserAccessRole(professional.user_access_role || 'barber')
+    )
+
+    setSavingPermissionId('')
+
+    if (updated) {
+      loadData()
+    }
   }
 
   async function toggleProfessionalActive(professionalId: string, active: boolean) {
@@ -619,6 +770,30 @@ export default function ProfessionalsPage() {
 
         <div>
           <label className="mb-2 block text-sm text-zinc-400">
+            Permissão de acesso no sistema
+          </label>
+
+          <select
+            className="w-full rounded-lg bg-zinc-800 p-3"
+            value={userAccessRole}
+            onChange={(e) =>
+              setUserAccessRole(e.target.value as UserAccessRole)
+            }
+          >
+            {userAccessRoles.map((accessRole) => (
+              <option key={accessRole.value} value={accessRole.value}>
+                {accessRole.label}
+              </option>
+            ))}
+          </select>
+
+          <p className="mt-2 text-xs text-zinc-500">
+            A permissão será aplicada ao usuário do sistema com o mesmo e-mail.
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
             Comissão sobre serviços concluídos (%)
           </label>
 
@@ -717,6 +892,32 @@ export default function ProfessionalsPage() {
 
                   <div>
                     <label className="mb-2 block text-sm text-zinc-400">
+                      Permissão de acesso no sistema
+                    </label>
+
+                    <select
+                      className="w-full rounded-lg bg-zinc-800 p-3"
+                      value={editUserAccessRole}
+                      onChange={(e) =>
+                        setEditUserAccessRole(
+                          e.target.value as UserAccessRole
+                        )
+                      }
+                    >
+                      {userAccessRoles.map((accessRole) => (
+                        <option key={accessRole.value} value={accessRole.value}>
+                          {accessRole.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Será aplicada ao usuário do sistema com o mesmo e-mail.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
                       Comissão sobre serviços concluídos (%)
                     </label>
 
@@ -800,6 +1001,13 @@ export default function ProfessionalsPage() {
                         <p className="text-zinc-400">{professional.role}</p>
                         <p className="text-zinc-500">{professional.phone}</p>
                         <p className="text-zinc-500">{professional.email}</p>
+
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Permissão:{' '}
+                          <span className="font-bold text-blue-400">
+                            {professional.user_access_role || 'Sem usuário vinculado'}
+                          </span>
+                        </p>
 
                         <p className="mt-2 text-sm text-zinc-500">
                           Status:{' '}
@@ -899,6 +1107,40 @@ export default function ProfessionalsPage() {
                       className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white"
                     >
                       PDF
+                    </button>
+
+                    <select
+                      value={professional.user_access_role || 'barber'}
+                      onChange={(e) => {
+                        setProfessionals((currentProfessionals) =>
+                          currentProfessionals.map((item) =>
+                            item.id === professional.id
+                              ? {
+                                  ...item,
+                                  user_access_role:
+                                    e.target.value as UserAccessRole,
+                                }
+                              : item
+                          )
+                        )
+                      }}
+                      className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white"
+                    >
+                      {userAccessRoles.map((accessRole) => (
+                        <option key={accessRole.value} value={accessRole.value}>
+                          {accessRole.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => updateProfessionalAccessRole(professional)}
+                      disabled={savingPermissionId === professional.id}
+                      className="rounded-lg bg-purple-600 px-4 py-2 font-bold text-white disabled:opacity-50"
+                    >
+                      {savingPermissionId === professional.id
+                        ? 'Salvando...'
+                        : 'Salvar permissão'}
                     </button>
 
                     <button
