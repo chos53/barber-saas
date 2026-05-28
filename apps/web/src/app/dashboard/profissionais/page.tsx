@@ -12,6 +12,13 @@ type UserAccessRole =
   | 'barber'
   | 'financial'
 
+type ProfessionalAvailability = {
+  weekday: number
+  available: boolean
+  pause_start_time: string
+  pause_end_time: string
+}
+
 type Professional = {
   id: string
   name: string
@@ -36,6 +43,23 @@ const userAccessRoles: { value: UserAccessRole; label: string }[] = [
   { value: 'barber', label: 'Profissional' },
   { value: 'financial', label: 'Financeiro' },
 ]
+
+const weekDays = [
+  { value: 0, label: 'Domingo' },
+  { value: 1, label: 'Segunda-feira' },
+  { value: 2, label: 'Terça-feira' },
+  { value: 3, label: 'Quarta-feira' },
+  { value: 4, label: 'Quinta-feira' },
+  { value: 5, label: 'Sexta-feira' },
+  { value: 6, label: 'Sábado' },
+]
+
+const defaultAvailability: ProfessionalAvailability[] = weekDays.map((day) => ({
+  weekday: day.value,
+  available: day.value !== 0,
+  pause_start_time: '',
+  pause_end_time: '',
+}))
 
 const professionalRoles = [
   'Cabeleireiro(a)',
@@ -103,6 +127,11 @@ export default function ProfessionalsPage() {
   const [payingCommissionId, setPayingCommissionId] = useState('')
   const [savingPermissionId, setSavingPermissionId] = useState('')
   const [monthReference, setMonthReference] = useState(getCurrentMonthReference())
+  const [availabilityProfessional, setAvailabilityProfessional] =
+    useState<Professional | null>(null)
+  const [availabilityRows, setAvailabilityRows] =
+    useState<ProfessionalAvailability[]>(defaultAvailability)
+  const [savingAvailability, setSavingAvailability] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -846,6 +875,120 @@ export default function ProfessionalsPage() {
     loadData()
   }
 
+
+  async function openAvailability(professional: Professional) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    setAvailabilityProfessional(professional)
+
+    const { data, error } = await supabase
+      .from('professional_availability')
+      .select('weekday, available, pause_start_time, pause_end_time')
+      .eq('company_id', companyId)
+      .eq('professional_id', professional.id)
+
+    if (error) {
+      alert(`Erro ao carregar disponibilidade: ${error.message}`)
+      setAvailabilityRows(defaultAvailability)
+      return
+    }
+
+    const availabilityMap = new Map(
+      (data || []).map((item) => [Number(item.weekday), item])
+    )
+
+    setAvailabilityRows(
+      defaultAvailability.map((defaultRow) => {
+        const savedRow = availabilityMap.get(defaultRow.weekday)
+
+        return {
+          weekday: defaultRow.weekday,
+          available: savedRow?.available ?? defaultRow.available,
+          pause_start_time: savedRow?.pause_start_time
+            ? String(savedRow.pause_start_time).slice(0, 5)
+            : '',
+          pause_end_time: savedRow?.pause_end_time
+            ? String(savedRow.pause_end_time).slice(0, 5)
+            : '',
+        }
+      })
+    )
+  }
+
+  function updateAvailabilityRow(
+    weekday: number,
+    field: keyof ProfessionalAvailability,
+    value: string | boolean
+  ) {
+    setAvailabilityRows((currentRows) =>
+      currentRows.map((row) =>
+        row.weekday === weekday
+          ? {
+              ...row,
+              [field]: value,
+            }
+          : row
+      )
+    )
+  }
+
+  async function saveProfessionalAvailability() {
+    if (!companyId || !availabilityProfessional) {
+      alert('Empresa ou profissional não identificado.')
+      return
+    }
+
+    const invalidPause = availabilityRows.find(
+      (row) =>
+        row.available &&
+        row.pause_start_time &&
+        row.pause_end_time &&
+        row.pause_start_time >= row.pause_end_time
+    )
+
+    if (invalidPause) {
+      const dayName =
+        weekDays.find((day) => day.value === invalidPause.weekday)?.label ||
+        'dia selecionado'
+
+      alert(`A pausa de ${dayName} está inválida. O início deve ser menor que o fim.`)
+      return
+    }
+
+    setSavingAvailability(true)
+
+    const payload = availabilityRows.map((row) => ({
+      company_id: companyId,
+      professional_id: availabilityProfessional.id,
+      weekday: row.weekday,
+      available: row.available,
+      pause_start_time:
+        row.available && row.pause_start_time ? row.pause_start_time : null,
+      pause_end_time:
+        row.available && row.pause_end_time ? row.pause_end_time : null,
+      updated_at: new Date().toISOString(),
+    }))
+
+    const { error } = await supabase
+      .from('professional_availability')
+      .upsert(payload, {
+        onConflict: 'company_id,professional_id,weekday',
+      })
+
+    setSavingAvailability(false)
+
+    if (error) {
+      alert(`Erro ao salvar disponibilidade: ${error.message}`)
+      return
+    }
+
+    alert('Disponibilidade semanal salva com sucesso.')
+    setAvailabilityProfessional(null)
+  }
+
   return (
     <div>
       <h1 className="text-4xl font-bold">Profissionais</h1>
@@ -1308,6 +1451,13 @@ export default function ProfessionalsPage() {
                       Editar
                     </button>
 
+                    <button
+                      onClick={() => openAvailability(professional)}
+                      className="rounded-lg bg-cyan-600 px-4 py-2 font-bold text-white"
+                    >
+                      Disponibilidade
+                    </button>
+
                     {professional.commission_payment_status === 'pending' && (
                       <button
                         onClick={() => releaseCommission(professional)}
@@ -1403,6 +1553,136 @@ export default function ProfessionalsPage() {
           )
         })}
       </div>
+
+      {availabilityProfessional && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
+                  Disponibilidade semanal
+                </p>
+
+                <h2 className="mt-2 text-3xl font-bold">
+                  {availabilityProfessional.name}
+                </h2>
+
+                <p className="mt-2 text-zinc-400">
+                  Defina os dias disponíveis e a pausa individual deste profissional.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setAvailabilityProfessional(null)}
+                className="rounded-xl bg-zinc-800 px-4 py-2"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-8 space-y-3">
+              {availabilityRows.map((row) => {
+                const day = weekDays.find((item) => item.value === row.weekday)
+
+                return (
+                  <div
+                    key={row.weekday}
+                    className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[1fr_auto_auto_auto]"
+                  >
+                    <div>
+                      <p className="font-bold">{day?.label}</p>
+
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {row.available
+                          ? 'Dia disponível para agendamentos'
+                          : 'Dia bloqueado para este profissional'}
+                      </p>
+                    </div>
+
+                    <label className="flex items-center gap-2 rounded-xl bg-zinc-800 px-4 py-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={row.available}
+                        onChange={(event) =>
+                          updateAvailabilityRow(
+                            row.weekday,
+                            'available',
+                            event.target.checked
+                          )
+                        }
+                      />
+
+                      Disponível
+                    </label>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">
+                        Pausa início
+                      </label>
+
+                      <input
+                        type="time"
+                        value={row.pause_start_time}
+                        disabled={!row.available}
+                        onChange={(event) =>
+                          updateAvailabilityRow(
+                            row.weekday,
+                            'pause_start_time',
+                            event.target.value
+                          )
+                        }
+                        className="w-full rounded-lg bg-zinc-800 p-3 disabled:opacity-40"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">
+                        Pausa fim
+                      </label>
+
+                      <input
+                        type="time"
+                        value={row.pause_end_time}
+                        disabled={!row.available}
+                        onChange={(event) =>
+                          updateAvailabilityRow(
+                            row.weekday,
+                            'pause_end_time',
+                            event.target.value
+                          )
+                        }
+                        className="w-full rounded-lg bg-zinc-800 p-3 disabled:opacity-40"
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-cyan-900 bg-cyan-950/30 p-4 text-sm text-cyan-200">
+              A agenda vai bloquear automaticamente os horários da pausa e os dias indisponíveis deste profissional.
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 md:flex-row">
+              <button
+                onClick={saveProfessionalAvailability}
+                disabled={savingAvailability}
+                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+              >
+                {savingAvailability ? 'Salvando...' : 'Salvar disponibilidade'}
+              </button>
+
+              <button
+                onClick={() => setAvailabilityProfessional(null)}
+                className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
