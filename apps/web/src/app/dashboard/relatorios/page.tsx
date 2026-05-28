@@ -32,6 +32,14 @@ type ServiceRanking = {
   total: number
 }
 
+type CommissionRanking = {
+  professional_id: string
+  professional_name: string
+  commission_percentage: number
+  revenue: number
+  commission: number
+}
+
 const chartColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
 
 export default function ReportsPage() {
@@ -48,6 +56,9 @@ export default function ReportsPage() {
   const [pixRevenue, setPixRevenue] = useState(0)
   const [creditRevenue, setCreditRevenue] = useState(0)
   const [debitRevenue, setDebitRevenue] = useState(0)
+  const [commissionRanking, setCommissionRanking] = useState<CommissionRanking[]>([])
+  const [totalCommission, setTotalCommission] = useState(0)
+  const [totalCommissionRevenue, setTotalCommissionRevenue] = useState(0)
 
   useEffect(() => {
     loadData()
@@ -72,6 +83,16 @@ export default function ReportsPage() {
     startDate.setDate(startDate.getDate() - Number(period))
 
     const formattedStartDate = startDate.toISOString().split('T')[0]
+
+    const today = new Date().toISOString().split('T')[0]
+
+    const monthStartDate = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1
+    )
+      .toISOString()
+      .split('T')[0]
 
     const { data: financialTransactions } = await supabase
       .from('financial_transactions')
@@ -110,13 +131,10 @@ export default function ReportsPage() {
             .in('id', serviceIds)
         : { data: [] }
 
-    const { data: professionals } =
-      professionalIds.length > 0
-        ? await supabase
-            .from('professionals')
-            .select('id, name')
-            .in('id', professionalIds)
-        : { data: [] }
+    const { data: professionals } = await supabase
+      .from('professionals')
+      .select('id, name, commission_percentage')
+      .eq('company_id', profile.company_id)
 
     const servicesMap = new Map(
       services?.map((service) => [service.id, service]) || []
@@ -203,30 +221,116 @@ export default function ReportsPage() {
 
         soldServicesMap[item.service_name] += 1
       })
-      const cashTotal =
+
+    const cashTotal =
       financialTransactions
         ?.filter((item) => item.payment_method === 'cash')
         .reduce((sum, item) => sum + Number(item.amount), 0) || 0
-    
+
     const pixTotal =
       financialTransactions
         ?.filter((item) => item.payment_method === 'pix')
         .reduce((sum, item) => sum + Number(item.amount), 0) || 0
-    
+
     const creditTotal =
       financialTransactions
         ?.filter((item) => item.payment_method === 'credit_card')
         .reduce((sum, item) => sum + Number(item.amount), 0) || 0
-    
+
     const debitTotal =
       financialTransactions
         ?.filter((item) => item.payment_method === 'debit_card')
         .reduce((sum, item) => sum + Number(item.amount), 0) || 0
-    
+
+    const { data: closedComandas } = await supabase
+      .from('comandas')
+      .select('id, closed_at')
+      .eq('company_id', profile.company_id)
+      .eq('status', 'closed')
+      .gte('closed_at', `${monthStartDate}T00:00:00`)
+      .lte('closed_at', `${today}T23:59:59`)
+
+    const closedComandaIds = (closedComandas || []).map((comanda) => comanda.id)
+
+    const { data: comandaItems } =
+      closedComandaIds.length > 0
+        ? await supabase
+            .from('comanda_items')
+            .select('professional_id, price, quantity')
+            .in('comanda_id', closedComandaIds)
+            .not('professional_id', 'is', null)
+        : { data: [] }
+
+    const commissionRevenueByProfessional = new Map<string, number>()
+
+    normalizedAppointments
+      .filter(
+        (appointment) =>
+          appointment.status === 'completed' &&
+          appointment.professional_id &&
+          appointment.appointment_date >= monthStartDate &&
+          appointment.appointment_date <= today
+      )
+      .forEach((appointment) => {
+        const professionalId = appointment.professional_id
+        const value = Number(appointment.price || 0)
+
+        commissionRevenueByProfessional.set(
+          professionalId,
+          (commissionRevenueByProfessional.get(professionalId) || 0) + value
+        )
+      })
+
+    ;(comandaItems || []).forEach((item) => {
+      if (!item.professional_id) return
+
+      const value = Number(item.price || 0) * Number(item.quantity || 1)
+
+      commissionRevenueByProfessional.set(
+        item.professional_id,
+        (commissionRevenueByProfessional.get(item.professional_id) || 0) + value
+      )
+    })
+
+    const normalizedCommissionRanking =
+      (professionals || [])
+        .map((professional) => {
+          const revenue = commissionRevenueByProfessional.get(professional.id) || 0
+          const percentage = Number(professional.commission_percentage || 0)
+          const commission = (revenue * percentage) / 100
+
+          return {
+            professional_id: professional.id,
+            professional_name: professional.name,
+            commission_percentage: percentage,
+            revenue,
+            commission,
+          }
+        })
+        .filter((professional) => professional.revenue > 0)
+        .sort((a, b) => b.commission - a.commission)
+
+    setCommissionRanking(normalizedCommissionRanking)
+
+    setTotalCommission(
+      normalizedCommissionRanking.reduce(
+        (sum, professional) => sum + professional.commission,
+        0
+      )
+    )
+
+    setTotalCommissionRevenue(
+      normalizedCommissionRanking.reduce(
+        (sum, professional) => sum + professional.revenue,
+        0
+      )
+    )
+
     setCashRevenue(cashTotal)
     setPixRevenue(pixTotal)
     setCreditRevenue(creditTotal)
     setDebitRevenue(debitTotal)
+
     setServicesRanking(
       Object.entries(soldServicesMap)
         .map(([service_name, total]) => ({
@@ -313,47 +417,116 @@ export default function ReportsPage() {
           </strong>
         </div>
       </div>
+
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-4">
-  <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
-    <p className="text-sm text-green-300">
-      Dinheiro
-    </p>
+        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
+          <p className="text-sm text-green-300">Dinheiro</p>
+          <strong className="mt-2 block text-3xl text-white">
+            R$ {cashRevenue.toFixed(2)}
+          </strong>
+        </div>
 
-    <strong className="mt-2 block text-3xl text-white">
-      R$ {cashRevenue.toFixed(2)}
-    </strong>
-  </div>
+        <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-6">
+          <p className="text-sm text-cyan-300">Pix</p>
+          <strong className="mt-2 block text-3xl text-white">
+            R$ {pixRevenue.toFixed(2)}
+          </strong>
+        </div>
 
-  <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-6">
-    <p className="text-sm text-cyan-300">
-      Pix
-    </p>
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
+          <p className="text-sm text-blue-300">Crédito</p>
+          <strong className="mt-2 block text-3xl text-white">
+            R$ {creditRevenue.toFixed(2)}
+          </strong>
+        </div>
 
-    <strong className="mt-2 block text-3xl text-white">
-      R$ {pixRevenue.toFixed(2)}
-    </strong>
-  </div>
+        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-6">
+          <p className="text-sm text-purple-300">Débito</p>
+          <strong className="mt-2 block text-3xl text-white">
+            R$ {debitRevenue.toFixed(2)}
+          </strong>
+        </div>
+      </div>
 
-  <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
-    <p className="text-sm text-blue-300">
-      Crédito
-    </p>
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-6">
+          <p className="text-sm text-yellow-300">
+            Faturamento comissionável no mês
+          </p>
 
-    <strong className="mt-2 block text-3xl text-white">
-      R$ {creditRevenue.toFixed(2)}
-    </strong>
-  </div>
+          <strong className="mt-2 block text-3xl text-white">
+            R$ {totalCommissionRevenue.toFixed(2)}
+          </strong>
+        </div>
 
-  <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-6">
-    <p className="text-sm text-purple-300">
-      Débito
-    </p>
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
+          <p className="text-sm text-blue-300">
+            Comissão total do mês
+          </p>
 
-    <strong className="mt-2 block text-3xl text-white">
-      R$ {debitRevenue.toFixed(2)}
-    </strong>
-  </div>
-</div>
+          <strong className="mt-2 block text-3xl text-white">
+            R$ {totalCommission.toFixed(2)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-400">
+            Profissionais com comissão
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {commissionRanking.length}
+          </strong>
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
+        <h2 className="text-2xl font-bold">Relatório mensal de comissões</h2>
+
+        <p className="mt-1 text-sm text-zinc-500">
+          Soma agendamentos concluídos e itens de comandas fechadas com profissional vinculado.
+        </p>
+
+        <div className="mt-6 space-y-3">
+          {commissionRanking.length === 0 && (
+            <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+              Nenhuma comissão encontrada no mês atual.
+            </p>
+          )}
+
+          {commissionRanking.map((professional, index) => (
+            <div
+              key={professional.professional_id}
+              className="grid grid-cols-1 gap-3 rounded-xl bg-zinc-800 p-4 md:grid-cols-[auto_1fr_auto_auto]"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700 font-bold">
+                #{index + 1}
+              </div>
+
+              <div>
+                <p className="font-bold">{professional.professional_name}</p>
+                <p className="text-sm text-zinc-500">
+                  Comissão: {professional.commission_percentage.toFixed(2)}%
+                </p>
+              </div>
+
+              <div className="text-left md:text-right">
+                <p className="text-sm text-zinc-500">Faturamento</p>
+                <strong className="text-green-400">
+                  R$ {professional.revenue.toFixed(2)}
+                </strong>
+              </div>
+
+              <div className="text-left md:text-right">
+                <p className="text-sm text-zinc-500">Comissão</p>
+                <strong className="text-blue-400">
+                  R$ {professional.commission.toFixed(2)}
+                </strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="mt-8 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">Faturamento por dia</h2>
