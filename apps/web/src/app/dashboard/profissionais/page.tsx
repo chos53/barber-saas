@@ -119,6 +119,24 @@ export default function ProfessionalsPage() {
       .gte('appointment_date', monthStartDate)
       .lte('appointment_date', todayDate)
 
+    const { data: comandaItemsData } = await supabase
+      .from('comanda_items')
+      .select(`
+        id,
+        professional_id,
+        quantity,
+        price,
+        comandas!inner (
+          company_id,
+          status,
+          closed_at
+        )
+      `)
+      .eq('comandas.company_id', profile.company_id)
+      .eq('comandas.status', 'closed')
+      .gte('comandas.closed_at', `${monthStartDate}T00:00:00`)
+      .lte('comandas.closed_at', `${todayDate}T23:59:59`)
+
     const revenueByProfessional = new Map<string, number>()
 
     ;(appointmentsData || []).forEach((appointment) => {
@@ -131,6 +149,18 @@ export default function ProfessionalsPage() {
       revenueByProfessional.set(
         appointment.professional_id,
         (revenueByProfessional.get(appointment.professional_id) || 0) + price
+      )
+    })
+
+    ;(comandaItemsData || []).forEach((item) => {
+      if (!item.professional_id) return
+
+      const itemTotal =
+        Number(item.price || 0) * Number(item.quantity || 1)
+
+      revenueByProfessional.set(
+        item.professional_id,
+        (revenueByProfessional.get(item.professional_id) || 0) + itemTotal
       )
     })
 

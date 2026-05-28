@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 
 type Client = { id: string; name: string }
 type Service = { id: string; name: string; price: number }
+type Professional = { id: string; name: string }
 
 type ComandaItem = {
   id: string
@@ -12,6 +13,8 @@ type ComandaItem = {
   description: string
   quantity: number
   price: number
+  professional_id?: string | null
+  professional_name?: string | null
 }
 
 type Comanda = {
@@ -45,6 +48,7 @@ const statusFilters = [
 export default function ComandasPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [professionals, setProfessionals] = useState<Professional[]>([])
   const [comandas, setComandas] = useState<Comanda[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
   const [notes, setNotes] = useState('')
@@ -54,6 +58,7 @@ export default function ComandasPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [priorityOnly, setPriorityOnly] = useState(false)
   const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
+  const [selectedProfessionals, setSelectedProfessionals] = useState<Record<string, string>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
@@ -223,6 +228,13 @@ useEffect(() => {
       .eq('company_id', profile.company_id)
       .order('name', { ascending: true })
 
+    const { data: professionalsData } = await supabase
+      .from('professionals')
+      .select('id, name')
+      .eq('company_id', profile.company_id)
+      .eq('active', true)
+      .order('name', { ascending: true })
+
     const { data: comandasData } = await supabase
       .from('comandas')
       .select(
@@ -237,13 +249,20 @@ useEffect(() => {
       comandaIds.length > 0
         ? await supabase
             .from('comanda_items')
-            .select('id, comanda_id, description, quantity, price')
+            .select('id, comanda_id, description, quantity, price, professional_id')
             .in('comanda_id', comandaIds)
             .order('created_at', { ascending: true })
         : { data: [] }
 
     const clientsMap = new Map(
       (clientsData || []).map((client) => [client.id, client.name])
+    )
+
+    const professionalsMap = new Map(
+      (professionalsData || []).map((professional) => [
+        professional.id,
+        professional.name,
+      ])
     )
 
     const itemsByComanda = new Map<string, ComandaItem[]>()
@@ -257,6 +276,10 @@ useEffect(() => {
         description: item.description,
         quantity: Number(item.quantity),
         price: Number(item.price),
+        professional_id: item.professional_id || null,
+        professional_name: item.professional_id
+          ? professionalsMap.get(item.professional_id) || 'Profissional não informado'
+          : 'Profissional não informado',
       })
 
       itemsByComanda.set(item.comanda_id, currentItems)
@@ -281,6 +304,8 @@ useEffect(() => {
         price: Number(service.price),
       }))
     )
+
+    setProfessionals(professionalsData || [])
 
     setComandas(normalizedComandas)
 
@@ -381,9 +406,15 @@ useEffect(() => {
 
   async function addServiceToComanda(comanda: Comanda) {
     const serviceId = selectedServices[comanda.id]
+    const professionalId = selectedProfessionals[comanda.id]
 
     if (!serviceId) {
       alert('Selecione um serviço.')
+      return
+    }
+
+    if (!professionalId) {
+      alert('Selecione o profissional que executou o serviço.')
       return
     }
 
@@ -401,6 +432,7 @@ useEffect(() => {
       .insert({
         comanda_id: comanda.id,
         service_id: service.id,
+        professional_id: professionalId,
         description: service.name,
         quantity: 1,
         price: service.price,
@@ -429,6 +461,11 @@ useEffect(() => {
     }
 
     setSelectedServices((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
+    setSelectedProfessionals((current) => ({
       ...current,
       [comanda.id]: '',
     }))
@@ -728,7 +765,7 @@ useEffect(() => {
 
         <div className="mt-5 border-t border-zinc-700 pt-5">
           {comanda.status === 'open' && (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
               <select
                 value={selectedServices[comanda.id] || ''}
                 onChange={(event) =>
@@ -744,6 +781,25 @@ useEffect(() => {
                 {services.map((service) => (
                   <option key={service.id} value={service.id}>
                     {service.name} - R$ {service.price.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedProfessionals[comanda.id] || ''}
+                onChange={(event) =>
+                  setSelectedProfessionals((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value,
+                  }))
+                }
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+              >
+                <option value="">Selecionar profissional</option>
+
+                {professionals.map((professional) => (
+                  <option key={professional.id} value={professional.id}>
+                    {professional.name}
                   </option>
                 ))}
               </select>
@@ -774,6 +830,10 @@ useEffect(() => {
                   <p className="font-medium">{item.description}</p>
                   <p className="text-sm text-zinc-500">
                     Quantidade: {item.quantity}
+                  </p>
+
+                  <p className="text-sm text-zinc-500">
+                    Profissional: {item.professional_name || 'Não informado'}
                   </p>
                 </div>
 
