@@ -25,6 +25,11 @@ type ProfessionalBlock = {
   block_type: string
 }
 
+type ProfessionalService = {
+  professional_id: string
+  service_id: string
+}
+
 export default function PublicBookingPage() {
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -40,6 +45,7 @@ export default function PublicBookingPage() {
 
   const [services, setServices] = useState<Service[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [professionalServices, setProfessionalServices] = useState<ProfessionalService[]>([])
 
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [selectedProfessionalId, setSelectedProfessionalId] = useState('')
@@ -173,8 +179,14 @@ export default function PublicBookingPage() {
       .eq('active', true)
       .order('name')
 
+    const { data: professionalServicesData } = await supabase
+      .from('professional_services')
+      .select('professional_id, service_id')
+      .eq('company_id', settings.company_id)
+
     setServices(servicesData || [])
     setProfessionals(professionalsData || [])
+    setProfessionalServices((professionalServicesData || []) as ProfessionalService[])
   }
 
   async function loadOccupiedTimes() {
@@ -271,6 +283,17 @@ export default function PublicBookingPage() {
       return
     }
 
+    const professionalCanDoService = professionalServices.some(
+      (item) =>
+        item.professional_id === selectedProfessionalId &&
+        item.service_id === selectedServiceId
+    )
+
+    if (!professionalCanDoService) {
+      alert('Este profissional não realiza o serviço selecionado.')
+      return
+    }
+
     if (professionalBlock) {
       alert('Este profissional está indisponível nesta data.')
       return
@@ -357,6 +380,16 @@ export default function PublicBookingPage() {
     setOccupiedTimes([])
   }
 
+  const filteredProfessionals = selectedServiceId
+    ? professionals.filter((professional) =>
+        professionalServices.some(
+          (item) =>
+            item.professional_id === professional.id &&
+            item.service_id === selectedServiceId
+        )
+      )
+    : []
+
   const canSubmit =
     selectedServiceId &&
     selectedProfessionalId &&
@@ -420,7 +453,11 @@ export default function PublicBookingPage() {
                     key={service.id}
                     onClick={() => {
                       setSelectedServiceId(service.id)
+                      setSelectedProfessionalId('')
+                      setDate('')
                       setTime('')
+                      setOccupiedTimes([])
+                      setProfessionalBlock(null)
                     }}
                     className={`w-full rounded-2xl border p-5 text-left transition ${
                       selectedServiceId === service.id
@@ -453,8 +490,20 @@ export default function PublicBookingPage() {
                 Escolha um profissional
               </h2>
 
+              {!selectedServiceId && (
+                <p className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Escolha primeiro um serviço para ver os profissionais compatíveis.
+                </p>
+              )}
+
+              {selectedServiceId && filteredProfessionals.length === 0 && (
+                <p className="mt-4 rounded-2xl border border-red-900 bg-red-950 p-4 text-sm text-red-300">
+                  Nenhum profissional disponível para este serviço.
+                </p>
+              )}
+
               <div className="mt-6 space-y-3">
-                {professionals.map((professional) => (
+                {filteredProfessionals.map((professional) => (
                   <button
                     key={professional.id}
                     onClick={() => {
