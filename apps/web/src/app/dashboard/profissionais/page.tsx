@@ -28,6 +28,13 @@ type ProfessionalBlock = {
   block_type: 'vacation' | 'day_off' | 'temporary'
 }
 
+type Service = {
+  id: string
+  name: string
+  price: number | null
+  duration_minutes: number | null
+}
+
 type Professional = {
   id: string
   name: string
@@ -111,6 +118,7 @@ function getUserAccessRoleLabel(role: UserAccessRole | null | undefined) {
 
 export default function ProfessionalsPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [services, setServices] = useState<Service[]>([])
   const [search, setSearch] = useState('')
 
   const [companyId, setCompanyId] = useState('')
@@ -151,6 +159,11 @@ export default function ProfessionalsPage() {
   const [blockReason, setBlockReason] = useState('')
   const [savingBlock, setSavingBlock] = useState(false)
   const [deletingBlockId, setDeletingBlockId] = useState('')
+  const [specialtyProfessional, setSpecialtyProfessional] =
+    useState<Professional | null>(null)
+  const [selectedSpecialtyServiceIds, setSelectedSpecialtyServiceIds] =
+    useState<string[]>([])
+  const [savingSpecialties, setSavingSpecialties] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -410,6 +423,15 @@ export default function ProfessionalsPage() {
       alert(professionalsError.message)
       return
     }
+
+    const { data: servicesData } = await supabase
+      .from('services')
+      .select('id, name, price, duration_minutes')
+      .eq('company_id', profile.company_id)
+      .eq('active', true)
+      .order('name')
+
+    setServices(servicesData || [])
 
     const { data: companyProfiles } = await supabase
       .from('profiles')
@@ -894,6 +916,82 @@ export default function ProfessionalsPage() {
     loadData()
   }
 
+
+  async function openSpecialties(professional: Professional) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    setSpecialtyProfessional(professional)
+
+    const { data, error } = await supabase
+      .from('professional_services')
+      .select('service_id')
+      .eq('company_id', companyId)
+      .eq('professional_id', professional.id)
+
+    if (error) {
+      alert(`Erro ao carregar especialidades: ${error.message}`)
+      setSelectedSpecialtyServiceIds([])
+      return
+    }
+
+    setSelectedSpecialtyServiceIds(
+      (data || []).map((item) => String(item.service_id))
+    )
+  }
+
+  function toggleSpecialtyService(serviceId: string) {
+    setSelectedSpecialtyServiceIds((currentIds) =>
+      currentIds.includes(serviceId)
+        ? currentIds.filter((id) => id !== serviceId)
+        : [...currentIds, serviceId]
+    )
+  }
+
+  async function saveProfessionalSpecialties() {
+    if (!companyId || !specialtyProfessional) {
+      alert('Empresa ou profissional não identificado.')
+      return
+    }
+
+    setSavingSpecialties(true)
+
+    const { error: deleteError } = await supabase
+      .from('professional_services')
+      .delete()
+      .eq('company_id', companyId)
+      .eq('professional_id', specialtyProfessional.id)
+
+    if (deleteError) {
+      setSavingSpecialties(false)
+      alert(`Erro ao atualizar especialidades: ${deleteError.message}`)
+      return
+    }
+
+    if (selectedSpecialtyServiceIds.length > 0) {
+      const payload = selectedSpecialtyServiceIds.map((serviceId) => ({
+        company_id: companyId,
+        professional_id: specialtyProfessional.id,
+        service_id: serviceId,
+      }))
+
+      const { error: insertError } = await supabase
+        .from('professional_services')
+        .insert(payload)
+
+      if (insertError) {
+        setSavingSpecialties(false)
+        alert(`Erro ao salvar especialidades: ${insertError.message}`)
+        return
+      }
+    }
+
+    setSavingSpecialties(false)
+    alert('Especialidades salvas com sucesso.')
+    setSpecialtyProfessional(null)
+  }
 
   function getBlockTypeLabel(type: ProfessionalBlock['block_type']) {
     switch (type) {
@@ -1592,6 +1690,13 @@ export default function ProfessionalsPage() {
                       Férias/Folgas
                     </button>
 
+                    <button
+                      onClick={() => openSpecialties(professional)}
+                      className="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white"
+                    >
+                      Especialidades
+                    </button>
+
                     {professional.commission_payment_status === 'pending' && (
                       <button
                         onClick={() => releaseCommission(professional)}
@@ -1688,6 +1793,96 @@ export default function ProfessionalsPage() {
         })}
       </div>
 
+
+
+      {specialtyProfessional && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
+                  Especialidades do profissional
+                </p>
+
+                <h2 className="mt-2 text-3xl font-bold">
+                  {specialtyProfessional.name}
+                </h2>
+
+                <p className="mt-2 text-zinc-400">
+                  Selecione quais serviços este profissional pode realizar.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSpecialtyProfessional(null)}
+                className="rounded-xl bg-zinc-800 px-4 py-2"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-sm text-emerald-200">
+              A agenda pública usará essas especialidades para mostrar apenas profissionais compatíveis com o serviço escolhido.
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              {services.length === 0 && (
+                <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
+                  Nenhum serviço ativo encontrado.
+                </p>
+              )}
+
+              {services.map((service) => {
+                const checked = selectedSpecialtyServiceIds.includes(service.id)
+
+                return (
+                  <label
+                    key={service.id}
+                    className={`flex cursor-pointer items-center justify-between rounded-2xl border p-4 transition ${
+                      checked
+                        ? 'border-emerald-500 bg-emerald-950/40'
+                        : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-bold">{service.name}</p>
+
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {service.duration_minutes || 0} min · R${' '}
+                        {Number(service.price || 0).toFixed(2)}
+                      </p>
+                    </div>
+
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSpecialtyService(service.id)}
+                      className="h-5 w-5"
+                    />
+                  </label>
+                )
+              })}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 md:flex-row">
+              <button
+                onClick={saveProfessionalSpecialties}
+                disabled={savingSpecialties}
+                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+              >
+                {savingSpecialties ? 'Salvando...' : 'Salvar especialidades'}
+              </button>
+
+              <button
+                onClick={() => setSpecialtyProfessional(null)}
+                className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {blockProfessional && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
