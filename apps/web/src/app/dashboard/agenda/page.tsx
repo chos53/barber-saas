@@ -92,6 +92,18 @@ export default function AgendaPage() {
   const [visualProfessionalBlock, setVisualProfessionalBlock] =
     useState<ProfessionalTimeBlock | null>(null)
 
+  const [rescheduleAppointment, setRescheduleAppointment] =
+    useState<Appointment | null>(null)
+  const [rescheduleProfessionalId, setRescheduleProfessionalId] = useState('')
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
+  const [rescheduleOccupiedTimes, setRescheduleOccupiedTimes] = useState<string[]>([])
+  const [reschedulePauseTimes, setReschedulePauseTimes] = useState<string[]>([])
+  const [rescheduleWarning, setRescheduleWarning] = useState('')
+  const [rescheduleBlock, setRescheduleBlock] =
+    useState<ProfessionalTimeBlock | null>(null)
+  const [savingReschedule, setSavingReschedule] = useState(false)
+
   useEffect(() => {
     loadData()
 
@@ -116,6 +128,10 @@ export default function AgendaPage() {
   useEffect(() => {
     loadVisualProfessionalBlock()
   }, [companyId, visualProfessionalId, filterDate, today])
+
+  useEffect(() => {
+    loadRescheduleAvailability()
+  }, [rescheduleAppointment, rescheduleProfessionalId, rescheduleDate])
 
   function generateAvailableTimes(
     opening: string,
@@ -528,6 +544,211 @@ export default function AgendaPage() {
     }
 
     setAppointments((appointmentsData || []) as Appointment[])
+  }
+
+  function startReschedule(appointment: Appointment) {
+    setRescheduleAppointment(appointment)
+    setRescheduleProfessionalId(appointment.professional_id || '')
+    setRescheduleDate(appointment.appointment_date)
+    setRescheduleTime(appointment.appointment_time.slice(0, 5))
+    setRescheduleWarning('')
+    setRescheduleBlock(null)
+    setRescheduleOccupiedTimes([])
+    setReschedulePauseTimes([])
+  }
+
+  async function loadRescheduleAvailability() {
+    if (
+      !companyId ||
+      !rescheduleAppointment ||
+      !rescheduleProfessionalId ||
+      !rescheduleDate
+    ) {
+      setRescheduleOccupiedTimes([])
+      setReschedulePauseTimes([])
+      setRescheduleWarning('')
+      setRescheduleBlock(null)
+      return
+    }
+
+    const { data: activeBlock } = await supabase
+      .from('professional_time_blocks')
+      .select('id, professional_id, start_date, end_date, reason, block_type')
+      .eq('company_id', companyId)
+      .eq('professional_id', rescheduleProfessionalId)
+      .lte('start_date', rescheduleDate)
+      .gte('end_date', rescheduleDate)
+      .limit(1)
+      .maybeSingle()
+
+    if (activeBlock) {
+      setRescheduleBlock(activeBlock as ProfessionalTimeBlock)
+      setRescheduleWarning(
+        `Profissional indisponível (${activeBlock.block_type}). ${activeBlock.reason || 'Período bloqueado.'}`
+      )
+      setRescheduleOccupiedTimes([])
+      setReschedulePauseTimes([])
+      return
+    }
+
+    setRescheduleBlock(null)
+
+    const weekday = getWeekdayFromDate(rescheduleDate)
+
+    const { data: availability } = await supabase
+      .from('professional_availability')
+      .select('weekday, available, pause_start_time, pause_end_time')
+      .eq('company_id', companyId)
+      .eq('professional_id', rescheduleProfessionalId)
+      .eq('weekday', weekday)
+      .maybeSingle()
+
+    if (availability && !availability.available) {
+      setRescheduleWarning('Este profissional não atende nesta data.')
+      setReschedulePauseTimes([])
+    } else if (availability?.pause_start_time && availability?.pause_end_time) {
+      const pauseStart = timeToMinutes(availability.pause_start_time)
+      const pauseEnd = timeToMinutes(availability.pause_end_time)
+      const generatedPauseTimes: string[] = []
+
+      for (
+        let current = pauseStart;
+        current < pauseEnd;
+        current += intervalMinutes
+      ) {
+        const currentHour = Math.floor(current / 60)
+        const currentMinute = current % 60
+
+        generatedPauseTimes.push(
+          `${String(currentHour).padStart(2, '0')}:${String(
+            currentMinute
+          ).padStart(2, '0')}`
+        )
+      }
+
+      setReschedulePauseTimes(generatedPauseTimes)
+      setRescheduleWarning(
+        `Pausa do profissional: ${availability.pause_start_time.slice(
+          0,
+          5
+        )} às ${availability.pause_end_time.slice(0, 5)}.`
+      )
+    } else {
+      setReschedulePauseTimes([])
+      setRescheduleWarning('')
+    }
+
+    const { data: appointmentsData } = await supabase
+      .from('appointments')
+      .select(`
+        id,
+        appointment_time,
+        services (
+          duration_minutes
+        )
+      `)
+      .eq('professional_id', rescheduleProfessionalId)
+      .eq('appointment_date', rescheduleDate)
+      .neq('status', 'cancelled')
+      .neq('id', rescheduleAppointment.id)
+
+    const blockedTimes: string[] = []
+
+    appointmentsData?.forEach((appointment: any) => {
+      const appointmentTime = appointment.appointment_time.slice(0, 5)
+      const duration = appointment.services?.duration_minutes || 0
+      const totalBlockMinutes = duration + intervalMinutes
+
+      const [hour, minute] = appointmentTime.split(':').map(Number)
+      const startMinutes = hour * 60 + minute
+
+      for (
+        let current = startMinutes;
+        current < startMinutes + totalBlockMinutes;
+        current += intervalMinutes
+      ) {
+        const currentHour = Math.floor(current / 60)
+        const currentMinute = current % 60
+
+        blockedTimes.push(
+          `${String(currentHour).padStart(2, '0')}:${String(
+            currentMinute
+          ).padStart(2, '0')}`
+        )
+      }
+    })
+
+    setRescheduleOccupiedTimes(blockedTimes)
+  }
+
+  async function saveReschedule() {
+    if (
+      !rescheduleAppointment ||
+      !rescheduleProfessionalId ||
+      !rescheduleDate ||
+      !rescheduleTime
+    ) {
+      alert('Preencha profissional, data e horário para reagendar.')
+      return
+    }
+
+    if (rescheduleDate < today) {
+      alert('Não é possível reagendar para data passada.')
+      return
+    }
+
+    if (rescheduleDate === today && rescheduleTime < currentTime) {
+      alert('Não é possível reagendar para horário passado.')
+      return
+    }
+
+    if (rescheduleBlock) {
+      alert('Este profissional possui férias, folga ou bloqueio nesta data.')
+      return
+    }
+
+    if (rescheduleWarning.includes('não atende')) {
+      alert('Este profissional não atende nesta data.')
+      return
+    }
+
+    if (reschedulePauseTimes.includes(rescheduleTime)) {
+      alert('Este horário está dentro da pausa do profissional.')
+      return
+    }
+
+    if (rescheduleOccupiedTimes.includes(rescheduleTime)) {
+      alert('Este horário já está ocupado.')
+      return
+    }
+
+    setSavingReschedule(true)
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({
+        professional_id: rescheduleProfessionalId,
+        appointment_date: rescheduleDate,
+        appointment_time: rescheduleTime,
+      })
+      .eq('id', rescheduleAppointment.id)
+
+    setSavingReschedule(false)
+
+    if (error) {
+      if (error.code === '23505') {
+        alert('Este profissional já possui um agendamento neste dia e horário.')
+        return
+      }
+
+      alert(`Erro ao reagendar: ${error.message}`)
+      return
+    }
+
+    setRescheduleAppointment(null)
+    setSelectedAppointment(null)
+    setFilterDate(rescheduleDate)
+    loadData()
   }
 
   async function createAppointment() {
@@ -1251,6 +1472,16 @@ export default function AgendaPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        startReschedule(appointment)
+                      }}
+                      className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-bold"
+                    >
+                      Reagendar
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
                         updateAppointmentStatus(appointment.id, 'cancelled')
                       }}
                       className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
@@ -1274,6 +1505,163 @@ export default function AgendaPage() {
           )
         })}
       </div>
+
+
+      {rescheduleAppointment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
+                  Reagendar atendimento
+                </p>
+
+                <h2 className="mt-2 text-3xl font-bold">
+                  {rescheduleAppointment.clients?.name || 'Cliente'}
+                </h2>
+
+                <p className="mt-2 text-zinc-400">
+                  Serviço: {rescheduleAppointment.services?.name || 'Serviço'}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setRescheduleAppointment(null)}
+                className="rounded-xl bg-zinc-800 px-4 py-2"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-8 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+              <div>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  Novo profissional
+                </label>
+
+                <select
+                  value={rescheduleProfessionalId}
+                  onChange={(event) => {
+                    setRescheduleProfessionalId(event.target.value)
+                    setRescheduleTime('')
+                  }}
+                  className="w-full rounded-lg bg-zinc-800 p-3"
+                >
+                  <option value="">Selecione um profissional</option>
+
+                  {professionals.map((professional) => (
+                    <option key={professional.id} value={professional.id}>
+                      {professional.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm text-zinc-400">
+                  Nova data
+                </label>
+
+                <input
+                  type="date"
+                  min={today}
+                  value={rescheduleDate}
+                  onChange={(event) => {
+                    setRescheduleDate(event.target.value)
+                    setRescheduleTime('')
+                  }}
+                  className="w-full rounded-lg bg-zinc-800 p-3"
+                />
+              </div>
+
+              {rescheduleWarning && (
+                <div
+                  className={`rounded-xl p-4 text-sm ${
+                    rescheduleBlock || rescheduleWarning.includes('não atende')
+                      ? 'bg-red-950/60 text-red-300'
+                      : 'bg-yellow-950/60 text-yellow-300'
+                  }`}
+                >
+                  {rescheduleWarning}
+                </div>
+              )}
+
+              <div>
+                <p className="mb-3 text-sm text-zinc-400">
+                  Novo horário
+                </p>
+
+                <div className="grid grid-cols-3 gap-2 md:grid-cols-5">
+                  {availableTimes.map((availableTime) => {
+                    const isOccupied =
+                      rescheduleOccupiedTimes.includes(availableTime)
+                    const isPause =
+                      reschedulePauseTimes.includes(availableTime)
+                    const isBlockedDay = Boolean(rescheduleBlock)
+                    const isUnavailableDay =
+                      rescheduleWarning.includes('não atende')
+                    const isPastTime =
+                      rescheduleDate === today && availableTime < currentTime
+
+                    return (
+                      <button
+                        key={`reschedule-${availableTime}`}
+                        type="button"
+                        disabled={Boolean(
+                          isOccupied ||
+                            isPastTime ||
+                            isPause ||
+                            isUnavailableDay ||
+                            isBlockedDay
+                        )}
+                        onClick={() => setRescheduleTime(availableTime)}
+                        className={`rounded-xl p-3 text-sm font-medium transition ${
+                          isBlockedDay
+                            ? 'cursor-not-allowed bg-orange-950 text-orange-300 opacity-70'
+                            : isUnavailableDay
+                              ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                              : isOccupied
+                                ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
+                                : isPause
+                                  ? 'cursor-not-allowed bg-yellow-900 text-yellow-300 opacity-70'
+                                  : isPastTime
+                                    ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
+                                    : rescheduleTime === availableTime
+                                      ? 'bg-white text-black'
+                                      : 'bg-zinc-800 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {availableTime}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-4 text-sm text-purple-200">
+                O reagendamento mantém o mesmo cliente e serviço, alterando apenas profissional, data e horário.
+              </div>
+
+              <div className="flex flex-col gap-3 md:flex-row">
+                <button
+                  onClick={saveReschedule}
+                  disabled={savingReschedule}
+                  className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                >
+                  {savingReschedule ? 'Salvando...' : 'Salvar reagendamento'}
+                </button>
+
+                <button
+                  onClick={() => setRescheduleAppointment(null)}
+                  className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
@@ -1414,6 +1802,13 @@ export default function AgendaPage() {
                       className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-black"
                     >
                       Concluir sequência
+                    </button>
+
+                    <button
+                      onClick={() => startReschedule(selectedAppointment)}
+                      className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-bold"
+                    >
+                      Reagendar
                     </button>
 
                     <button

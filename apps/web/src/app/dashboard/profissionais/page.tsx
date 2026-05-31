@@ -1050,6 +1050,61 @@ export default function ProfessionalsPage() {
 
     setSavingBlock(true)
 
+    const { data: existingAppointments, error: appointmentsError } =
+      await supabase
+        .from('appointments')
+        .select(`
+          id,
+          appointment_date,
+          appointment_time,
+          status,
+          clients (
+            name
+          ),
+          services (
+            name
+          )
+        `)
+        .eq('company_id', companyId)
+        .eq('professional_id', blockProfessional.id)
+        .gte('appointment_date', blockStartDate)
+        .lte('appointment_date', blockEndDate)
+        .not('status', 'in', '("cancelled","completed","no_show")')
+        .limit(5)
+
+    if (appointmentsError) {
+      setSavingBlock(false)
+      alert(`Erro ao verificar agendamentos: ${appointmentsError.message}`)
+      return
+    }
+
+    if (existingAppointments && existingAppointments.length > 0) {
+      setSavingBlock(false)
+
+      const appointmentsText = existingAppointments
+        .map((appointment: any) => {
+          const clientName = Array.isArray(appointment.clients)
+            ? appointment.clients[0]?.name
+            : appointment.clients?.name
+
+          const serviceName = Array.isArray(appointment.services)
+            ? appointment.services[0]?.name
+            : appointment.services?.name
+
+          return `${appointment.appointment_date} às ${String(
+            appointment.appointment_time
+          ).slice(0, 5)} - ${clientName || 'Cliente'} - ${
+            serviceName || 'Serviço'
+          }`
+        })
+        .join('\n')
+
+      alert(
+        `Não foi possível criar este bloqueio. Existem agendamentos ativos neste período.\n\nReagende, cancele ou conclua estes horários antes de cadastrar a folga/férias:\n\n${appointmentsText}`
+      )
+      return
+    }
+
     const { error } = await supabase
       .from('professional_time_blocks')
       .insert({
@@ -2031,7 +2086,7 @@ export default function ProfessionalsPage() {
             </div>
 
             <div className="mt-6 rounded-2xl border border-orange-900 bg-orange-950/30 p-4 text-sm text-orange-200">
-              No próximo ajuste, a Agenda passará a consultar esses períodos e bloquear automaticamente os dias cadastrados.
+              O sistema impede o cadastro de férias/folgas quando já existem agendamentos ativos no período. Reagende ou cancele os horários antes de bloquear a agenda.
             </div>
           </div>
         </div>
