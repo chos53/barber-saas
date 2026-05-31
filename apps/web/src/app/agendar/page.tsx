@@ -47,7 +47,7 @@ export default function PublicBookingPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [professionalServices, setProfessionalServices] = useState<ProfessionalService[]>([])
 
-  const [selectedServiceId, setSelectedServiceId] = useState('')
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const [selectedProfessionalId, setSelectedProfessionalId] = useState('')
 
   const [date, setDate] = useState('')
@@ -86,7 +86,7 @@ export default function PublicBookingPage() {
 
   useEffect(() => {
     loadOccupiedTimes()
-  }, [date, selectedProfessionalId, selectedServiceId])
+  }, [date, selectedProfessionalId, selectedServiceIds])
 
   function generateAvailableTimes(
     opening: string,
@@ -115,8 +115,61 @@ export default function PublicBookingPage() {
     setAvailableTimes(times)
   }
 
+  function toggleService(serviceId: string) {
+    setSelectedServiceIds((currentIds) =>
+      currentIds.includes(serviceId)
+        ? currentIds.filter((id) => id !== serviceId)
+        : [...currentIds, serviceId]
+    )
+
+    setSelectedProfessionalId('')
+    setDate('')
+    setTime('')
+    setOccupiedTimes([])
+    setProfessionalBlock(null)
+  }
+
+  const selectedServices = services.filter((service) =>
+    selectedServiceIds.includes(service.id)
+  )
+
+  const totalDurationMinutes = selectedServices.reduce(
+    (sum, service) => sum + Number(service.duration_minutes || 0),
+    0
+  )
+
+  const totalPrice = selectedServices.reduce(
+    (sum, service) => sum + Number(service.price || 0),
+    0
+  )
+
+  function hasEnoughTimeForSelectedServices(availableTime: string) {
+    if (selectedServiceIds.length === 0) return false
+
+    const [hour, minute] = availableTime.split(':').map(Number)
+    const startMinutes = hour * 60 + minute
+    const endMinutes = startMinutes + totalDurationMinutes
+    const [closingHour, closingMinute] = closingTime.split(':').map(Number)
+    const closingMinutes = closingHour * 60 + closingMinute
+
+    if (endMinutes > closingMinutes) return false
+
+    return !Array.from(
+      { length: Math.ceil(totalDurationMinutes / intervalMinutes) },
+      (_, index) => startMinutes + index * intervalMinutes
+    ).some((minutes) => {
+      const currentHour = Math.floor(minutes / 60)
+      const currentMinute = minutes % 60
+      const formattedTime = `${String(currentHour).padStart(2, '0')}:${String(
+        currentMinute
+      ).padStart(2, '0')}`
+
+      return occupiedTimes.includes(formattedTime)
+    })
+  }
+
   function resetBooking() {
-    setSelectedServiceId('')
+    setSelectedServiceIds([])
     setSelectedProfessionalId('')
     setDate('')
     setTime('')
@@ -257,15 +310,33 @@ export default function PublicBookingPage() {
   async function createBooking() {
     setSuccessMessage('')
 
-    if (
-      !selectedServiceId ||
-      !selectedProfessionalId ||
-      !date ||
-      !time ||
-      !clientName.trim() ||
-      !clientPhone.trim()
-    ) {
-      alert('Preencha todos os campos.')
+    if (selectedServiceIds.length === 0) {
+      alert('Escolha pelo menos um serviço.')
+      return
+    }
+
+    if (!selectedProfessionalId) {
+      alert('Escolha um profissional.')
+      return
+    }
+
+    if (!date) {
+      alert('Escolha uma data.')
+      return
+    }
+
+    if (!time) {
+      alert('Escolha um horário disponível.')
+      return
+    }
+
+    if (!clientName.trim()) {
+      alert('Informe seu nome.')
+      return
+    }
+
+    if (!clientPhone.trim()) {
+      alert('Informe seu telefone.')
       return
     }
 
@@ -283,14 +354,21 @@ export default function PublicBookingPage() {
       return
     }
 
-    const professionalCanDoService = professionalServices.some(
-      (item) =>
-        item.professional_id === selectedProfessionalId &&
-        item.service_id === selectedServiceId
+    const professionalCanDoAllServices = selectedServiceIds.every((serviceId) =>
+      professionalServices.some(
+        (item) =>
+          item.professional_id === selectedProfessionalId &&
+          item.service_id === serviceId
+      )
     )
 
-    if (!professionalCanDoService) {
-      alert('Este profissional não realiza o serviço selecionado.')
+    if (!professionalCanDoAllServices) {
+      alert('Este profissional não realiza todos os serviços selecionados.')
+      return
+    }
+
+    if (!hasEnoughTimeForSelectedServices(time)) {
+      alert('Não existe tempo livre suficiente para todos os serviços neste horário.')
       return
     }
 
@@ -303,10 +381,6 @@ export default function PublicBookingPage() {
       alert('Este horário já está ocupado.')
       return
     }
-
-    const selectedService = services.find(
-      (service) => service.id === selectedServiceId
-    )
 
     const selectedProfessional = professionals.find(
       (professional) => professional.id === selectedProfessionalId
@@ -344,18 +418,35 @@ export default function PublicBookingPage() {
       clientId = newClient.id
     }
 
-    const { error: appointmentError } = await supabase
-      .from('appointments')
-      .insert({
+    const [startHour, startMinute] = time.split(':').map(Number)
+    const startMinutes = startHour * 60 + startMinute
+
+    let accumulatedMinutes = 0
+
+    const appointmentsToInsert = selectedServices.map((service) => {
+      const serviceStartMinutes = startMinutes + accumulatedMinutes
+      const serviceHour = Math.floor(serviceStartMinutes / 60)
+      const serviceMinute = serviceStartMinutes % 60
+
+      accumulatedMinutes += Number(service.duration_minutes || 0)
+
+      return {
         company_id: companyId,
         client_id: clientId,
-        service_id: selectedServiceId,
+        service_id: service.id,
         professional_id: selectedProfessionalId,
         appointment_date: date,
-        appointment_time: time,
+        appointment_time: `${String(serviceHour).padStart(2, '0')}:${String(
+          serviceMinute
+        ).padStart(2, '0')}`,
         status: 'scheduled',
         notes: notes.trim(),
-      })
+      }
+    })
+
+    const { error: appointmentError } = await supabase
+      .from('appointments')
+      .insert(appointmentsToInsert)
 
     setLoading(false)
 
@@ -367,10 +458,10 @@ export default function PublicBookingPage() {
     setSuccessMessage('Agendamento realizado com sucesso!')
 
     setSuccessDetails(
-      `${selectedService?.name} com ${selectedProfessional?.name} em ${date} às ${time}`
+      `${selectedServices.map((service) => service.name).join(', ')} com ${selectedProfessional?.name} em ${date} às ${time}`
     )
 
-    setSelectedServiceId('')
+    setSelectedServiceIds([])
     setSelectedProfessionalId('')
     setDate('')
     setTime('')
@@ -380,18 +471,20 @@ export default function PublicBookingPage() {
     setOccupiedTimes([])
   }
 
-  const filteredProfessionals = selectedServiceId
+  const filteredProfessionals = selectedServiceIds.length > 0
     ? professionals.filter((professional) =>
-        professionalServices.some(
-          (item) =>
-            item.professional_id === professional.id &&
-            item.service_id === selectedServiceId
+        selectedServiceIds.every((serviceId) =>
+          professionalServices.some(
+            (item) =>
+              item.professional_id === professional.id &&
+              item.service_id === serviceId
+          )
         )
       )
     : []
 
   const canSubmit =
-    selectedServiceId &&
+    selectedServiceIds.length > 0 &&
     selectedProfessionalId &&
     date &&
     time &&
@@ -448,19 +541,15 @@ export default function PublicBookingPage() {
               </h2>
 
               <div className="mt-6 space-y-3">
-                {services.map((service) => (
+                {services.map((service) => {
+                  const isSelected = selectedServiceIds.includes(service.id)
+
+                  return (
                   <button
                     key={service.id}
-                    onClick={() => {
-                      setSelectedServiceId(service.id)
-                      setSelectedProfessionalId('')
-                      setDate('')
-                      setTime('')
-                      setOccupiedTimes([])
-                      setProfessionalBlock(null)
-                    }}
+                    onClick={() => toggleService(service.id)}
                     className={`w-full rounded-2xl border p-5 text-left transition ${
-                      selectedServiceId === service.id
+                      isSelected
                         ? 'border-white bg-zinc-700'
                         : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
                     }`}
@@ -481,8 +570,22 @@ export default function PublicBookingPage() {
                       </strong>
                     </div>
                   </button>
-                ))}
+                  )
+                })}
               </div>
+
+              {selectedServices.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-green-900 bg-green-950/30 p-5">
+                  <p className="font-bold text-green-300">
+                    Serviços selecionados: {selectedServices.length}
+                  </p>
+
+                  <p className="mt-2 text-sm text-green-100">
+                    Duração total: {totalDurationMinutes} min · Valor total: R${' '}
+                    {totalPrice.toFixed(2)}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-xl">
@@ -490,15 +593,15 @@ export default function PublicBookingPage() {
                 Escolha um profissional
               </h2>
 
-              {!selectedServiceId && (
+              {selectedServiceIds.length === 0 && (
                 <p className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
                   Escolha primeiro um serviço para ver os profissionais compatíveis.
                 </p>
               )}
 
-              {selectedServiceId && filteredProfessionals.length === 0 && (
+              {selectedServiceIds.length > 0 && filteredProfessionals.length === 0 && (
                 <p className="mt-4 rounded-2xl border border-red-900 bg-red-950 p-4 text-sm text-red-300">
-                  Nenhum profissional disponível para este serviço.
+                  Nenhum profissional disponível para todos os serviços selecionados.
                 </p>
               )}
 
@@ -577,8 +680,9 @@ export default function PublicBookingPage() {
                   const isOccupied = occupiedTimes.includes(availableTime)
                   const isPastTime =
                     date === today && availableTime < currentTime
+                  const hasEnoughTime = hasEnoughTimeForSelectedServices(availableTime)
 
-                  return !isOccupied && !isPastTime
+                  return !isOccupied && !isPastTime && hasEnoughTime
                 }).length === 0 &&
                   date &&
                   selectedProfessionalId && (
@@ -594,20 +698,23 @@ export default function PublicBookingPage() {
                     const isPastTime =
                       date === today && availableTime < currentTime
 
+                    const hasEnoughTime = hasEnoughTimeForSelectedServices(availableTime)
                     const isSelected = time === availableTime
 
                     return (
                       <button
                         key={availableTime}
                         type="button"
-                        disabled={isOccupied || isPastTime}
+                        disabled={isOccupied || isPastTime || !hasEnoughTime}
                         onClick={() => setTime(availableTime)}
                         className={`relative overflow-hidden rounded-2xl border p-3 text-sm font-bold transition-all duration-200 ${
                           isOccupied
                             ? 'cursor-not-allowed border-red-800 bg-red-950 text-red-300 opacity-70'
                             : isPastTime
                               ? 'cursor-not-allowed border-zinc-900 bg-zinc-950 text-zinc-600 opacity-50'
-                              : isSelected
+                              : !hasEnoughTime
+                                ? 'cursor-not-allowed border-orange-900 bg-orange-950 text-orange-300 opacity-60'
+                                : isSelected
                                 ? 'scale-105 border-white bg-white text-black shadow-lg shadow-white/20'
                                 : 'border-zinc-700 bg-zinc-800 hover:scale-105 hover:border-white hover:bg-zinc-700'
                         }`}
@@ -624,6 +731,12 @@ export default function PublicBookingPage() {
                           {isPastTime && (
                             <span className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">
                               Encerrado
+                            </span>
+                          )}
+
+                          {!isOccupied && !isPastTime && !hasEnoughTime && (
+                            <span className="mt-1 text-[10px] uppercase tracking-wide text-orange-400">
+                              Não cabe
                             </span>
                           )}
                         </div>
@@ -654,7 +767,7 @@ export default function PublicBookingPage() {
                 onChange={(e) => setNotes(e.target.value)}
               />
 
-              {selectedServiceId &&
+              {selectedServiceIds.length > 0 &&
                 selectedProfessionalId &&
                 date &&
                 time && (
@@ -665,12 +778,8 @@ export default function PublicBookingPage() {
 
                     <div className="mt-4 space-y-2 text-zinc-300">
                       <p>
-                        <strong>Serviço:</strong>{' '}
-                        {
-                          services.find(
-                            (service) => service.id === selectedServiceId
-                          )?.name
-                        }
+                        <strong>Serviços:</strong>{' '}
+                        {selectedServices.map((service) => service.name).join(', ')}
                       </p>
 
                       <p>
@@ -692,12 +801,11 @@ export default function PublicBookingPage() {
                       </p>
 
                       <p>
-                        <strong>Valor:</strong> R${' '}
-                        {Number(
-                          services.find(
-                            (service) => service.id === selectedServiceId
-                          )?.price || 0
-                        ).toFixed(2)}
+                        <strong>Duração total:</strong> {totalDurationMinutes} min
+                      </p>
+
+                      <p>
+                        <strong>Valor total:</strong> R$ {totalPrice.toFixed(2)}
                       </p>
 
                       {notes.trim() && (
@@ -711,11 +819,13 @@ export default function PublicBookingPage() {
 
               <button
                 onClick={createBooking}
-                disabled={!canSubmit || loading}
+                disabled={loading}
                 className={`rounded-xl p-4 font-bold transition ${
-                  !canSubmit || loading
+                  loading
                     ? 'cursor-not-allowed bg-zinc-700 text-zinc-400'
-                    : 'bg-white text-black hover:opacity-90'
+                    : canSubmit
+                      ? 'bg-white text-black hover:opacity-90'
+                      : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
                 }`}
               >
                 {loading ? 'Agendando...' : 'Confirmar agendamento'}

@@ -20,6 +20,8 @@ type Professional = {
 
 type Appointment = {
   id: string
+  client_id: string | null
+  service_id: string | null
   professional_id: string | null
   appointment_date: string
   appointment_time: string
@@ -492,6 +494,8 @@ export default function AgendaPage() {
       .from('appointments')
       .select(`
         id,
+        client_id,
+        service_id,
         professional_id,
         appointment_date,
         appointment_time,
@@ -599,6 +603,66 @@ export default function AgendaPage() {
     loadData()
   }
 
+  async function createFinancialTransactionForAppointment(
+    appointmentId: string,
+    selectedMethod = 'cash'
+  ) {
+    const { data: existingTransaction } = await supabase
+      .from('financial_transactions')
+      .select('id')
+      .eq('appointment_id', appointmentId)
+      .eq('type', 'income')
+      .maybeSingle()
+
+    if (existingTransaction) {
+      return
+    }
+
+    const { data: fullAppointment } = await supabase
+      .from('appointments')
+      .select(`
+        id,
+        company_id,
+        client_id,
+        professional_id,
+        service_id,
+        appointment_date,
+        services (
+          name,
+          price
+        )
+      `)
+      .eq('id', appointmentId)
+      .single()
+
+    if (!fullAppointment) {
+      return
+    }
+
+    const serviceData = Array.isArray(fullAppointment.services)
+      ? fullAppointment.services[0]
+      : fullAppointment.services
+
+    const serviceName = serviceData?.name || 'Serviço'
+    const servicePrice = Number(serviceData?.price || 0)
+
+    await supabase
+      .from('financial_transactions')
+      .insert({
+        company_id: fullAppointment.company_id,
+        appointment_id: fullAppointment.id,
+        professional_id: fullAppointment.professional_id,
+        client_id: fullAppointment.client_id,
+        type: 'income',
+        category: 'service',
+        description: serviceName,
+        amount: servicePrice,
+        payment_method: selectedMethod,
+        status: 'paid',
+        transaction_date: fullAppointment.appointment_date,
+      })
+  }
+
   async function updateAppointmentStatus(
     appointmentId: string,
     status: string,
@@ -623,55 +687,10 @@ export default function AgendaPage() {
     }
 
     if (status === 'completed') {
-      const { data: existingTransaction } = await supabase
-        .from('financial_transactions')
-        .select('id')
-        .eq('appointment_id', appointmentId)
-        .eq('type', 'income')
-        .maybeSingle()
-
-      if (!existingTransaction) {
-        const { data: fullAppointment } = await supabase
-          .from('appointments')
-          .select(`
-            id,
-            company_id,
-            client_id,
-            professional_id,
-            service_id,
-            services (
-              name,
-              price
-            )
-          `)
-          .eq('id', appointmentId)
-          .single()
-
-        if (fullAppointment) {
-          const serviceData = Array.isArray(fullAppointment.services)
-            ? fullAppointment.services[0]
-            : fullAppointment.services
-
-          const serviceName = serviceData?.name || 'Serviço'
-          const servicePrice = Number(serviceData?.price || 0)
-
-          await supabase
-            .from('financial_transactions')
-            .insert({
-              company_id: fullAppointment.company_id,
-              appointment_id: fullAppointment.id,
-              professional_id: fullAppointment.professional_id,
-              client_id: fullAppointment.client_id,
-              type: 'income',
-              category: 'service',
-              description: serviceName,
-              amount: servicePrice,
-              payment_method: selectedMethod,
-              status: 'paid',
-              transaction_date: appointment.appointment_date,
-            })
-        }
-      }
+      await createFinancialTransactionForAppointment(
+        appointmentId,
+        selectedMethod
+      )
     }
 
     if (selectedAppointment?.id === appointmentId) {
@@ -684,12 +703,77 @@ export default function AgendaPage() {
     loadData()
   }
 
+  async function completeAppointmentSequence(
+    appointment: Appointment,
+    selectedMethod = 'cash'
+  ) {
+    if (!appointment.client_id || !appointment.professional_id) {
+      await updateAppointmentStatus(appointment.id, 'completed', selectedMethod)
+      return
+    }
+
+    const confirmComplete = window.confirm(
+      'Concluir todos os serviços deste cliente com este profissional nesta data?'
+    )
+
+    if (!confirmComplete) return
+
+    const { data: sequenceAppointments, error } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('client_id', appointment.client_id)
+      .eq('professional_id', appointment.professional_id)
+      .eq('appointment_date', appointment.appointment_date)
+      .eq('status', 'scheduled')
+      .order('appointment_time', {
+        ascending: true,
+      })
+
+    if (error) {
+      alert(`Erro ao localizar sequência de serviços: ${error.message}`)
+      return
+    }
+
+    const appointmentIds = (sequenceAppointments || []).map((item) => item.id)
+
+    if (appointmentIds.length === 0) {
+      return
+    }
+
+    const { error: updateError } = await supabase
+      .from('appointments')
+      .update({ status: 'completed' })
+      .in('id', appointmentIds)
+
+    if (updateError) {
+      alert(`Erro ao concluir sequência: ${updateError.message}`)
+      return
+    }
+
+    for (const appointmentId of appointmentIds) {
+      await createFinancialTransactionForAppointment(
+        appointmentId,
+        selectedMethod
+      )
+    }
+
+    if (selectedAppointment) {
+      setSelectedAppointment({
+        ...selectedAppointment,
+        status: 'completed',
+      })
+    }
+
+    loadData()
+  }
+
   return (
     <div>
       <h1 className="text-4xl font-bold">Agenda</h1>
 
       <p className="mt-2 text-zinc-400">
-        Agendamentos com bloqueio por profissional, ocupação e pausa individual.
+        Agendamentos com bloqueio por profissional, ocupação, pausa individual e conclusão em sequência para múltiplos serviços.
       </p>
 
       <div className="mt-6 rounded-2xl bg-zinc-900 p-6">
@@ -1154,6 +1238,19 @@ export default function AgendaPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        completeAppointmentSequence(
+                          appointment,
+                          selectedPaymentMethod
+                        )
+                      }}
+                      className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-black"
+                    >
+                      Concluir sequência
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
                         updateAppointmentStatus(appointment.id, 'cancelled')
                       }}
                       className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
@@ -1305,6 +1402,18 @@ export default function AgendaPage() {
                       className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold"
                     >
                       Concluído
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        completeAppointmentSequence(
+                          selectedAppointment,
+                          selectedPaymentMethod
+                        )
+                      }
+                      className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-black"
+                    >
+                      Concluir sequência
                     </button>
 
                     <button
