@@ -105,6 +105,8 @@ export default function AgendaPage() {
   const [rescheduleBlock, setRescheduleBlock] =
     useState<ProfessionalTimeBlock | null>(null)
   const [savingReschedule, setSavingReschedule] = useState(false)
+  const [rescheduleSequence, setRescheduleSequence] = useState<Appointment[]>([])
+  const [rescheduleSequenceLoading, setRescheduleSequenceLoading] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -133,7 +135,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     loadRescheduleAvailability()
-  }, [rescheduleAppointment, rescheduleProfessionalId, rescheduleDate])
+  }, [rescheduleAppointment, rescheduleProfessionalId, rescheduleDate, rescheduleSequence])
 
   function generateAvailableTimes(
     opening: string,
@@ -520,7 +522,7 @@ export default function AgendaPage() {
         status,
         notes,
         clients ( name ),
-        services ( name ),
+        services ( name, duration_minutes ),
         professionals ( name )
       `)
       .eq('company_id', profile.company_id)
@@ -548,7 +550,7 @@ export default function AgendaPage() {
     setAppointments((appointmentsData || []) as Appointment[])
   }
 
-  function startReschedule(appointment: Appointment) {
+  async function startReschedule(appointment: Appointment) {
     setRescheduleAppointment(appointment)
     setRescheduleProfessionalId(appointment.professional_id || '')
     setRescheduleDate(appointment.appointment_date)
@@ -557,6 +559,50 @@ export default function AgendaPage() {
     setRescheduleBlock(null)
     setRescheduleOccupiedTimes([])
     setReschedulePauseTimes([])
+    setRescheduleSequence([appointment])
+
+    if (!appointment.client_id || !appointment.professional_id) {
+      return
+    }
+
+    setRescheduleSequenceLoading(true)
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .select(`
+        id,
+        client_id,
+        service_id,
+        professional_id,
+        appointment_date,
+        appointment_time,
+        status,
+        notes,
+        clients ( name ),
+        services ( name, duration_minutes ),
+        professionals ( name )
+      `)
+      .eq('company_id', companyId)
+      .eq('client_id', appointment.client_id)
+      .eq('professional_id', appointment.professional_id)
+      .eq('appointment_date', appointment.appointment_date)
+      .eq('status', 'scheduled')
+      .order('appointment_time', {
+        ascending: true,
+      })
+
+    setRescheduleSequenceLoading(false)
+
+    if (error) {
+      alert(`Erro ao carregar sequência para reagendamento: ${error.message}`)
+      return
+    }
+
+    const sequence = ((data || []) as Appointment[]).filter(
+      (item) => item.professional_id === appointment.professional_id
+    )
+
+    setRescheduleSequence(sequence.length > 0 ? sequence : [appointment])
   }
 
   async function loadRescheduleAvailability() {
@@ -640,7 +686,9 @@ export default function AgendaPage() {
       setRescheduleWarning('')
     }
 
-    const { data: appointmentsData } = await supabase
+    const rescheduleSequenceIds = rescheduleSequence.map((item) => item.id)
+
+    let appointmentsQuery = supabase
       .from('appointments')
       .select(`
         id,
@@ -652,7 +700,18 @@ export default function AgendaPage() {
       .eq('professional_id', rescheduleProfessionalId)
       .eq('appointment_date', rescheduleDate)
       .neq('status', 'cancelled')
-      .neq('id', rescheduleAppointment.id)
+
+    if (rescheduleSequenceIds.length > 0) {
+      appointmentsQuery = appointmentsQuery.not(
+        'id',
+        'in',
+        `(${rescheduleSequenceIds.join(',')})`
+      )
+    } else {
+      appointmentsQuery = appointmentsQuery.neq('id', rescheduleAppointment.id)
+    }
+
+    const { data: appointmentsData } = await appointmentsQuery
 
     const blockedTimes: string[] = []
 
@@ -681,6 +740,46 @@ export default function AgendaPage() {
     })
 
     setRescheduleOccupiedTimes(blockedTimes)
+  }
+
+
+  function getRescheduleSequenceDurationMinutes() {
+    return rescheduleSequence.reduce((sum, appointment) => {
+      const serviceData = Array.isArray(appointment.services)
+        ? appointment.services[0]
+        : appointment.services
+
+      return sum + Number((serviceData as any)?.duration_minutes || intervalMinutes)
+    }, 0)
+  }
+
+  function rescheduleSequenceFitsInSchedule(startTime: string) {
+    const totalDuration = getRescheduleSequenceDurationMinutes()
+
+    if (!totalDuration) return false
+
+    const startMinutes = timeToMinutes(startTime)
+    const endMinutes = startMinutes + totalDuration
+    const closingMinutes = timeToMinutes(closingTime)
+
+    if (endMinutes > closingMinutes) return false
+
+    for (
+      let current = startMinutes;
+      current < endMinutes;
+      current += intervalMinutes
+    ) {
+      const currentTimeSlot = formatTimeFromMinutes(current)
+
+      if (
+        rescheduleOccupiedTimes.includes(currentTimeSlot) ||
+        reschedulePauseTimes.includes(currentTimeSlot)
+      ) {
+        return false
+      }
+    }
+
+    return true
   }
 
   async function saveReschedule() {
@@ -724,35 +823,61 @@ export default function AgendaPage() {
       return
     }
 
-    setSavingReschedule(true)
-
-    const { error } = await supabase
-      .from('appointments')
-      .update({
-        professional_id: rescheduleProfessionalId,
-        appointment_date: rescheduleDate,
-        appointment_time: rescheduleTime,
-      })
-      .eq('id', rescheduleAppointment.id)
-
-    setSavingReschedule(false)
-
-    if (error) {
-      if (error.code === '23505') {
-        alert('Este profissional já possui um agendamento neste dia e horário.')
-        return
-      }
-
-      alert(`Erro ao reagendar: ${error.message}`)
+    if (!rescheduleSequenceFitsInSchedule(rescheduleTime)) {
+      alert('Não há tempo livre suficiente para reagendar toda a sequência.')
       return
     }
 
+    const sequence =
+      rescheduleSequence.length > 0
+        ? [...rescheduleSequence].sort((a, b) =>
+            a.appointment_time.localeCompare(b.appointment_time)
+          )
+        : [rescheduleAppointment]
+
+    setSavingReschedule(true)
+
+    let accumulatedMinutes = 0
+    const startMinutes = timeToMinutes(rescheduleTime)
+
+    for (const appointment of sequence) {
+      const appointmentStartMinutes = startMinutes + accumulatedMinutes
+      const nextAppointmentTime = formatTimeFromMinutes(appointmentStartMinutes)
+      const serviceData = Array.isArray(appointment.services)
+        ? appointment.services[0]
+        : appointment.services
+
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          professional_id: rescheduleProfessionalId,
+          appointment_date: rescheduleDate,
+          appointment_time: nextAppointmentTime,
+        })
+        .eq('id', appointment.id)
+
+      if (error) {
+        setSavingReschedule(false)
+
+        if (error.code === '23505') {
+          alert('Este profissional já possui um agendamento neste dia e horário.')
+          return
+        }
+
+        alert(`Erro ao reagendar: ${error.message}`)
+        return
+      }
+
+      accumulatedMinutes += Number((serviceData as any)?.duration_minutes || intervalMinutes)
+    }
+
+    setSavingReschedule(false)
     setRescheduleAppointment(null)
     setSelectedAppointment(null)
+    setRescheduleSequence([])
     setFilterDate(rescheduleDate)
     loadData()
   }
-
 
   function getSelectedServices() {
     return services.filter((service) => serviceIds.includes(service.id))
@@ -1631,7 +1756,7 @@ export default function AgendaPage() {
                 </h2>
 
                 <p className="mt-2 text-zinc-400">
-                  Serviço: {rescheduleAppointment.services?.name || 'Serviço'}
+                  Sequência: {rescheduleSequence.length || 1} serviço(s)
                 </p>
               </div>
 
@@ -1641,6 +1766,46 @@ export default function AgendaPage() {
               >
                 Fechar
               </button>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
+              <p className="text-sm font-bold uppercase tracking-wide text-purple-300">
+                Serviços que serão reagendados juntos
+              </p>
+
+              {rescheduleSequenceLoading ? (
+                <p className="mt-3 text-sm text-purple-100">
+                  Carregando sequência...
+                </p>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {rescheduleSequence.map((appointment, index) => {
+                    const serviceData = Array.isArray(appointment.services)
+                      ? appointment.services[0]
+                      : appointment.services
+
+                    return (
+                      <div
+                        key={appointment.id}
+                        className="flex items-center justify-between rounded-xl bg-zinc-950 p-3 text-sm"
+                      >
+                        <span>
+                          {index + 1}. {serviceData?.name || 'Serviço'}
+                        </span>
+
+                        <span className="text-zinc-400">
+                          {appointment.appointment_time.slice(0, 5)}
+                        </span>
+                      </div>
+                    )
+                  })}
+
+                  <p className="pt-2 text-sm text-purple-100">
+                    Duração estimada da sequência:{' '}
+                    {getRescheduleSequenceDurationMinutes()} min
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="mt-8 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
@@ -1712,6 +1877,9 @@ export default function AgendaPage() {
                       rescheduleWarning.includes('não atende')
                     const isPastTime =
                       rescheduleDate === today && availableTime < currentTime
+                    const doesNotFitSequence =
+                      rescheduleSequence.length > 0 &&
+                      !rescheduleSequenceFitsInSchedule(availableTime)
 
                     return (
                       <button
@@ -1722,7 +1890,8 @@ export default function AgendaPage() {
                             isPastTime ||
                             isPause ||
                             isUnavailableDay ||
-                            isBlockedDay
+                            isBlockedDay ||
+                            doesNotFitSequence
                         )}
                         onClick={() => setRescheduleTime(availableTime)}
                         className={`rounded-xl p-3 text-sm font-medium transition ${
@@ -1734,7 +1903,9 @@ export default function AgendaPage() {
                                 ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
                                 : isPause
                                   ? 'cursor-not-allowed bg-yellow-900 text-yellow-300 opacity-70'
-                                  : isPastTime
+                                  : doesNotFitSequence
+                                    ? 'cursor-not-allowed bg-orange-950 text-orange-300 opacity-70'
+                                    : isPastTime
                                     ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
                                     : rescheduleTime === availableTime
                                       ? 'bg-white text-black'
@@ -1749,7 +1920,7 @@ export default function AgendaPage() {
               </div>
 
               <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-4 text-sm text-purple-200">
-                O reagendamento mantém o mesmo cliente e serviço, alterando apenas profissional, data e horário.
+                O reagendamento move toda a sequência do cliente, mantendo a ordem dos serviços e recalculando os horários automaticamente.
               </div>
 
               <div className="flex flex-col gap-3 md:flex-row">
