@@ -2,311 +2,458 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-type UserRole =
-  | 'owner'
-  | 'administrator'
-  | 'manager'
-  | 'reception'
-  | 'barber'
-  | 'financial'
-
-type MenuItem = {
-  label: string
-  href: string
-  roles: UserRole[]
+type Appointment = {
+  id: string
+  appointment_date: string
+  appointment_time: string
+  status: string
+  clients: { name: string } | null
+  services: { name: string } | null
+  professionals: { name: string } | null
 }
 
-const userRoleOptions: { value: UserRole; label: string }[] = [
-  { value: 'owner', label: 'Proprietário(a)' },
-  { value: 'administrator', label: 'Administrador(a)' },
-  { value: 'manager', label: 'Gerente' },
-  { value: 'reception', label: 'Recepção' },
-  { value: 'barber', label: 'Profissional' },
-  { value: 'financial', label: 'Financeiro' },
-]
-
-const visualRoleStorageKey = 'barber_saas_visual_role'
-
-const allRoles: UserRole[] = [
-  'owner',
-  'administrator',
-  'manager',
-  'reception',
-  'barber',
-  'financial',
-]
-
-const menuItems: MenuItem[] = [
-  {
-    label: 'Dashboard',
-    href: '/dashboard',
-    roles: allRoles,
-  },
-  {
-    label: 'Agenda',
-    href: '/dashboard/agenda',
-    roles: ['owner', 'administrator', 'manager', 'reception', 'barber'],
-  },
-  {
-    label: 'Clientes',
-    href: '/dashboard/clientes',
-    roles: ['owner', 'administrator', 'manager', 'reception'],
-  },
-  {
-    label: 'Serviços',
-    href: '/dashboard/servicos',
-    roles: ['owner', 'administrator', 'manager'],
-  },
-  {
-    label: 'Profissionais',
-    href: '/dashboard/profissionais',
-    roles: ['owner', 'administrator', 'manager'],
-  },
-  {
-    label: 'Financeiro',
-    href: '/dashboard/financeiro',
-    roles: ['owner', 'administrator', 'manager', 'financial'],
-  },
-  {
-    label: 'Relatórios',
-    href: '/dashboard/relatorios',
-    roles: ['owner', 'administrator', 'manager', 'financial'],
-  },
-  {
-    label: 'Comandas',
-    href: '/dashboard/comandas',
-    roles: ['owner', 'administrator', 'manager', 'reception', 'barber'],
-  },
-  {
-    label: 'Configurações',
-    href: '/dashboard/configuracoes',
-    roles: ['owner', 'administrator'],
-  },
-]
-
-function normalizeRole(role: string | null | undefined): UserRole {
-  const normalized = String(role || 'reception').toLowerCase()
-
-  if (normalized === 'owner') return 'owner'
-  if (normalized === 'admin') return 'administrator'
-  if (normalized === 'administrator') return 'administrator'
-  if (normalized === 'manager') return 'manager'
-  if (normalized === 'reception') return 'reception'
-  if (normalized === 'barber') return 'barber'
-  if (normalized === 'financial') return 'financial'
-
-  return 'reception'
+type FinancialTransaction = {
+  id: string
+  type: string
+  amount: number
+  status: string | null
+  transaction_date: string
 }
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const router = useRouter()
-  const pathname = usePathname()
+type DashboardStats = {
+  todayAppointments: number
+  scheduledAppointments: number
+  completedAppointments: number
+  clientsCount: number
+  activeProfessionals: number
+  activeServices: number
+  todayIncome: number
+  todayExpenses: number
+  monthIncome: number
+  monthExpenses: number
+}
 
+export default function DashboardPage() {
+  const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('Barber SaaS')
-  const [logoUrl, setLogoUrl] = useState('')
-  const [realUserRole, setRealUserRole] = useState<UserRole>('reception')
-  const [userRole, setUserRole] = useState<UserRole>('reception')
-  const [visualRole, setVisualRole] = useState<UserRole | ''>('')
-  const [loadingPermissions, setLoadingPermissions] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [today, setToday] = useState('')
+  const [monthStartDate, setMonthStartDate] = useState('')
+  const [stats, setStats] = useState<DashboardStats>({
+    todayAppointments: 0,
+    scheduledAppointments: 0,
+    completedAppointments: 0,
+    clientsCount: 0,
+    activeProfessionals: 0,
+    activeServices: 0,
+    todayIncome: 0,
+    todayExpenses: 0,
+    monthIncome: 0,
+    monthExpenses: 0,
+  })
+  const [upcomingAppointments, setUpcomingAppointments] = useState<
+    Appointment[]
+  >([])
 
   useEffect(() => {
-    loadCompanyBrand()
+    const now = new Date()
+    const currentDate = formatDate(now)
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    setToday(currentDate)
+    setMonthStartDate(formatDate(firstDayOfMonth))
+    loadDashboard(currentDate, formatDate(firstDayOfMonth))
   }, [])
 
-  const allowedMenuItems = useMemo(() => {
-    return menuItems.filter((item) => item.roles.includes(userRole))
-  }, [userRole])
+  function formatDate(date: Date) {
+    return date.toISOString().split('T')[0]
+  }
 
-  useEffect(() => {
-    if (loadingPermissions) return
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value)
+  }
 
-    const currentPageAllowed = menuItems.some(
-      (item) => item.href === pathname && item.roles.includes(userRole)
-    )
+  async function loadDashboard(currentDate: string, firstDayOfMonth: string) {
+    setLoading(true)
 
-    const isDashboardRoot = pathname === '/dashboard'
-
-    if (!currentPageAllowed && !isDashboardRoot) {
-      router.push('/dashboard')
-    }
-  }, [pathname, router, userRole, loadingPermissions])
-
-  async function loadCompanyBrand() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
+    if (!user) {
+      window.location.href = '/login'
+      return
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id, role')
+      .select('company_id')
       .eq('id', user.id)
       .single()
 
-    if (!profile?.company_id) return
-
-    const normalizedRole = normalizeRole(profile.role)
-    const savedVisualRole = window.localStorage.getItem(visualRoleStorageKey)
-
-    setRealUserRole(normalizedRole)
-
-    if (savedVisualRole) {
-      const normalizedVisualRole = normalizeRole(savedVisualRole)
-
-      setVisualRole(normalizedVisualRole)
-      setUserRole(normalizedVisualRole)
-    } else {
-      setUserRole(normalizedRole)
+    if (!profile?.company_id) {
+      setLoading(false)
+      return
     }
+
+    setCompanyId(profile.company_id)
 
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('company_name, logo_url')
+      .select('company_name')
       .eq('company_id', profile.company_id)
-      .single()
+      .maybeSingle()
 
     if (settings?.company_name) {
       setCompanyName(settings.company_name)
     }
 
-    if (settings?.logo_url) {
-      setLogoUrl(settings.logo_url)
-    }
+    const [
+      todayAppointmentsResult,
+      clientsResult,
+      professionalsResult,
+      servicesResult,
+      todayTransactionsResult,
+      monthTransactionsResult,
+      upcomingAppointmentsResult,
+    ] = await Promise.all([
+      supabase
+        .from('appointments')
+        .select('id, status', { count: 'exact' })
+        .eq('company_id', profile.company_id)
+        .eq('appointment_date', currentDate),
 
-    setLoadingPermissions(false)
+      supabase
+        .from('clients')
+        .select('id', { count: 'exact' })
+        .eq('company_id', profile.company_id)
+        .eq('active', true),
+
+      supabase
+        .from('professionals')
+        .select('id', { count: 'exact' })
+        .eq('company_id', profile.company_id)
+        .eq('active', true),
+
+      supabase
+        .from('services')
+        .select('id', { count: 'exact' })
+        .eq('company_id', profile.company_id)
+        .eq('active', true),
+
+      supabase
+        .from('financial_transactions')
+        .select('id, type, amount, status, transaction_date')
+        .eq('company_id', profile.company_id)
+        .eq('transaction_date', currentDate),
+
+      supabase
+        .from('financial_transactions')
+        .select('id, type, amount, status, transaction_date')
+        .eq('company_id', profile.company_id)
+        .gte('transaction_date', firstDayOfMonth)
+        .lte('transaction_date', currentDate),
+
+      supabase
+        .from('appointments')
+        .select(`
+          id,
+          appointment_date,
+          appointment_time,
+          status,
+          clients ( name ),
+          services ( name ),
+          professionals ( name )
+        `)
+        .eq('company_id', profile.company_id)
+        .gte('appointment_date', currentDate)
+        .neq('status', 'cancelled')
+        .order('appointment_date', { ascending: true })
+        .order('appointment_time', { ascending: true })
+        .limit(8),
+    ])
+
+    const todayAppointments = todayAppointmentsResult.data || []
+    const todayTransactions =
+      (todayTransactionsResult.data || []) as FinancialTransaction[]
+    const monthTransactions =
+      (monthTransactionsResult.data || []) as FinancialTransaction[]
+
+    const todayIncome = todayTransactions
+      .filter(
+        (transaction) =>
+          transaction.type === 'income' && transaction.status !== 'cancelled'
+      )
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+
+    const todayExpenses = todayTransactions
+      .filter(
+        (transaction) =>
+          transaction.type === 'expense' && transaction.status !== 'cancelled'
+      )
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+
+    const monthIncome = monthTransactions
+      .filter(
+        (transaction) =>
+          transaction.type === 'income' && transaction.status !== 'cancelled'
+      )
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+
+    const monthExpenses = monthTransactions
+      .filter(
+        (transaction) =>
+          transaction.type === 'expense' && transaction.status !== 'cancelled'
+      )
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+
+    setStats({
+      todayAppointments: todayAppointmentsResult.count || 0,
+      scheduledAppointments: todayAppointments.filter(
+        (appointment) => appointment.status === 'scheduled'
+      ).length,
+      completedAppointments: todayAppointments.filter(
+        (appointment) => appointment.status === 'completed'
+      ).length,
+      clientsCount: clientsResult.count || 0,
+      activeProfessionals: professionalsResult.count || 0,
+      activeServices: servicesResult.count || 0,
+      todayIncome,
+      todayExpenses,
+      monthIncome,
+      monthExpenses,
+    })
+
+    setUpcomingAppointments(
+      (upcomingAppointmentsResult.data || []) as Appointment[]
+    )
+
+    setLoading(false)
   }
 
-  function handleVisualRoleChange(nextRole: UserRole | '') {
-    setVisualRole(nextRole)
+  const monthBalance = useMemo(() => {
+    return stats.monthIncome - stats.monthExpenses
+  }, [stats.monthIncome, stats.monthExpenses])
 
-    if (!nextRole) {
-      window.localStorage.removeItem(visualRoleStorageKey)
-      setUserRole(realUserRole)
-      router.push('/dashboard')
-      return
-    }
+  const todayBalance = useMemo(() => {
+    return stats.todayIncome - stats.todayExpenses
+  }, [stats.todayIncome, stats.todayExpenses])
 
-    window.localStorage.setItem(visualRoleStorageKey, nextRole)
-    setUserRole(nextRole)
-    router.push('/dashboard')
-  }
+  const shortcuts = [
+    {
+      label: 'Abrir Agenda',
+      href: '/dashboard/agenda',
+      description: 'Criar, concluir e reagendar atendimentos.',
+    },
+    {
+      label: 'Clientes',
+      href: '/dashboard/clientes',
+      description: 'Cadastrar e consultar clientes.',
+    },
+    {
+      label: 'Serviços',
+      href: '/dashboard/servicos',
+      description: 'Gerenciar preços e duração dos serviços.',
+    },
+    {
+      label: 'Profissionais',
+      href: '/dashboard/profissionais',
+      description: 'Disponibilidade, comissão e permissões.',
+    },
+    {
+      label: 'Financeiro',
+      href: '/dashboard/financeiro',
+      description: 'Entradas, despesas e caixa.',
+    },
+    {
+      label: 'Relatórios',
+      href: '/dashboard/relatorios',
+      description: 'Análises e desempenho do salão.',
+    },
+  ]
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+  if (loading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-8 py-6">
+          <p className="text-zinc-400">Carregando dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <main className="flex min-h-screen bg-black text-white">
-      <aside className="flex w-72 flex-col border-r border-zinc-800 bg-zinc-950 p-6">
+    <div>
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          {logoUrl && (
-            <img
-              src={logoUrl}
-              alt={companyName}
-              className="mb-4 h-20 w-20 rounded-2xl object-cover ring-2 ring-zinc-800"
-            />
-          )}
-
-          <h1 className="text-2xl font-bold">{companyName}</h1>
-
-          <p className="mt-1 text-sm text-zinc-500">
-            Painel administrativo
+          <p className="text-sm uppercase tracking-[0.25em] text-zinc-500">
+            Painel do proprietário
           </p>
 
-          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-            <p className="text-xs uppercase tracking-wide text-zinc-500">
-              Permissão real
-            </p>
+          <h1 className="mt-2 text-4xl font-bold">{companyName}</h1>
 
-            <strong className="mt-1 block text-sm">
-              {userRoleOptions.find((item) => item.value === realUserRole)
-                ?.label || realUserRole}
-            </strong>
+          <p className="mt-2 text-zinc-400">
+            Resumo operacional e financeiro do seu negócio.
+          </p>
+        </div>
 
-            {visualRole && (
-              <p className="mt-2 rounded-lg bg-yellow-900/40 px-3 py-2 text-xs font-bold text-yellow-300">
-                Visualizando como{' '}
-                {userRoleOptions.find((item) => item.value === visualRole)
-                  ?.label || visualRole}
+        <button
+          type="button"
+          onClick={() => loadDashboard(today, monthStartDate)}
+          className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
+        >
+          Atualizar
+        </button>
+      </div>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Faturamento hoje</p>
+          <p className="mt-3 text-3xl font-bold text-green-300">
+            {formatCurrency(stats.todayIncome)}
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Saldo: {formatCurrency(todayBalance)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Agendamentos hoje</p>
+          <p className="mt-3 text-3xl font-bold">
+            {stats.todayAppointments}
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            {stats.scheduledAppointments} agendado(s) ·{' '}
+            {stats.completedAppointments} concluído(s)
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Clientes ativos</p>
+          <p className="mt-3 text-3xl font-bold text-blue-300">
+            {stats.clientsCount}
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Base cadastrada no sistema.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Profissionais ativos</p>
+          <p className="mt-3 text-3xl font-bold text-purple-300">
+            {stats.activeProfessionals}
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            {stats.activeServices} serviço(s) ativo(s).
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Faturamento do mês</p>
+          <p className="mt-3 text-3xl font-bold text-green-300">
+            {formatCurrency(stats.monthIncome)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Despesas do mês</p>
+          <p className="mt-3 text-3xl font-bold text-red-300">
+            {formatCurrency(stats.monthExpenses)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <p className="text-sm text-zinc-500">Lucro do mês</p>
+          <p
+            className={`mt-3 text-3xl font-bold ${
+              monthBalance >= 0 ? 'text-blue-300' : 'text-red-300'
+            }`}
+          >
+            {formatCurrency(monthBalance)}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Próximos agendamentos</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Atendimentos futuros e do dia.
               </p>
-            )}
+            </div>
+
+            <Link
+              href="/dashboard/agenda"
+              className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-black"
+            >
+              Ver agenda
+            </Link>
           </div>
 
-          <div className="mt-3 rounded-xl border border-blue-900 bg-blue-950/30 p-3">
-            <label className="text-xs uppercase tracking-wide text-blue-300">
-              Visualizar como
-            </label>
+          <div className="mt-5 space-y-3">
+            {upcomingAppointments.length === 0 && (
+              <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">
+                Nenhum agendamento futuro encontrado.
+              </p>
+            )}
 
-            <select
-              value={visualRole}
-              onChange={(event) =>
-                handleVisualRoleChange(event.target.value as UserRole | '')
-              }
-              className="mt-2 w-full rounded-lg border border-blue-900 bg-black p-2 text-sm text-white outline-none"
-            >
-              <option value="">Permissão real</option>
+            {upcomingAppointments.map((appointment) => (
+              <div
+                key={appointment.id}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
+              >
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                  <div>
+                    <p className="font-bold">
+                      {appointment.clients?.name || 'Cliente não informado'}
+                    </p>
 
-              {userRoleOptions.map((roleOption) => (
-                <option key={roleOption.value} value={roleOption.value}>
-                  {roleOption.label}
-                </option>
-              ))}
-            </select>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      {appointment.services?.name || 'Serviço'} ·{' '}
+                      {appointment.professionals?.name || 'Profissional'}
+                    </p>
+                  </div>
 
-            <p className="mt-2 text-xs text-blue-200">
-              Modo temporário: altera apenas a visualização deste navegador.
-            </p>
+                  <div className="text-sm text-zinc-400 md:text-right">
+                    <p>{appointment.appointment_date}</p>
+                    <p className="font-bold text-white">
+                      {appointment.appointment_time.slice(0, 5)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <nav className="mt-10 space-y-2">
-          {allowedMenuItems.map((item) => {
-            const isActive = pathname === item.href
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <h2 className="text-2xl font-bold">Atalhos rápidos</h2>
 
-            return (
+          <div className="mt-5 grid gap-3">
+            {shortcuts.map((shortcut) => (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`block rounded-xl p-3 transition ${
-                  isActive
-                    ? 'bg-white font-bold text-black'
-                    : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
-                }`}
+                key={shortcut.href}
+                href={shortcut.href}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 transition hover:border-white"
               >
-                {item.label}
+                <p className="font-bold">{shortcut.label}</p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {shortcut.description}
+                </p>
               </Link>
-            )
-          })}
-        </nav>
-
-        <button
-          onClick={handleLogout}
-          className="mt-auto rounded-xl bg-white p-3 font-bold text-black transition hover:bg-zinc-200"
-        >
-          Sair
-        </button>
-      </aside>
-
-      <section className="flex-1 p-10">
-        {loadingPermissions ? (
-          <div className="flex min-h-[300px] items-center justify-center">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-8 py-6">
-              <p className="text-zinc-400">Carregando permissões...</p>
-            </div>
+            ))}
           </div>
-        ) : (
-          children
-        )}
-      </section>
-    </main>
+        </div>
+      </div>
+    </div>
   )
 }

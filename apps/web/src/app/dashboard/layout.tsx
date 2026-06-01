@@ -19,6 +19,17 @@ type MenuItem = {
   roles: UserRole[]
 }
 
+const userRoleOptions: { value: UserRole; label: string }[] = [
+  { value: 'owner', label: 'Proprietário(a)' },
+  { value: 'administrator', label: 'Administrador(a)' },
+  { value: 'manager', label: 'Gerente' },
+  { value: 'reception', label: 'Recepção' },
+  { value: 'barber', label: 'Profissional' },
+  { value: 'financial', label: 'Financeiro' },
+]
+
+const visualRoleStorageKey = 'barber_saas_visual_role'
+
 const allRoles: UserRole[] = [
   'owner',
   'administrator',
@@ -80,12 +91,21 @@ function normalizeRole(role: string | null | undefined): UserRole {
   const normalized = String(role || 'reception').toLowerCase()
 
   if (normalized === 'owner') return 'owner'
+  if (normalized === 'proprietario') return 'owner'
+  if (normalized === 'proprietário') return 'owner'
   if (normalized === 'admin') return 'administrator'
   if (normalized === 'administrator') return 'administrator'
+  if (normalized === 'administrador') return 'administrator'
   if (normalized === 'manager') return 'manager'
+  if (normalized === 'gerente') return 'manager'
   if (normalized === 'reception') return 'reception'
+  if (normalized === 'recepcao') return 'reception'
+  if (normalized === 'recepção') return 'reception'
   if (normalized === 'barber') return 'barber'
+  if (normalized === 'professional') return 'barber'
+  if (normalized === 'profissional') return 'barber'
   if (normalized === 'financial') return 'financial'
+  if (normalized === 'financeiro') return 'financial'
 
   return 'reception'
 }
@@ -100,7 +120,9 @@ export default function DashboardLayout({
 
   const [companyName, setCompanyName] = useState('Barber SaaS')
   const [logoUrl, setLogoUrl] = useState('')
+  const [realUserRole, setRealUserRole] = useState<UserRole>('reception')
   const [userRole, setUserRole] = useState<UserRole>('reception')
+  const [visualRole, setVisualRole] = useState<UserRole | ''>('')
   const [loadingPermissions, setLoadingPermissions] = useState(true)
 
   useEffect(() => {
@@ -108,6 +130,10 @@ export default function DashboardLayout({
   }, [])
 
   const allowedMenuItems = useMemo(() => {
+    if (userRole === 'owner' || userRole === 'administrator') {
+      return menuItems
+    }
+
     return menuItems.filter((item) => item.roles.includes(userRole))
   }, [userRole])
 
@@ -115,7 +141,9 @@ export default function DashboardLayout({
     if (loadingPermissions) return
 
     const currentPageAllowed = menuItems.some(
-      (item) => item.href === pathname && item.roles.includes(userRole)
+      (item) =>
+        (pathname === item.href || pathname.startsWith(`${item.href}/`)) &&
+        item.roles.includes(userRole)
     )
 
     const isDashboardRoot = pathname === '/dashboard'
@@ -130,7 +158,11 @@ export default function DashboardLayout({
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
+    if (!user) {
+      setLoadingPermissions(false)
+      router.push('/login')
+      return
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -138,9 +170,24 @@ export default function DashboardLayout({
       .eq('id', user.id)
       .single()
 
-    if (!profile?.company_id) return
+    if (!profile?.company_id) {
+      setLoadingPermissions(false)
+      return
+    }
 
-    setUserRole(normalizeRole(profile.role))
+    const normalizedRole = normalizeRole(profile.role)
+    const savedVisualRole = window.localStorage.getItem(visualRoleStorageKey)
+
+    setRealUserRole(normalizedRole)
+
+    if (savedVisualRole) {
+      const normalizedVisualRole = normalizeRole(savedVisualRole)
+
+      setVisualRole(normalizedVisualRole)
+      setUserRole(normalizedVisualRole)
+    } else {
+      setUserRole(normalizedRole)
+    }
 
     const { data: settings } = await supabase
       .from('company_settings')
@@ -157,6 +204,21 @@ export default function DashboardLayout({
     }
 
     setLoadingPermissions(false)
+  }
+
+  function handleVisualRoleChange(nextRole: UserRole | '') {
+    if (!nextRole || nextRole === realUserRole) {
+      window.localStorage.removeItem(visualRoleStorageKey)
+      setVisualRole('')
+      setUserRole(realUserRole)
+      router.push('/dashboard')
+      return
+    }
+
+    setVisualRole(nextRole)
+    window.localStorage.setItem(visualRoleStorageKey, nextRole)
+    setUserRole(nextRole)
+    router.push('/dashboard')
   }
 
   async function handleLogout() {
@@ -184,12 +246,57 @@ export default function DashboardLayout({
 
           <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
             <p className="text-xs uppercase tracking-wide text-zinc-500">
-              Permissão atual
+              Permissão real
             </p>
 
-            <strong className="mt-1 block text-sm capitalize">
-              {userRole}
+            <strong className="mt-1 block text-sm">
+              {userRoleOptions.find((item) => item.value === realUserRole)
+                ?.label || realUserRole}
             </strong>
+
+            {visualRole && (
+              <p className="mt-2 rounded-lg bg-yellow-900/40 px-3 py-2 text-xs font-bold text-yellow-300">
+                Visualizando como{' '}
+                {userRoleOptions.find((item) => item.value === visualRole)
+                  ?.label || visualRole}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-3 rounded-xl border border-blue-900 bg-blue-950/30 p-3">
+            <label className="text-xs uppercase tracking-wide text-blue-300">
+              Visualizar como
+            </label>
+
+            <select
+              value={visualRole}
+              onChange={(event) =>
+                handleVisualRoleChange(event.target.value as UserRole | '')
+              }
+              className="mt-2 w-full rounded-lg border border-blue-900 bg-black p-2 text-sm text-white outline-none"
+            >
+              <option value="">Permissão real</option>
+
+              {userRoleOptions.map((roleOption) => (
+                <option key={roleOption.value} value={roleOption.value}>
+                  {roleOption.label}
+                </option>
+              ))}
+            </select>
+
+            <p className="mt-2 text-xs text-blue-200">
+              Modo temporário: altera apenas a visualização deste navegador.
+            </p>
+
+            {visualRole && (
+              <button
+                type="button"
+                onClick={() => handleVisualRoleChange('')}
+                className="mt-3 w-full rounded-lg bg-white p-2 text-sm font-bold text-black transition hover:bg-zinc-200"
+              >
+                Voltar para {userRoleOptions.find((item) => item.value === realUserRole)?.label || 'permissão real'}
+              </button>
+            )}
           </div>
         </div>
 
