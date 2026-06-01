@@ -11,6 +11,8 @@ type Client = {
 type Service = {
   id: string
   name: string
+  price: number | null
+  duration_minutes: number | null
 }
 
 type Professional = {
@@ -52,6 +54,7 @@ type ProfessionalAvailability = {
 
 export default function AgendaPage() {
   const [companyId, setCompanyId] = useState('')
+  const [serviceIds, setServiceIds] = useState<string[]>([])
 
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
@@ -66,7 +69,6 @@ export default function AgendaPage() {
   const [search, setSearch] = useState('')
 
   const [clientId, setClientId] = useState('')
-  const [serviceId, setServiceId] = useState('')
   const [professionalId, setProfessionalId] = useState('')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
@@ -123,7 +125,7 @@ export default function AgendaPage() {
   useEffect(() => {
     loadOccupiedTimes()
     loadProfessionalAvailability()
-  }, [date, professionalId, serviceId, intervalMinutes])
+  }, [date, professionalId, serviceIds, intervalMinutes])
 
   useEffect(() => {
     loadVisualProfessionalBlock()
@@ -496,7 +498,7 @@ export default function AgendaPage() {
 
     const { data: servicesData } = await supabase
       .from('services')
-      .select('id, name')
+      .select('id, name, price, duration_minutes')
       .eq('company_id', profile.company_id)
       .eq('active', true)
 
@@ -751,8 +753,52 @@ export default function AgendaPage() {
     loadData()
   }
 
+
+  function getSelectedServices() {
+    return services.filter((service) => serviceIds.includes(service.id))
+  }
+
+  function getTotalSelectedDurationMinutes() {
+    return getSelectedServices().reduce(
+      (sum, service) => sum + Number(service.duration_minutes || intervalMinutes),
+      0
+    )
+  }
+
+  function getTotalSelectedPrice() {
+    return getSelectedServices().reduce(
+      (sum, service) => sum + Number(service.price || 0),
+      0
+    )
+  }
+
+  function formatTimeFromMinutes(totalMinutes: number) {
+    const hour = Math.floor(totalMinutes / 60)
+    const minute = totalMinutes % 60
+
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+  }
+
+  function selectedServicesFitInSchedule(startTime: string) {
+    const totalDuration = getTotalSelectedDurationMinutes()
+
+    if (!totalDuration) return false
+
+    const startMinutes = timeToMinutes(startTime)
+    const endMinutes = startMinutes + totalDuration
+    const closingMinutes = timeToMinutes(closingTime)
+
+    return endMinutes <= closingMinutes
+  }
+
   async function createAppointment() {
-    if (!clientId || !serviceId || !professionalId || !date || !time) {
+    if (
+      !clientId ||
+      serviceIds.length === 0 ||
+      !professionalId ||
+      !date ||
+      !time
+    ) {
       alert('Preencha cliente, serviço, profissional, data e horário.')
       return
     }
@@ -787,16 +833,36 @@ export default function AgendaPage() {
       return
     }
 
-    const { error } = await supabase.from('appointments').insert({
-      company_id: companyId,
-      client_id: clientId,
-      service_id: serviceId,
-      professional_id: professionalId,
-      appointment_date: date,
-      appointment_time: time,
-      notes,
-      status: 'scheduled',
+    if (!selectedServicesFitInSchedule(time)) {
+      alert('Não há tempo livre suficiente para todos os serviços selecionados.')
+      return
+    }
+
+    const selectedServices = getSelectedServices()
+    let accumulatedMinutes = 0
+    const startMinutes = timeToMinutes(time)
+
+    const appointmentsToInsert = selectedServices.map((service) => {
+      const appointmentStartMinutes = startMinutes + accumulatedMinutes
+      const appointmentTime = formatTimeFromMinutes(appointmentStartMinutes)
+
+      accumulatedMinutes += Number(service.duration_minutes || intervalMinutes)
+
+      return {
+        company_id: companyId,
+        client_id: clientId,
+        service_id: service.id,
+        professional_id: professionalId,
+        appointment_date: date,
+        appointment_time: appointmentTime,
+        notes,
+        status: 'scheduled',
+      }
     })
+
+    const { error } = await supabase
+      .from('appointments')
+      .insert(appointmentsToInsert)
 
     if (error) {
       if (error.code === '23505') {
@@ -809,7 +875,7 @@ export default function AgendaPage() {
     }
 
     setClientId('')
-    setServiceId('')
+    setServiceIds([])
     setProfessionalId('')
     setDate('')
     setTime('')
@@ -1208,22 +1274,67 @@ export default function AgendaPage() {
           ))}
         </select>
 
-        <select
-          className="rounded-lg bg-zinc-800 p-3"
-          value={serviceId}
-          onChange={(e) => {
-            setServiceId(e.target.value)
-            setTime('')
-          }}
-        >
-          <option value="">Selecione um serviço</option>
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
+            Serviços
+          </label>
 
-          {services.map((service) => (
-            <option key={service.id} value={service.id}>
-              {service.name}
-            </option>
-          ))}
-        </select>
+          <div className="grid gap-2 md:grid-cols-2">
+            {services.map((service) => {
+              const checked = serviceIds.includes(service.id)
+
+              return (
+                <button
+                  key={service.id}
+                  type="button"
+                  onClick={() => {
+                    setServiceIds((currentIds) =>
+                      currentIds.includes(service.id)
+                        ? currentIds.filter((id) => id !== service.id)
+                        : [...currentIds, service.id]
+                    )
+
+                    setTime('')
+                  }}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    checked
+                      ? 'border-white bg-zinc-700'
+                      : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold">{service.name}</p>
+
+                      <p className="mt-1 text-sm text-zinc-400">
+                        {service.duration_minutes || intervalMinutes} min · R${' '}
+                        {Number(service.price || 0).toFixed(2)}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-md border text-sm font-bold ${
+                        checked
+                          ? 'border-white bg-white text-black'
+                          : 'border-zinc-500 text-transparent'
+                      }`}
+                    >
+                      ✓
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {serviceIds.length > 0 && (
+            <p className="mt-3 rounded-xl bg-zinc-800 p-3 text-sm text-zinc-300">
+              {serviceIds.length} serviço(s) selecionado(s) · duração estimada:{' '}
+              {getTotalSelectedDurationMinutes()} min · total: R${' '}
+              {getTotalSelectedPrice().toFixed(2)}
+            </p>
+          )}
+        </div>
 
         <select
           className="rounded-lg bg-zinc-800 p-3"
@@ -1279,27 +1390,26 @@ export default function AgendaPage() {
                 professionalAvailability && !professionalAvailability.available
               const isPastTime =
                 date === today && availableTime < currentTime
-
               return (
                 <button
                   key={availableTime}
                   type="button"
-                  disabled={Boolean(isOccupied || isPastTime || isPause || isUnavailableDay || isBlockedDay)}
+                  disabled={Boolean(isPastTime)}
                   onClick={() => setTime(availableTime)}
                   className={`rounded-xl p-3 text-sm font-medium transition ${
-                    isBlockedDay
-                      ? 'cursor-not-allowed bg-orange-950 text-orange-300 opacity-70'
-                      : isUnavailableDay
+                    time === availableTime
+                      ? 'bg-white text-black'
+                      : isPastTime
                         ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
-                        : isOccupied
-                        ? 'cursor-not-allowed bg-red-900 text-red-300 opacity-60'
-                        : isPause
-                          ? 'cursor-not-allowed bg-yellow-900 text-yellow-300 opacity-70'
-                          : isPastTime
-                            ? 'cursor-not-allowed bg-zinc-950 text-zinc-600 opacity-50'
-                            : time === availableTime
-                              ? 'bg-white text-black'
-                              : 'bg-zinc-800 hover:bg-zinc-700'
+                        : isBlockedDay
+                          ? 'bg-orange-950 text-orange-300 hover:bg-orange-900'
+                          : isUnavailableDay
+                            ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                            : isOccupied
+                              ? 'bg-red-900 text-red-300 hover:bg-red-800'
+                              : isPause
+                                ? 'bg-yellow-900 text-yellow-300 hover:bg-yellow-800'
+                                : 'bg-zinc-800 hover:bg-zinc-700'
                   }`}
                 >
                   {availableTime}
