@@ -44,9 +44,13 @@ type Professional = {
   active: boolean
   photo_url: string | null
   commission_percentage: number | null
+  monthly_goal: number | null
   user_access_role?: UserAccessRole | null
   monthly_revenue?: number
   monthly_commission?: number
+  monthly_appointments?: number
+  goal_percentage?: number
+  ranking_position?: number
   commission_payment_status?: 'pending' | 'released' | 'paid'
   commission_payment_date?: string | null
 }
@@ -129,6 +133,7 @@ export default function ProfessionalsPage() {
   const [userAccessRole, setUserAccessRole] =
     useState<UserAccessRole>('barber')
   const [commissionPercentage, setCommissionPercentage] = useState('40')
+  const [monthlyGoal, setMonthlyGoal] = useState('0')
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
@@ -141,6 +146,7 @@ export default function ProfessionalsPage() {
   const [editUserAccessRole, setEditUserAccessRole] =
     useState<UserAccessRole>('barber')
   const [editCommissionPercentage, setEditCommissionPercentage] = useState('40')
+  const [editMonthlyGoal, setEditMonthlyGoal] = useState('0')
   const [payingCommissionId, setPayingCommissionId] = useState('')
   const [savingPermissionId, setSavingPermissionId] = useState('')
   const [monthReference, setMonthReference] = useState(getCurrentMonthReference())
@@ -232,11 +238,47 @@ export default function ProfessionalsPage() {
       )
   }, [professionals])
 
+
+  const totalMonthlyAppointments = useMemo(() => {
+    return professionals.reduce(
+      (sum, professional) => sum + Number(professional.monthly_appointments || 0),
+      0
+    )
+  }, [professionals])
+
+  const totalMonthlyGoals = useMemo(() => {
+    return professionals.reduce(
+      (sum, professional) => sum + Number(professional.monthly_goal || 0),
+      0
+    )
+  }, [professionals])
+
+  const totalGoalPercentage = useMemo(() => {
+    if (totalMonthlyGoals <= 0) return 0
+
+    return Math.min(100, (totalProduced / totalMonthlyGoals) * 100)
+  }, [totalProduced, totalMonthlyGoals])
+
+  const rankedProfessionals = useMemo(() => {
+    return [...professionals].sort((a, b) => {
+      const revenueDifference =
+        Number(b.monthly_revenue || 0) - Number(a.monthly_revenue || 0)
+
+      if (revenueDifference !== 0) return revenueDifference
+
+      return a.name.localeCompare(b.name)
+    })
+  }, [professionals])
+
   function formatCurrency(value: number) {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
     }).format(value)
+  }
+
+  function formatPercentage(value: number) {
+    return `${Number(value || 0).toFixed(1)}%`
   }
 
   function getCurrentMonthStartDate() {
@@ -325,6 +367,28 @@ export default function ProfessionalsPage() {
           <p><strong>Função:</strong> ${professional.role || '-'}</p>
           <p><strong>Emitido em:</strong> ${today}</p>
           <p><strong>Mês de referência:</strong> ${monthReference}</p>
+          <p><strong>Ranking:</strong> ${professional.ranking_position || '-'}º lugar</p>
+
+          <div class="card">
+            <div class="label">Atendimentos no mês</div>
+            <div class="value">
+              ${professional.monthly_appointments || 0}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Meta mensal</div>
+            <div class="value">
+              ${formatCurrency(professional.monthly_goal || 0)}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Meta atingida</div>
+            <div class="value">
+              ${formatPercentage(professional.goal_percentage || 0)}
+            </div>
+          </div>
 
           <div class="card">
             <div class="label">Comissão (%)</div>
@@ -414,7 +478,7 @@ export default function ProfessionalsPage() {
     const { data: professionalsData, error: professionalsError } = await supabase
       .from('professionals')
       .select(
-        'id, name, phone, email, role, active, photo_url, commission_percentage'
+        'id, name, phone, email, role, active, photo_url, commission_percentage, monthly_goal'
       )
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
@@ -499,6 +563,7 @@ export default function ProfessionalsPage() {
     )
 
     const revenueByProfessional = new Map<string, number>()
+    const appointmentsByProfessional = new Map<string, number>()
 
     ;(serviceIncomeTransactionsData || []).forEach((transaction) => {
       if (!transaction.professional_id) return
@@ -507,6 +572,11 @@ export default function ProfessionalsPage() {
         transaction.professional_id,
         (revenueByProfessional.get(transaction.professional_id) || 0) +
           Number(transaction.amount || 0)
+      )
+
+      appointmentsByProfessional.set(
+        transaction.professional_id,
+        (appointmentsByProfessional.get(transaction.professional_id) || 0) + 1
       )
     })
 
@@ -520,12 +590,38 @@ export default function ProfessionalsPage() {
         item.professional_id,
         (revenueByProfessional.get(item.professional_id) || 0) + itemTotal
       )
+
+      appointmentsByProfessional.set(
+        item.professional_id,
+        (appointmentsByProfessional.get(item.professional_id) || 0) +
+          Number(item.quantity || 1)
+      )
     })
+
+    const rankingByProfessional = new Map<string, number>()
+
+    ;[...(professionalsData || [])]
+      .sort((a, b) => {
+        const revenueDifference =
+          Number(revenueByProfessional.get(b.id) || 0) -
+          Number(revenueByProfessional.get(a.id) || 0)
+
+        if (revenueDifference !== 0) return revenueDifference
+
+        return a.name.localeCompare(b.name)
+      })
+      .forEach((professional, index) => {
+        rankingByProfessional.set(professional.id, index + 1)
+      })
 
     const normalizedProfessionals = (professionalsData || []).map(
       (professional) => {
         const percentage = Number(professional.commission_percentage || 0)
+        const monthlyGoal = Number(professional.monthly_goal || 0)
         const monthlyRevenue = revenueByProfessional.get(professional.id) || 0
+        const monthlyAppointments = appointmentsByProfessional.get(professional.id) || 0
+        const goalPercentage =
+          monthlyGoal > 0 ? Math.min(100, (monthlyRevenue / monthlyGoal) * 100) : 0
 
         const payment = commissionPaymentsMap.get(professional.id)
         const linkedProfile = professional.email
@@ -535,11 +631,15 @@ export default function ProfessionalsPage() {
         return {
           ...professional,
           commission_percentage: percentage,
+          monthly_goal: monthlyGoal,
           user_access_role: linkedProfile
             ? normalizeUserAccessRole(linkedProfile.role)
             : null,
           monthly_revenue: monthlyRevenue,
           monthly_commission: (monthlyRevenue * percentage) / 100,
+          monthly_appointments: monthlyAppointments,
+          goal_percentage: goalPercentage,
+          ranking_position: rankingByProfessional.get(professional.id) || 0,
           commission_payment_status:
             payment?.status === 'paid'
               ? 'paid'
@@ -595,6 +695,7 @@ export default function ProfessionalsPage() {
       email: email.trim(),
       role: role.trim(),
       commission_percentage: Number(commissionPercentage || 0),
+      monthly_goal: Number(monthlyGoal || 0),
       photo_url: photoUrl || null,
       active: true,
     })
@@ -614,6 +715,7 @@ export default function ProfessionalsPage() {
     setRole('')
     setUserAccessRole('barber')
     setCommissionPercentage('40')
+    setMonthlyGoal('0')
     setPhotoFile(null)
     setPhotoPreview('')
 
@@ -630,6 +732,7 @@ export default function ProfessionalsPage() {
       normalizeUserAccessRole(professional.user_access_role || 'barber')
     )
     setEditCommissionPercentage(String(professional.commission_percentage ?? 0))
+    setEditMonthlyGoal(String(professional.monthly_goal ?? 0))
     setPhotoPreview(professional.photo_url || '')
   }
 
@@ -641,6 +744,7 @@ export default function ProfessionalsPage() {
     setEditRole('')
     setEditUserAccessRole('barber')
     setEditCommissionPercentage('40')
+    setEditMonthlyGoal('0')
     setPhotoFile(null)
     setPhotoPreview('')
   }
@@ -665,6 +769,7 @@ export default function ProfessionalsPage() {
         email: editEmail.trim(),
         role: editRole.trim(),
         commission_percentage: Number(editCommissionPercentage || 0),
+        monthly_goal: Number(editMonthlyGoal || 0),
         photo_url: photoUrl || null,
       })
       .eq('id', professionalId)
@@ -1292,63 +1397,83 @@ export default function ProfessionalsPage() {
         </p>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
-          <p className="text-sm text-green-300">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-green-300">
             Total produzido no mês
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-3 block text-3xl text-white">
             {formatCurrency(totalProduced)}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
-          <p className="text-sm text-blue-300">
+        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-purple-300">
+            Atendimentos no mês
+          </p>
+
+          <strong className="mt-3 block text-3xl text-white">
+            {totalMonthlyAppointments}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-indigo-900 bg-indigo-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-indigo-300">
+            Meta atingida
+          </p>
+
+          <strong className="mt-3 block text-3xl text-white">
+            {formatPercentage(totalGoalPercentage)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-blue-300">
             Comissão a pagar
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-3 block text-3xl text-white">
             {formatCurrency(totalCommissionToPay)}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-6">
-          <p className="text-sm text-yellow-300">
+        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-yellow-300">
             Saldo da empresa após comissão
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-3 block text-3xl text-white">
             {formatCurrency(companyBalanceAfterCommission)}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-6">
-          <p className="text-sm text-cyan-300">
+        <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-cyan-300">
             Comissão paga
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-3 block text-3xl text-white">
             {formatCurrency(totalCommissionPaid)}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
-          <p className="text-sm text-blue-300">
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-blue-300">
             Comissão liberada
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-3 block text-3xl text-white">
             {formatCurrency(totalCommissionReleased)}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-red-900 bg-red-950/30 p-6">
-          <p className="text-sm text-red-300">
+        <div className="rounded-2xl border border-red-900 bg-red-950/30 p-7">
+          <p className="min-h-[40px] text-sm leading-5 text-red-300">
             Comissão pendente
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-3 block text-3xl text-white">
             {formatCurrency(totalCommissionPending)}
           </strong>
         </div>
@@ -1428,6 +1553,22 @@ export default function ProfessionalsPage() {
 
         <div>
           <label className="mb-2 block text-sm text-zinc-400">
+            Meta mensal de produção (R$)
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Ex: 5000"
+            className="w-full rounded-lg bg-zinc-800 p-3"
+            value={monthlyGoal}
+            onChange={(e) => setMonthlyGoal(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
             Foto do profissional
           </label>
 
@@ -1483,6 +1624,40 @@ export default function ProfessionalsPage() {
         <p className="mt-2 text-sm text-blue-100">
           Pendente: comissão calculada automaticamente. Liberada: conferida e pronta para pagamento. Pago: pagamento confirmado com data registrada.
         </p>
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <h2 className="text-xl font-bold text-white">
+          Ranking do mês
+        </h2>
+
+        <p className="mt-2 text-sm text-zinc-400">
+          Ordenado pelo total produzido no mês selecionado.
+        </p>
+
+        <div className="mt-5 space-y-3">
+          {rankedProfessionals.slice(0, 5).map((professional, index) => (
+            <div
+              key={`ranking-${professional.id}`}
+              className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[80px_1fr_auto] md:items-center"
+            >
+              <strong className="text-2xl text-yellow-400">
+                {index + 1}º
+              </strong>
+
+              <div>
+                <p className="font-bold text-white">{professional.name}</p>
+                <p className="text-sm text-zinc-500">
+                  {professional.monthly_appointments || 0} atendimento(s) · meta: {formatPercentage(professional.goal_percentage || 0)}
+                </p>
+              </div>
+
+              <strong className="text-green-400">
+                {formatCurrency(professional.monthly_revenue || 0)}
+              </strong>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="mt-8 space-y-3">
@@ -1569,6 +1744,21 @@ export default function ProfessionalsPage() {
                       className="w-full rounded-lg bg-zinc-800 p-3"
                       value={editCommissionPercentage}
                       onChange={(e) => setEditCommissionPercentage(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
+                      Meta mensal de produção (R$)
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full rounded-lg bg-zinc-800 p-3"
+                      value={editMonthlyGoal}
+                      onChange={(e) => setEditMonthlyGoal(e.target.value)}
                     />
                   </div>
 
@@ -1664,7 +1854,49 @@ export default function ProfessionalsPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-right md:min-w-[280px]">
+                    <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-right md:min-w-[320px]">
+                      <div>
+                        <p className="text-sm text-zinc-500">Ranking</p>
+                        <strong className="text-xl text-yellow-400">
+                          {professional.ranking_position || '-'}º lugar
+                        </strong>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-zinc-500">Atendimentos</p>
+                        <strong className="text-xl text-white">
+                          {professional.monthly_appointments || 0}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-zinc-500">Meta mensal</p>
+                        <strong className="text-indigo-400">
+                          {formatCurrency(professional.monthly_goal || 0)}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <div className="mb-2 flex items-center justify-between gap-3 text-sm text-zinc-500">
+                          <span>Meta atingida</span>
+                          <strong className="text-indigo-300">
+                            {formatPercentage(professional.goal_percentage || 0)}
+                          </strong>
+                        </div>
+
+                        <div className="h-3 overflow-hidden rounded-full bg-zinc-800">
+                          <div
+                            className="h-full rounded-full bg-indigo-500"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Number(professional.goal_percentage || 0)
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
                       <div>
                         <p className="text-sm text-zinc-500">Comissão</p>
                         <strong className="text-xl text-yellow-400">
@@ -1720,7 +1952,7 @@ export default function ProfessionalsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       onClick={() => startEditing(professional)}
                       className="rounded-lg bg-white px-4 py-2 font-bold text-black"
