@@ -26,6 +26,9 @@ type Comanda = {
   discount?: number | null
   discount_type?: 'amount' | 'percentage' | null
   discount_value?: number | null
+  surcharge?: number | null
+  surcharge_type?: 'amount' | 'percentage' | null
+  surcharge_value?: number | null
   notes?: string | null
   created_at: string
   closed_at?: string | null
@@ -67,10 +70,13 @@ export default function ComandasPage() {
   const [productPrices, setProductPrices] = useState<Record<string, string>>({})
   const [discountsByComanda, setDiscountsByComanda] = useState<Record<string, string>>({})
   const [discountTypesByComanda, setDiscountTypesByComanda] = useState<Record<string, 'amount' | 'percentage'>>({})
+  const [surchargesByComanda, setSurchargesByComanda] = useState<Record<string, string>>({})
+  const [surchargeTypesByComanda, setSurchargeTypesByComanda] = useState<Record<string, 'amount' | 'percentage'>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
   const [savingDiscount, setSavingDiscount] = useState<Record<string, boolean>>({})
+  const [savingSurcharge, setSavingSurcharge] = useState<Record<string, boolean>>({})
   const [savingPriority, setSavingPriority] = useState<Record<string, boolean>>({})
   const [, forceClock] = useState(0)
 
@@ -239,8 +245,41 @@ useEffect(() => {
     )
   }
 
+  function getComandaSurchargeType(comanda: Comanda) {
+    return comanda.surcharge_type === 'percentage' ? 'percentage' : 'amount'
+  }
+
+  function getComandaSurchargeValue(comanda: Comanda) {
+    return Number(comanda.surcharge_value ?? comanda.surcharge ?? 0)
+  }
+
+  function calculateSurchargeAmount(
+    subtotal: number,
+    surchargeType: 'amount' | 'percentage',
+    surchargeValue: number
+  ) {
+    if (surchargeValue <= 0 || subtotal <= 0) return 0
+
+    if (surchargeType === 'percentage') {
+      return Number(((subtotal * surchargeValue) / 100).toFixed(2))
+    }
+
+    return Number(surchargeValue.toFixed(2))
+  }
+
+  function getComandaSurcharge(comanda: Comanda) {
+    return calculateSurchargeAmount(
+      Number(comanda.total || 0),
+      getComandaSurchargeType(comanda),
+      getComandaSurchargeValue(comanda)
+    )
+  }
+
   function getComandaFinalTotal(comanda: Comanda) {
-    return Math.max(Number(comanda.total || 0) - getComandaDiscount(comanda), 0)
+    return Math.max(
+      Number(comanda.total || 0) - getComandaDiscount(comanda) + getComandaSurcharge(comanda),
+      0
+    )
   }
 
   async function loadData() {
@@ -282,7 +321,7 @@ useEffect(() => {
     const { data: comandasData } = await supabase
       .from('comandas')
       .select(
-        'id, client_id, status, total, discount, discount_type, discount_value, notes, is_priority, created_at, closed_at, cancelled_at'
+        'id, client_id, status, total, discount, discount_type, discount_value, surcharge, surcharge_type, surcharge_value, notes, is_priority, created_at, closed_at, cancelled_at'
       )
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
@@ -341,6 +380,14 @@ useEffect(() => {
         discount_value: Number(
           (comanda as any).discount_value ?? (comanda as any).discount ?? 0
         ),
+        surcharge: Number((comanda as any).surcharge || 0),
+        surcharge_type:
+          (comanda as any).surcharge_type === 'percentage'
+            ? 'percentage'
+            : 'amount',
+        surcharge_value: Number(
+          (comanda as any).surcharge_value ?? (comanda as any).surcharge ?? 0
+        ),
         is_priority: Boolean(comanda.is_priority),
         client_name: comanda.client_id
           ? clientsMap.get(comanda.client_id) || 'Cliente não informado'
@@ -364,16 +411,22 @@ useEffect(() => {
     const initialEditingNotes: Record<string, string> = {}
     const initialDiscounts: Record<string, string> = {}
     const initialDiscountTypes: Record<string, 'amount' | 'percentage'> = {}
+    const initialSurcharges: Record<string, string> = {}
+    const initialSurchargeTypes: Record<string, 'amount' | 'percentage'> = {}
 
     normalizedComandas.forEach((comanda) => {
       initialEditingNotes[comanda.id] = comanda.notes || ''
       initialDiscounts[comanda.id] = String(getComandaDiscountValue(comanda))
       initialDiscountTypes[comanda.id] = getComandaDiscountType(comanda)
+      initialSurcharges[comanda.id] = String(getComandaSurchargeValue(comanda))
+      initialSurchargeTypes[comanda.id] = getComandaSurchargeType(comanda)
     })
 
     setEditingNotes(initialEditingNotes)
     setDiscountsByComanda(initialDiscounts)
     setDiscountTypesByComanda(initialDiscountTypes)
+    setSurchargesByComanda(initialSurcharges)
+    setSurchargeTypesByComanda(initialSurchargeTypes)
   }
 
   async function saveNotes(comandaId: string) {
@@ -462,6 +515,55 @@ useEffect(() => {
     await loadData()
   }
 
+
+  async function saveSurcharge(comanda: Comanda) {
+    if (comanda.status !== 'open') {
+      alert('Somente comandas abertas podem receber acréscimo.')
+      return
+    }
+
+    const surchargeType = surchargeTypesByComanda[comanda.id] || 'amount'
+    const surchargeValue = Number(surchargesByComanda[comanda.id] || 0)
+    const subtotal = Number(comanda.total || 0)
+
+    if (surchargeValue < 0) {
+      alert('O acréscimo não pode ser negativo.')
+      return
+    }
+
+    const surchargeAmount = calculateSurchargeAmount(
+      subtotal,
+      surchargeType,
+      surchargeValue
+    )
+
+    setSavingSurcharge((current) => ({
+      ...current,
+      [comanda.id]: true,
+    }))
+
+    const { error } = await supabase
+      .from('comandas')
+      .update({
+        surcharge: surchargeAmount,
+        surcharge_type: surchargeType,
+        surcharge_value: surchargeValue,
+      })
+      .eq('id', comanda.id)
+
+    setSavingSurcharge((current) => ({
+      ...current,
+      [comanda.id]: false,
+    }))
+
+    if (error) {
+      alert(`Erro ao salvar acréscimo: ${error.message}`)
+      return
+    }
+
+    await loadData()
+  }
+
   async function togglePriority(comanda: Comanda) {
     setSavingPriority((current) => ({
       ...current,
@@ -506,6 +608,9 @@ useEffect(() => {
       discount: 0,
       discount_type: 'amount',
       discount_value: 0,
+      surcharge: 0,
+      surcharge_type: 'amount',
+      surcharge_value: 0,
       notes: notes || null,
       is_priority: false,
     })
@@ -896,6 +1001,12 @@ useEffect(() => {
               </p>
             )}
 
+            {getComandaSurcharge(comanda) > 0 && (
+              <p className="mt-1 text-xs text-blue-300">
+                Acrésc. {getComandaSurchargeType(comanda) === 'percentage' ? `${getComandaSurchargeValue(comanda)}%` : `R$ ${getComandaSurcharge(comanda).toFixed(2)}`}
+              </p>
+            )}
+
             <p className="mt-1 text-sm text-zinc-400">
               {itemsCount} item(ns)
             </p>
@@ -1172,8 +1283,64 @@ useEffect(() => {
             </div>
           </div>
 
+          <div className="mt-5 rounded-2xl border border-blue-900 bg-blue-950/20 p-5">
+            <div className="grid gap-4 md:grid-cols-[1fr_180px_220px_auto]">
+              <div>
+                <p className="text-sm uppercase tracking-wide text-blue-300">
+                  Acréscimo
+                </p>
+
+                <p className="mt-1 text-xs text-zinc-500">
+                  Use para taxa extra, atendimento VIP ou serviço adicional.
+                </p>
+              </div>
+
+              <select
+                disabled={comanda.status !== 'open'}
+                value={surchargeTypesByComanda[comanda.id] || 'amount'}
+                onChange={(event) =>
+                  setSurchargeTypesByComanda((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value as 'amount' | 'percentage',
+                  }))
+                }
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none disabled:opacity-50"
+              >
+                <option value="amount">Valor (R$)</option>
+                <option value="percentage">Percentual (%)</option>
+              </select>
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                disabled={comanda.status !== 'open'}
+                value={surchargesByComanda[comanda.id] || ''}
+                onChange={(event) =>
+                  setSurchargesByComanda((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value,
+                  }))
+                }
+                placeholder={(surchargeTypesByComanda[comanda.id] || 'amount') === 'percentage' ? 'Ex: 10' : 'Ex: 10.00'}
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none disabled:opacity-50"
+              />
+
+              {comanda.status === 'open' && (
+                <button
+                  type="button"
+                  onClick={() => saveSurcharge(comanda)}
+                  disabled={savingSurcharge[comanda.id]}
+                  className="rounded-xl bg-blue-500 px-5 py-3 font-bold text-white transition hover:bg-blue-400 disabled:opacity-50"
+                >
+                  {savingSurcharge[comanda.id] ? 'Salvando...' : 'Aplicar acréscimo'}
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="mt-5 rounded-2xl border border-green-900 bg-green-950/30 p-5">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <p className="text-sm uppercase tracking-wide text-zinc-400">
                   Subtotal
@@ -1196,6 +1363,22 @@ useEffect(() => {
                 {getComandaDiscountType(comanda) === 'percentage' && (
                   <p className="mt-1 text-xs text-red-200">
                     {getComandaDiscountValue(comanda)}% aplicado
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <p className="text-sm uppercase tracking-wide text-blue-300">
+                  Acréscimo
+                </p>
+
+                <strong className="mt-1 block text-2xl font-bold text-blue-300">
+                  R$ {getComandaSurcharge(comanda).toFixed(2)}
+                </strong>
+
+                {getComandaSurchargeType(comanda) === 'percentage' && (
+                  <p className="mt-1 text-xs text-blue-200">
+                    {getComandaSurchargeValue(comanda)}% aplicado
                   </p>
                 )}
               </div>
