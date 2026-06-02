@@ -621,6 +621,22 @@ export default function AgendaPage() {
     return groups
   }, [filteredAppointments, services, intervalMinutes])
 
+  const selectedAppointmentGroup = useMemo(() => {
+    if (!selectedAppointment) {
+      return null
+    }
+
+    const allGroups = [...filteredAppointmentGroups, ...visualAppointmentGroups]
+
+    return (
+      allGroups.find((group) =>
+        group.appointments.some(
+          (appointment) => appointment.id === selectedAppointment.id
+        )
+      ) || null
+    )
+  }, [selectedAppointment, filteredAppointmentGroups, visualAppointmentGroups])
+
   function getStatusCardClass(status: string) {
     switch (status) {
       case 'completed':
@@ -1226,16 +1242,20 @@ export default function AgendaPage() {
     appointmentId: string,
     selectedMethod = 'cash'
   ) {
-    const { data: existingTransaction } = await supabase
+    const { data: existingIncomeTransaction } = await supabase
       .from('financial_transactions')
       .select('id')
       .eq('appointment_id', appointmentId)
       .eq('type', 'income')
       .maybeSingle()
 
-    if (existingTransaction) {
-      return
-    }
+    const { data: existingCommissionTransaction } = await supabase
+      .from('financial_transactions')
+      .select('id')
+      .eq('appointment_id', appointmentId)
+      .eq('type', 'expense')
+      .eq('category', 'commission')
+      .maybeSingle()
 
     const { data: fullAppointment } = await supabase
       .from('appointments')
@@ -1249,6 +1269,10 @@ export default function AgendaPage() {
         services (
           name,
           price
+        ),
+        professionals (
+          name,
+          commission_percentage
         )
       `)
       .eq('id', appointmentId)
@@ -1262,25 +1286,71 @@ export default function AgendaPage() {
       ? fullAppointment.services[0]
       : fullAppointment.services
 
+    const professionalData = Array.isArray(fullAppointment.professionals)
+      ? fullAppointment.professionals[0]
+      : fullAppointment.professionals
+
     const serviceName = serviceData?.name || 'Serviço'
     const servicePrice = Number(serviceData?.price || 0)
+    const professionalName = professionalData?.name || 'Profissional'
+    const commissionPercentage = Number(
+      professionalData?.commission_percentage || 0
+    )
+    const commissionAmount = Number(
+      ((servicePrice * commissionPercentage) / 100).toFixed(2)
+    )
 
-    await supabase
-      .from('financial_transactions')
-      .insert({
-        company_id: fullAppointment.company_id,
-        appointment_id: fullAppointment.id,
-        professional_id: fullAppointment.professional_id,
-        client_id: fullAppointment.client_id,
-        type: 'income',
-        category: 'service',
-        description: serviceName,
-        amount: servicePrice,
-        payment_method: selectedMethod,
-        status: 'paid',
-        transaction_date: fullAppointment.appointment_date,
-      })
+    if (!existingIncomeTransaction) {
+      const { error: incomeError } = await supabase
+        .from('financial_transactions')
+        .insert({
+          company_id: fullAppointment.company_id,
+          appointment_id: fullAppointment.id,
+          professional_id: fullAppointment.professional_id,
+          client_id: fullAppointment.client_id,
+          type: 'income',
+          category: 'service',
+          description: serviceName,
+          amount: servicePrice,
+          payment_method: selectedMethod,
+          status: 'paid',
+          transaction_date: fullAppointment.appointment_date,
+        })
+
+      if (incomeError) {
+        alert(`Erro ao lançar entrada no financeiro: ${incomeError.message}`)
+        return
+      }
+    }
+
+    if (
+      !existingCommissionTransaction &&
+      fullAppointment.professional_id &&
+      commissionPercentage > 0 &&
+      commissionAmount > 0
+    ) {
+      const { error: commissionError } = await supabase
+        .from('financial_transactions')
+        .insert({
+          company_id: fullAppointment.company_id,
+          appointment_id: fullAppointment.id,
+          professional_id: fullAppointment.professional_id,
+          client_id: fullAppointment.client_id,
+          type: 'expense',
+          category: 'commission',
+          description: `Comissão ${commissionPercentage}% - ${professionalName} - ${serviceName}`,
+          amount: commissionAmount,
+          payment_method: selectedMethod,
+          status: 'paid',
+          transaction_date: fullAppointment.appointment_date,
+        })
+
+      if (commissionError) {
+        alert(`Erro ao lançar comissão automática: ${commissionError.message}`)
+      }
+    }
   }
+
 
   async function updateAppointmentStatus(
     appointmentId: string,
@@ -2211,11 +2281,72 @@ export default function AgendaPage() {
 
             <div className="mt-8 space-y-4">
               <div className="rounded-2xl bg-zinc-800 p-4">
-                <p className="text-sm text-zinc-500">Serviço</p>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-zinc-500">
+                      Serviços
+                    </p>
 
-                <p className="mt-1 text-lg font-bold">
-                  {selectedAppointment.services?.name}
-                </p>
+                    <p className="mt-1 text-lg font-bold">
+                      {selectedAppointmentGroup
+                        ? selectedAppointmentGroup.serviceNames.join(' + ')
+                        : selectedAppointment.services?.name || 'Serviço'}
+                    </p>
+                  </div>
+
+                  {selectedAppointmentGroup &&
+                    selectedAppointmentGroup.appointments.length > 1 && (
+                      <span className="rounded-full bg-purple-900 px-3 py-1 text-xs font-bold text-purple-300">
+                        {selectedAppointmentGroup.appointments.length} serviços
+                      </span>
+                    )}
+                </div>
+
+                {selectedAppointmentGroup && (
+                  <div className="mt-4 space-y-2">
+                    {selectedAppointmentGroup.appointments.map(
+                      (appointment, index) => {
+                        const serviceData = getAppointmentServiceData(appointment)
+
+                        return (
+                          <div
+                            key={`detail-service-${appointment.id}`}
+                            className="grid gap-3 rounded-xl bg-zinc-900 p-3 text-sm md:grid-cols-[auto_1fr_auto]"
+                          >
+                            <span className="font-bold text-zinc-500">
+                              {index + 1}.
+                            </span>
+
+                            <div>
+                              <p className="font-bold text-white">
+                                {serviceData.name}
+                              </p>
+
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {appointment.appointment_time.slice(0, 5)} ·{' '}
+                                {serviceData.duration_minutes} min
+                              </p>
+                            </div>
+
+                            <span className="font-bold text-green-300">
+                              {formatCurrency(serviceData.price)}
+                            </span>
+                          </div>
+                        )
+                      }
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-green-900 bg-green-950/30 p-3 text-sm">
+                      <span className="text-green-200">
+                        Total da sequência
+                      </span>
+
+                      <strong className="text-green-300">
+                        {formatCurrency(selectedAppointmentGroup.totalPrice)}
+                      </strong>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl bg-zinc-800 p-4">
@@ -2243,7 +2374,9 @@ export default function AgendaPage() {
                   </p>
 
                   <p className="mt-1 text-lg font-bold">
-                    {selectedAppointment.appointment_time.slice(0, 5)}
+                    {selectedAppointmentGroup
+                      ? `${selectedAppointmentGroup.startTime} → ${selectedAppointmentGroup.endTime}`
+                      : selectedAppointment.appointment_time.slice(0, 5)}
                   </p>
                 </div>
               </div>

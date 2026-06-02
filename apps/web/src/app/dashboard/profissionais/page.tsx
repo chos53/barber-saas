@@ -450,22 +450,22 @@ export default function ProfessionalsPage() {
     const monthStartDate = getCurrentMonthStartDate()
     const todayDate = getCurrentMonthEndDate()
 
-    const { data: appointmentsData } = await supabase
-      .from('appointments')
-      .select(`
-        id,
-        professional_id,
-        appointment_date,
-        status,
-        price,
-        services (
-          price
-        )
-      `)
-      .eq('company_id', profile.company_id)
-      .eq('status', 'completed')
-      .gte('appointment_date', monthStartDate)
-      .lte('appointment_date', todayDate)
+    const { data: serviceIncomeTransactionsData, error: serviceIncomeTransactionsError } =
+      await supabase
+        .from('financial_transactions')
+        .select('id, appointment_id, professional_id, amount, transaction_date')
+        .eq('company_id', profile.company_id)
+        .eq('type', 'income')
+        .eq('category', 'service')
+        .eq('status', 'paid')
+        .not('appointment_id', 'is', null)
+        .gte('transaction_date', monthStartDate)
+        .lte('transaction_date', todayDate)
+
+    if (serviceIncomeTransactionsError) {
+      alert(`Erro ao carregar produção dos profissionais: ${serviceIncomeTransactionsError.message}`)
+      return
+    }
 
     const { data: comandaItemsData } = await supabase
       .from('comanda_items')
@@ -500,16 +500,13 @@ export default function ProfessionalsPage() {
 
     const revenueByProfessional = new Map<string, number>()
 
-    ;(appointmentsData || []).forEach((appointment) => {
-      if (!appointment.professional_id) return
-
-      const price = Number(
-        appointment.price || appointment.services?.price || 0
-      )
+    ;(serviceIncomeTransactionsData || []).forEach((transaction) => {
+      if (!transaction.professional_id) return
 
       revenueByProfessional.set(
-        appointment.professional_id,
-        (revenueByProfessional.get(appointment.professional_id) || 0) + price
+        transaction.professional_id,
+        (revenueByProfessional.get(transaction.professional_id) || 0) +
+          Number(transaction.amount || 0)
       )
     })
 
@@ -1291,7 +1288,7 @@ export default function ProfessionalsPage() {
         />
 
         <p className="mt-2 text-xs text-zinc-500">
-          Os cálculos usam agendamentos concluídos e comandas fechadas do mês selecionado.
+          Os cálculos usam entradas financeiras de serviços concluídos e comandas fechadas do mês selecionado.
         </p>
       </div>
 
