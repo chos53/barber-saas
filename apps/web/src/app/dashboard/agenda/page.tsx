@@ -30,8 +30,24 @@ type Appointment = {
   status: string
   notes: string | null
   clients: { name: string } | null
-  services: { name: string } | null
+  services: {
+    name: string
+    price?: number | null
+    duration_minutes?: number | null
+  } | null
   professionals: { name: string } | null
+}
+
+type VisualAppointmentGroup = {
+  id: string
+  appointments: Appointment[]
+  clientName: string
+  professionalName: string
+  serviceNames: string[]
+  startTime: string
+  endTime: string
+  status: string
+  totalPrice: number
 }
 
 type ProfessionalTimeBlock = {
@@ -175,6 +191,13 @@ export default function AgendaPage() {
     const [hour, minute] = timeValue.slice(0, 5).split(':').map(Number)
 
     return hour * 60 + minute
+  }
+
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value)
   }
 
   function getProfessionalName(id: string) {
@@ -408,11 +431,195 @@ export default function AgendaPage() {
     )
   }, [appointments, selectedVisualProfessionalId, visualDate])
 
-  function getAppointmentByTime(availableTime: string) {
-    return visualAppointments.find(
-      (appointment) => appointment.appointment_time.slice(0, 5) === availableTime
+  function getAppointmentServiceData(appointment: Appointment) {
+    const appointmentService = Array.isArray(appointment.services)
+      ? appointment.services[0]
+      : appointment.services
+
+    const registeredService = services.find(
+      (service) => service.id === appointment.service_id
+    )
+
+    return {
+      name:
+        appointmentService?.name ||
+        registeredService?.name ||
+        'Serviço',
+      price:
+        Number(appointmentService?.price ?? registeredService?.price ?? 0),
+      duration_minutes:
+        Number(
+          appointmentService?.duration_minutes ??
+            registeredService?.duration_minutes ??
+            intervalMinutes
+        ) || intervalMinutes,
+    }
+  }
+
+  const visualAppointmentGroups = useMemo(() => {
+    const sortedAppointments = [...visualAppointments].sort((a, b) =>
+      a.appointment_time.localeCompare(b.appointment_time)
+    )
+
+    const usedAppointmentIds = new Set<string>()
+    const groups: VisualAppointmentGroup[] = []
+
+    sortedAppointments.forEach((appointment) => {
+      if (usedAppointmentIds.has(appointment.id)) return
+
+      const groupAppointments: Appointment[] = [appointment]
+      usedAppointmentIds.add(appointment.id)
+
+      let currentAppointment = appointment
+
+      while (true) {
+        const currentServiceData = getAppointmentServiceData(currentAppointment)
+        const expectedNextMinutes =
+          timeToMinutes(currentAppointment.appointment_time) +
+          currentServiceData.duration_minutes
+
+        const nextAppointment = sortedAppointments.find((candidate) => {
+          if (usedAppointmentIds.has(candidate.id)) return false
+          if (candidate.client_id !== appointment.client_id) return false
+          if (candidate.professional_id !== appointment.professional_id) return false
+          if (candidate.appointment_date !== appointment.appointment_date) return false
+          if (candidate.status !== appointment.status) return false
+
+          return timeToMinutes(candidate.appointment_time) === expectedNextMinutes
+        })
+
+        if (!nextAppointment) break
+
+        groupAppointments.push(nextAppointment)
+        usedAppointmentIds.add(nextAppointment.id)
+        currentAppointment = nextAppointment
+      }
+
+      const firstAppointment = groupAppointments[0]
+      const lastAppointment = groupAppointments[groupAppointments.length - 1]
+      const lastServiceData = getAppointmentServiceData(lastAppointment)
+
+      const startTime = firstAppointment.appointment_time.slice(0, 5)
+      const endTime = formatTimeFromMinutes(
+        timeToMinutes(lastAppointment.appointment_time) +
+          lastServiceData.duration_minutes
+      )
+
+      const serviceNames = groupAppointments.map((item) => {
+        return getAppointmentServiceData(item).name
+      })
+
+      const totalPrice = groupAppointments.reduce((sum, item) => {
+        return sum + getAppointmentServiceData(item).price
+      }, 0)
+
+      groups.push({
+        id: groupAppointments.map((item) => item.id).join('-'),
+        appointments: groupAppointments,
+        clientName: firstAppointment.clients?.name || 'Cliente não informado',
+        professionalName:
+          firstAppointment.professionals?.name || 'Profissional não informado',
+        serviceNames,
+        startTime,
+        endTime,
+        status: firstAppointment.status,
+        totalPrice,
+      })
+    })
+
+    return groups
+  }, [visualAppointments, services, intervalMinutes])
+
+
+  function getVisualAppointmentGroupByTime(availableTime: string) {
+    return visualAppointmentGroups.find(
+      (group) => group.startTime === availableTime
     )
   }
+
+  function isVisualTimeInsideGroup(availableTime: string) {
+    return visualAppointmentGroups.some(
+      (group) => availableTime > group.startTime && availableTime < group.endTime
+    )
+  }
+
+  const filteredAppointmentGroups = useMemo(() => {
+    const sortedAppointments = [...filteredAppointments].sort((a, b) => {
+      if (a.appointment_date !== b.appointment_date) {
+        return a.appointment_date.localeCompare(b.appointment_date)
+      }
+
+      return a.appointment_time.localeCompare(b.appointment_time)
+    })
+
+    const usedAppointmentIds = new Set<string>()
+    const groups: VisualAppointmentGroup[] = []
+
+    sortedAppointments.forEach((appointment) => {
+      if (usedAppointmentIds.has(appointment.id)) return
+
+      const groupAppointments: Appointment[] = [appointment]
+      usedAppointmentIds.add(appointment.id)
+
+      let currentAppointment = appointment
+
+      while (true) {
+        const currentServiceData = getAppointmentServiceData(currentAppointment)
+        const expectedNextMinutes =
+          timeToMinutes(currentAppointment.appointment_time) +
+          currentServiceData.duration_minutes
+
+        const nextAppointment = sortedAppointments.find((candidate) => {
+          if (usedAppointmentIds.has(candidate.id)) return false
+          if (candidate.client_id !== appointment.client_id) return false
+          if (candidate.professional_id !== appointment.professional_id) return false
+          if (candidate.appointment_date !== appointment.appointment_date) return false
+          if (candidate.status !== appointment.status) return false
+
+          return timeToMinutes(candidate.appointment_time) === expectedNextMinutes
+        })
+
+        if (!nextAppointment) break
+
+        groupAppointments.push(nextAppointment)
+        usedAppointmentIds.add(nextAppointment.id)
+        currentAppointment = nextAppointment
+      }
+
+      const firstAppointment = groupAppointments[0]
+      const lastAppointment = groupAppointments[groupAppointments.length - 1]
+      const lastServiceData = getAppointmentServiceData(lastAppointment)
+
+      const startTime = firstAppointment.appointment_time.slice(0, 5)
+      const endTime = formatTimeFromMinutes(
+        timeToMinutes(lastAppointment.appointment_time) +
+          lastServiceData.duration_minutes
+      )
+
+      const serviceNames = groupAppointments.map((item) => {
+        return getAppointmentServiceData(item).name
+      })
+
+      const totalPrice = groupAppointments.reduce((sum, item) => {
+        return sum + getAppointmentServiceData(item).price
+      }, 0)
+
+      groups.push({
+        id: groupAppointments.map((item) => item.id).join('-'),
+        appointments: groupAppointments,
+        clientName: firstAppointment.clients?.name || 'Cliente não informado',
+        professionalName:
+          firstAppointment.professionals?.name || 'Profissional não informado',
+        serviceNames,
+        startTime,
+        endTime,
+        status: firstAppointment.status,
+        totalPrice,
+      })
+    })
+
+    return groups
+  }, [filteredAppointments, services, intervalMinutes])
 
   function getStatusCardClass(status: string) {
     switch (status) {
@@ -522,7 +729,7 @@ export default function AgendaPage() {
         status,
         notes,
         clients ( name ),
-        services ( name, duration_minutes ),
+        services ( name, price, duration_minutes ),
         professionals ( name )
       `)
       .eq('company_id', profile.company_id)
@@ -579,7 +786,7 @@ export default function AgendaPage() {
         status,
         notes,
         clients ( name ),
-        services ( name, duration_minutes ),
+        services ( name, price, duration_minutes ),
         professionals ( name )
       `)
       .eq('company_id', companyId)
@@ -1306,7 +1513,8 @@ export default function AgendaPage() {
           </div>
 
           {availableTimes.map((availableTime) => {
-            const appointment = getAppointmentByTime(availableTime)
+            const appointmentGroup = getVisualAppointmentGroupByTime(availableTime)
+            const isInsideAppointmentGroup = isVisualTimeInsideGroup(availableTime)
             const isPastTime = visualDate === today && availableTime < currentTime
             const isSameProfessionalSelected =
               professionalId === selectedVisualProfessionalId && date === visualDate
@@ -1325,33 +1533,48 @@ export default function AgendaPage() {
                 </div>
 
                 <div className="p-2">
-                  {appointment ? (
+                  {appointmentGroup ? (
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedAppointment(appointment)
+                        setSelectedAppointment(appointmentGroup.appointments[0])
                         setSelectedPaymentMethod('cash')
                       }}
                       className={`w-full rounded-xl border p-3 text-left transition hover:border-white ${getStatusCardClass(
-                        appointment.status
+                        appointmentGroup.status
                       )}`}
                     >
-                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="font-bold">
-                            {appointment.clients?.name || 'Cliente não informado'}
+                            {appointmentGroup.clientName}
                           </p>
 
                           <p className="mt-1 text-sm opacity-90">
-                            {appointment.services?.name || 'Serviço não informado'}
+                            {appointmentGroup.serviceNames.join(' + ')}
                           </p>
+
+                          <p className="mt-2 text-xs opacity-80">
+                            {appointmentGroup.startTime} → {appointmentGroup.endTime}
+                            {' '}· {appointmentGroup.professionalName}
+                          </p>
+
+                          {appointmentGroup.totalPrice > 0 && (
+                            <p className="mt-1 text-xs font-bold opacity-90">
+                              Total: {formatCurrency(appointmentGroup.totalPrice)}
+                            </p>
+                          )}
                         </div>
 
                         <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-bold">
-                          {getStatusLabel(appointment.status)}
+                          {getStatusLabel(appointmentGroup.status)}
                         </span>
                       </div>
                     </button>
+                  ) : isInsideAppointmentGroup ? (
+                    <div className="rounded-xl border border-blue-900/60 bg-blue-950/30 p-3 text-sm text-blue-300">
+                      Continuação do atendimento
+                    </div>
                   ) : visualProfessionalBlock ? (
                     <div className="rounded-xl border border-orange-800 bg-orange-950/40 p-3 text-sm font-bold text-orange-300">
                       Profissional ausente — {getBlockTypeLabel(visualProfessionalBlock.block_type)}
@@ -1575,24 +1798,25 @@ export default function AgendaPage() {
       </div>
 
       <div className="mt-8 space-y-3">
-        {filteredAppointments.length === 0 && (
+        {filteredAppointmentGroups.length === 0 && (
           <p className="rounded-xl bg-zinc-900 p-4 text-zinc-500">
             Nenhum agendamento encontrado.
           </p>
         )}
 
-        {filteredAppointments.map((appointment) => {
+        {filteredAppointmentGroups.map((group) => {
+          const firstAppointment = group.appointments[0]
           const expired = isExpiredAppointment(
-            appointment.appointment_date,
-            appointment.appointment_time,
-            appointment.status
+            firstAppointment.appointment_date,
+            firstAppointment.appointment_time,
+            firstAppointment.status
           )
 
           return (
             <div
-              key={appointment.id}
+              key={group.id}
               onClick={() => {
-                setSelectedAppointment(appointment)
+                setSelectedAppointment(firstAppointment)
                 setSelectedPaymentMethod('cash')
               }}
               className="cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-lg transition hover:border-white"
@@ -1600,33 +1824,46 @@ export default function AgendaPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xl font-bold">
-                    {appointment.clients?.name}
+                    {group.clientName}
                   </p>
 
                   <p className="mt-1 text-zinc-300">
-                    {appointment.services?.name}
+                    {group.serviceNames.join(' + ')}
                   </p>
 
                   <p className="mt-2 text-sm text-zinc-500">
-                    Profissional: {appointment.professionals?.name}
+                    Profissional: {group.professionalName}
                   </p>
+
+                  {group.totalPrice > 0 && (
+                    <p className="mt-2 text-sm font-bold text-green-300">
+                      Total: {formatCurrency(group.totalPrice)}
+                    </p>
+                  )}
                 </div>
 
                 <div className="text-right">
                   <p className="text-lg font-bold">
-                    {appointment.appointment_time.slice(0, 5)}
+                    {group.startTime}
+                    {group.appointments.length > 1 ? ` → ${group.endTime}` : ''}
                   </p>
 
                   <p className="text-sm text-zinc-500">
-                    {appointment.appointment_date}
+                    {firstAppointment.appointment_date}
                   </p>
+
+                  {group.appointments.length > 1 && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {group.appointments.length} serviços
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {appointment.notes && (
+              {firstAppointment.notes && (
                 <div className="mt-4 rounded-xl bg-zinc-800 p-3">
                   <p className="text-sm text-zinc-400">
-                    {appointment.notes}
+                    {firstAppointment.notes}
                   </p>
                 </div>
               )}
@@ -1634,17 +1871,23 @@ export default function AgendaPage() {
               <div className="mt-4 flex items-center gap-2">
                 <span
                   className={`rounded-full px-3 py-1 text-sm font-bold ${
-                    appointment.status === 'completed'
+                    firstAppointment.status === 'completed'
                       ? 'bg-green-900 text-green-300'
-                      : appointment.status === 'cancelled'
+                      : firstAppointment.status === 'cancelled'
                         ? 'bg-red-900 text-red-300'
-                        : appointment.status === 'no_show'
+                        : firstAppointment.status === 'no_show'
                           ? 'bg-yellow-900 text-yellow-300'
                           : 'bg-blue-900 text-blue-300'
                   }`}
                 >
-                  {getStatusLabel(appointment.status)}
+                  {getStatusLabel(firstAppointment.status)}
                 </span>
+
+                {group.appointments.length > 1 && (
+                  <span className="rounded-full bg-purple-900 px-3 py-1 text-sm font-bold text-purple-300">
+                    Sequência agrupada
+                  </span>
+                )}
 
                 {expired && (
                   <span className="rounded-full bg-orange-900 px-3 py-1 text-sm font-bold text-orange-300">
@@ -1653,7 +1896,7 @@ export default function AgendaPage() {
                 )}
               </div>
 
-              {appointment.status === 'scheduled' && (
+              {firstAppointment.status === 'scheduled' && (
                 <div
                   className="mt-4 grid gap-3"
                   onClick={(e) => e.stopPropagation()}
@@ -1676,12 +1919,12 @@ export default function AgendaPage() {
                     </select>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         updateAppointmentStatus(
-                          appointment.id,
+                          firstAppointment.id,
                           'completed',
                           selectedPaymentMethod
                         )
@@ -1695,7 +1938,7 @@ export default function AgendaPage() {
                       onClick={(e) => {
                         e.stopPropagation()
                         completeAppointmentSequence(
-                          appointment,
+                          firstAppointment,
                           selectedPaymentMethod
                         )
                       }}
@@ -1707,7 +1950,7 @@ export default function AgendaPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        startReschedule(appointment)
+                        startReschedule(firstAppointment)
                       }}
                       className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-bold"
                     >
@@ -1717,7 +1960,7 @@ export default function AgendaPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        updateAppointmentStatus(appointment.id, 'cancelled')
+                        updateAppointmentStatus(firstAppointment.id, 'cancelled')
                       }}
                       className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
                     >
@@ -1727,7 +1970,7 @@ export default function AgendaPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        updateAppointmentStatus(appointment.id, 'no_show')
+                        updateAppointmentStatus(firstAppointment.id, 'no_show')
                       }}
                       className="rounded-lg bg-yellow-600 px-3 py-2 text-sm font-bold text-black"
                     >
