@@ -937,6 +937,323 @@ useEffect(() => {
     }
   }
 
+
+  function escapePrintText(value: string | number | null | undefined) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;')
+  }
+
+  function printComanda(comanda: Comanda) {
+    const subtotal = Number(comanda.total || 0)
+    const discount = getComandaDiscount(comanda)
+    const surcharge = getComandaSurcharge(comanda)
+    const finalTotal = getComandaFinalTotal(comanda)
+    const issuedAt = new Date().toLocaleString('pt-BR')
+    const createdAt = new Date(comanda.created_at).toLocaleString('pt-BR')
+    const closedAt = comanda.closed_at
+      ? new Date(comanda.closed_at).toLocaleString('pt-BR')
+      : ''
+    const cancelledAt = comanda.cancelled_at
+      ? new Date(comanda.cancelled_at).toLocaleString('pt-BR')
+      : ''
+
+    const itemsHtml = comanda.items
+      .map((item) => {
+        const itemTotal = Number(item.price || 0) * Number(item.quantity || 0)
+
+        return `
+          <tr>
+            <td>
+              <strong>${escapePrintText(item.description)}</strong>
+              <br />
+              <span>${escapePrintText(item.professional_name || 'Produto / sem profissional')}</span>
+            </td>
+            <td class="center">${escapePrintText(item.quantity)}</td>
+            <td class="right">R$ ${Number(item.price || 0).toFixed(2)}</td>
+            <td class="right">R$ ${itemTotal.toFixed(2)}</td>
+          </tr>
+        `
+      })
+      .join('')
+
+    const html = `
+      <html>
+        <head>
+          <title>Comanda - ${escapePrintText(comanda.client_name)}</title>
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              padding: 24px;
+              font-family: Arial, sans-serif;
+              color: #111827;
+              background: #ffffff;
+            }
+
+            .receipt {
+              max-width: 760px;
+              margin: 0 auto;
+              border: 1px solid #d1d5db;
+              border-radius: 16px;
+              padding: 24px;
+            }
+
+            .header {
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+              border-bottom: 2px solid #111827;
+              padding-bottom: 16px;
+              margin-bottom: 20px;
+            }
+
+            h1 {
+              margin: 0;
+              font-size: 28px;
+            }
+
+            .muted {
+              color: #6b7280;
+              font-size: 13px;
+            }
+
+            .status {
+              display: inline-block;
+              border: 1px solid #111827;
+              border-radius: 999px;
+              padding: 6px 12px;
+              font-size: 12px;
+              font-weight: bold;
+              text-transform: uppercase;
+            }
+
+            .info-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 12px;
+              margin-bottom: 20px;
+            }
+
+            .info-card {
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              padding: 12px;
+            }
+
+            .label {
+              margin-bottom: 4px;
+              color: #6b7280;
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: .08em;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 12px;
+            }
+
+            th,
+            td {
+              border-bottom: 1px solid #e5e7eb;
+              padding: 10px 8px;
+              vertical-align: top;
+              font-size: 14px;
+            }
+
+            th {
+              color: #374151;
+              text-align: left;
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: .08em;
+            }
+
+            .center {
+              text-align: center;
+            }
+
+            .right {
+              text-align: right;
+            }
+
+            .totals {
+              margin-top: 20px;
+              margin-left: auto;
+              width: 320px;
+              max-width: 100%;
+            }
+
+            .total-row {
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 8px 0;
+              border-bottom: 1px solid #e5e7eb;
+            }
+
+            .final-total {
+              margin-top: 8px;
+              padding: 14px;
+              border-radius: 12px;
+              background: #111827;
+              color: #ffffff;
+              font-size: 22px;
+              font-weight: bold;
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+            }
+
+            .notes {
+              margin-top: 20px;
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              padding: 12px;
+              white-space: pre-wrap;
+            }
+
+            .footer {
+              margin-top: 24px;
+              color: #6b7280;
+              font-size: 12px;
+              text-align: center;
+            }
+
+            @media print {
+              body {
+                padding: 0;
+              }
+
+              .receipt {
+                border: none;
+                border-radius: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <div class="header">
+              <div>
+                <h1>Comanda</h1>
+                <p class="muted">Emitida em ${escapePrintText(issuedAt)}</p>
+              </div>
+
+              <div class="right">
+                <span class="status">${escapePrintText(getStatusLabel(comanda.status))}</span>
+                <p class="muted">ID: ${escapePrintText(comanda.id.slice(0, 8))}</p>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-card">
+                <div class="label">Cliente</div>
+                <strong>${escapePrintText(comanda.client_name)}</strong>
+              </div>
+
+              <div class="info-card">
+                <div class="label">Criada em</div>
+                <strong>${escapePrintText(createdAt)}</strong>
+              </div>
+
+              ${closedAt ? `
+                <div class="info-card">
+                  <div class="label">Fechada em</div>
+                  <strong>${escapePrintText(closedAt)}</strong>
+                </div>
+              ` : ''}
+
+              ${cancelledAt ? `
+                <div class="info-card">
+                  <div class="label">Cancelada em</div>
+                  <strong>${escapePrintText(cancelledAt)}</strong>
+                </div>
+              ` : ''}
+            </div>
+
+            <h2>Itens</h2>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Descrição</th>
+                  <th class="center">Qtd</th>
+                  <th class="right">Unitário</th>
+                  <th class="right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml || `
+                  <tr>
+                    <td colspan="4" class="center muted">Nenhum item adicionado.</td>
+                  </tr>
+                `}
+              </tbody>
+            </table>
+
+            <div class="totals">
+              <div class="total-row">
+                <span>Subtotal</span>
+                <strong>R$ ${subtotal.toFixed(2)}</strong>
+              </div>
+
+              <div class="total-row">
+                <span>Desconto</span>
+                <strong>R$ ${discount.toFixed(2)}</strong>
+              </div>
+
+              <div class="total-row">
+                <span>Acréscimo</span>
+                <strong>R$ ${surcharge.toFixed(2)}</strong>
+              </div>
+
+              <div class="final-total">
+                <span>Total</span>
+                <span>R$ ${finalTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            ${comanda.notes?.trim() ? `
+              <div class="notes">
+                <div class="label">Observações</div>
+                ${escapePrintText(comanda.notes)}
+              </div>
+            ` : ''}
+
+            <div class="footer">
+              Barber SaaS · Documento gerado pelo sistema
+            </div>
+          </div>
+
+          <script>
+            window.onload = function () {
+              window.print()
+            }
+          </script>
+        </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+
+    if (!printWindow) {
+      alert('Não foi possível abrir a janela de impressão.')
+      return
+    }
+
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+
   function renderComandaCard(comanda: Comanda) {
     const itemsCount = comanda.items.reduce(
       (sum, item) => sum + Number(item.quantity),
@@ -1393,6 +1710,16 @@ useEffect(() => {
                 </strong>
               </div>
             </div>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 border-t border-zinc-700 pt-5 md:flex-row md:items-center md:justify-end">
+            <button
+              type="button"
+              onClick={() => printComanda(comanda)}
+              className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
+            >
+              Imprimir comanda
+            </button>
           </div>
 
           {comanda.status === 'open' && (
