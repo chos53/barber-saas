@@ -618,7 +618,18 @@ export default function AgendaPage() {
       })
     })
 
-    return groups
+    return groups.sort((a, b) => {
+      const firstAppointmentA = a.appointments[0]
+      const firstAppointmentB = b.appointments[0]
+
+      if (firstAppointmentA.appointment_date !== firstAppointmentB.appointment_date) {
+        return firstAppointmentB.appointment_date.localeCompare(
+          firstAppointmentA.appointment_date
+        )
+      }
+
+      return b.startTime.localeCompare(a.startTime)
+    })
   }, [filteredAppointments, services, intervalMinutes])
 
   const selectedAppointmentGroup = useMemo(() => {
