@@ -23,6 +23,9 @@ type Comanda = {
   status: string
   is_priority?: boolean
   total: number
+  discount?: number | null
+  discount_type?: 'amount' | 'percentage' | null
+  discount_value?: number | null
   notes?: string | null
   created_at: string
   closed_at?: string | null
@@ -62,9 +65,12 @@ export default function ComandasPage() {
   const [productNames, setProductNames] = useState<Record<string, string>>({})
   const [productQuantities, setProductQuantities] = useState<Record<string, string>>({})
   const [productPrices, setProductPrices] = useState<Record<string, string>>({})
+  const [discountsByComanda, setDiscountsByComanda] = useState<Record<string, string>>({})
+  const [discountTypesByComanda, setDiscountTypesByComanda] = useState<Record<string, 'amount' | 'percentage'>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
+  const [savingDiscount, setSavingDiscount] = useState<Record<string, boolean>>({})
   const [savingPriority, setSavingPriority] = useState<Record<string, boolean>>({})
   const [, forceClock] = useState(0)
 
@@ -168,19 +174,19 @@ useEffect(() => {
   const openTotal = useMemo(() => {
     return comandas
       .filter((comanda) => comanda.status === 'open')
-      .reduce((sum, comanda) => sum + Number(comanda.total), 0)
+      .reduce((sum, comanda) => sum + getComandaFinalTotal(comanda), 0)
   }, [comandas])
 
   const closedTotal = useMemo(() => {
     return comandas
       .filter((comanda) => comanda.status === 'closed')
-      .reduce((sum, comanda) => sum + Number(comanda.total), 0)
+      .reduce((sum, comanda) => sum + getComandaFinalTotal(comanda), 0)
   }, [comandas])
 
   const cancelledTotal = useMemo(() => {
     return comandas
       .filter((comanda) => comanda.status === 'cancelled')
-      .reduce((sum, comanda) => sum + Number(comanda.total), 0)
+      .reduce((sum, comanda) => sum + getComandaFinalTotal(comanda), 0)
   }, [comandas])
 
   const totalItems = useMemo(() => {
@@ -201,6 +207,41 @@ useEffect(() => {
   const priorityCount = useMemo(() => {
     return comandas.filter((comanda) => comanda.is_priority).length
   }, [comandas])
+
+  function getComandaDiscountType(comanda: Comanda) {
+    return comanda.discount_type === 'percentage' ? 'percentage' : 'amount'
+  }
+
+  function getComandaDiscountValue(comanda: Comanda) {
+    return Number(comanda.discount_value ?? comanda.discount ?? 0)
+  }
+
+  function calculateDiscountAmount(
+    subtotal: number,
+    discountType: 'amount' | 'percentage',
+    discountValue: number
+  ) {
+    if (discountValue <= 0 || subtotal <= 0) return 0
+
+    if (discountType === 'percentage') {
+      const percentage = Math.min(discountValue, 100)
+      return Math.min(Number(((subtotal * percentage) / 100).toFixed(2)), subtotal)
+    }
+
+    return Math.min(Number(discountValue.toFixed(2)), subtotal)
+  }
+
+  function getComandaDiscount(comanda: Comanda) {
+    return calculateDiscountAmount(
+      Number(comanda.total || 0),
+      getComandaDiscountType(comanda),
+      getComandaDiscountValue(comanda)
+    )
+  }
+
+  function getComandaFinalTotal(comanda: Comanda) {
+    return Math.max(Number(comanda.total || 0) - getComandaDiscount(comanda), 0)
+  }
 
   async function loadData() {
     const {
@@ -241,7 +282,7 @@ useEffect(() => {
     const { data: comandasData } = await supabase
       .from('comandas')
       .select(
-        'id, client_id, status, total, notes, is_priority, created_at, closed_at, cancelled_at'
+        'id, client_id, status, total, discount, discount_type, discount_value, notes, is_priority, created_at, closed_at, cancelled_at'
       )
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
@@ -281,7 +322,7 @@ useEffect(() => {
         price: Number(item.price),
         professional_id: item.professional_id || null,
         professional_name: item.professional_id
-          ? professionalsMap.get(item.professional_id) || 'Profissional não informado'
+          ? professionalsMap.get(String(item.professional_id)) || 'Profissional não informado'
           : 'Profissional não informado',
       })
 
@@ -292,6 +333,14 @@ useEffect(() => {
       comandasData?.map((comanda) => ({
         ...comanda,
         total: Number(comanda.total),
+        discount: Number((comanda as any).discount || 0),
+        discount_type:
+          (comanda as any).discount_type === 'percentage'
+            ? 'percentage'
+            : 'amount',
+        discount_value: Number(
+          (comanda as any).discount_value ?? (comanda as any).discount ?? 0
+        ),
         is_priority: Boolean(comanda.is_priority),
         client_name: comanda.client_id
           ? clientsMap.get(comanda.client_id) || 'Cliente não informado'
@@ -313,12 +362,18 @@ useEffect(() => {
     setComandas(normalizedComandas)
 
     const initialEditingNotes: Record<string, string> = {}
+    const initialDiscounts: Record<string, string> = {}
+    const initialDiscountTypes: Record<string, 'amount' | 'percentage'> = {}
 
     normalizedComandas.forEach((comanda) => {
       initialEditingNotes[comanda.id] = comanda.notes || ''
+      initialDiscounts[comanda.id] = String(getComandaDiscountValue(comanda))
+      initialDiscountTypes[comanda.id] = getComandaDiscountType(comanda)
     })
 
     setEditingNotes(initialEditingNotes)
+    setDiscountsByComanda(initialDiscounts)
+    setDiscountTypesByComanda(initialDiscountTypes)
   }
 
   async function saveNotes(comandaId: string) {
@@ -343,6 +398,64 @@ useEffect(() => {
 
     if (error) {
       alert(`Erro ao salvar observações: ${error.message}`)
+      return
+    }
+
+    await loadData()
+  }
+
+  async function saveDiscount(comanda: Comanda) {
+    if (comanda.status !== 'open') {
+      alert('Somente comandas abertas podem receber desconto.')
+      return
+    }
+
+    const discountType = discountTypesByComanda[comanda.id] || 'amount'
+    const discountValue = Number(discountsByComanda[comanda.id] || 0)
+    const subtotal = Number(comanda.total || 0)
+
+    if (discountValue < 0) {
+      alert('O desconto não pode ser negativo.')
+      return
+    }
+
+    if (discountType === 'amount' && discountValue > subtotal) {
+      alert('O desconto em R$ não pode ser maior que o subtotal da comanda.')
+      return
+    }
+
+    if (discountType === 'percentage' && discountValue > 100) {
+      alert('O desconto em % não pode ser maior que 100%.')
+      return
+    }
+
+    const discountAmount = calculateDiscountAmount(
+      subtotal,
+      discountType,
+      discountValue
+    )
+
+    setSavingDiscount((current) => ({
+      ...current,
+      [comanda.id]: true,
+    }))
+
+    const { error } = await supabase
+      .from('comandas')
+      .update({
+        discount: discountAmount,
+        discount_type: discountType,
+        discount_value: discountValue,
+      })
+      .eq('id', comanda.id)
+
+    setSavingDiscount((current) => ({
+      ...current,
+      [comanda.id]: false,
+    }))
+
+    if (error) {
+      alert(`Erro ao salvar desconto: ${error.message}`)
       return
     }
 
@@ -390,6 +503,9 @@ useEffect(() => {
       client_id: selectedClientId || null,
       status: 'open',
       total: 0,
+      discount: 0,
+      discount_type: 'amount',
+      discount_value: 0,
       notes: notes || null,
       is_priority: false,
     })
@@ -607,7 +723,7 @@ useEffect(() => {
           type: 'income',
           category: 'comanda',
           description: `Comanda - ${comanda.client_name}`,
-          amount: Number(comanda.total),
+          amount: getComandaFinalTotal(comanda),
           payment_method: paymentMethod,
           status: 'paid',
           transaction_date:
@@ -771,8 +887,14 @@ useEffect(() => {
 
           <div className="text-right">
             <strong className="block text-xl text-green-400">
-              R$ {Number(comanda.total).toFixed(2)}
+              R$ {getComandaFinalTotal(comanda).toFixed(2)}
             </strong>
+
+            {getComandaDiscount(comanda) > 0 && (
+              <p className="mt-1 text-xs text-red-300">
+                Desc. {getComandaDiscountType(comanda) === 'percentage' ? `${getComandaDiscountValue(comanda)}%` : `R$ ${getComandaDiscount(comanda).toFixed(2)}`}
+              </p>
+            )}
 
             <p className="mt-1 text-sm text-zinc-400">
               {itemsCount} item(ns)
@@ -993,21 +1115,100 @@ useEffect(() => {
             ))}
           </div>
 
-          <div className="mt-5 rounded-2xl border border-green-900 bg-green-950/30 p-5">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="mt-5 rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+            <div className="grid gap-4 md:grid-cols-[1fr_180px_220px_auto]">
               <div>
-                <p className="text-sm uppercase tracking-wide text-green-300">
-                  Total da comanda
+                <p className="text-sm uppercase tracking-wide text-zinc-300">
+                  Desconto
                 </p>
 
-                <p className="mt-1 text-xs text-zinc-400">
-                  Soma de serviços e produtos adicionados.
+                <p className="mt-1 text-xs text-zinc-500">
+                  Escolha R$ ou % antes de fechar a comanda.
                 </p>
               </div>
 
-              <strong className="text-3xl font-bold text-green-400">
-                R$ {Number(comanda.total).toFixed(2)}
-              </strong>
+              <select
+                disabled={comanda.status !== 'open'}
+                value={discountTypesByComanda[comanda.id] || 'amount'}
+                onChange={(event) =>
+                  setDiscountTypesByComanda((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value as 'amount' | 'percentage',
+                  }))
+                }
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none disabled:opacity-50"
+              >
+                <option value="amount">Valor (R$)</option>
+                <option value="percentage">Percentual (%)</option>
+              </select>
+
+              <input
+                type="number"
+                min="0"
+                max={(discountTypesByComanda[comanda.id] || 'amount') === 'percentage' ? '100' : undefined}
+                step="0.01"
+                disabled={comanda.status !== 'open'}
+                value={discountsByComanda[comanda.id] || ''}
+                onChange={(event) =>
+                  setDiscountsByComanda((current) => ({
+                    ...current,
+                    [comanda.id]: event.target.value,
+                  }))
+                }
+                placeholder={(discountTypesByComanda[comanda.id] || 'amount') === 'percentage' ? 'Ex: 10' : 'Ex: 10.00'}
+                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none disabled:opacity-50"
+              />
+
+              {comanda.status === 'open' && (
+                <button
+                  type="button"
+                  onClick={() => saveDiscount(comanda)}
+                  disabled={savingDiscount[comanda.id]}
+                  className="rounded-xl bg-red-500 px-5 py-3 font-bold text-white transition hover:bg-red-400 disabled:opacity-50"
+                >
+                  {savingDiscount[comanda.id] ? 'Salvando...' : 'Aplicar desconto'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-green-900 bg-green-950/30 p-5">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-sm uppercase tracking-wide text-zinc-400">
+                  Subtotal
+                </p>
+
+                <strong className="mt-1 block text-2xl font-bold text-white">
+                  R$ {Number(comanda.total).toFixed(2)}
+                </strong>
+              </div>
+
+              <div>
+                <p className="text-sm uppercase tracking-wide text-red-300">
+                  Desconto
+                </p>
+
+                <strong className="mt-1 block text-2xl font-bold text-red-300">
+                  R$ {getComandaDiscount(comanda).toFixed(2)}
+                </strong>
+
+                {getComandaDiscountType(comanda) === 'percentage' && (
+                  <p className="mt-1 text-xs text-red-200">
+                    {getComandaDiscountValue(comanda)}% aplicado
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <p className="text-sm uppercase tracking-wide text-green-300">
+                  Total final
+                </p>
+
+                <strong className="mt-1 block text-3xl font-bold text-green-400">
+                  R$ {getComandaFinalTotal(comanda).toFixed(2)}
+                </strong>
+              </div>
             </div>
           </div>
 
