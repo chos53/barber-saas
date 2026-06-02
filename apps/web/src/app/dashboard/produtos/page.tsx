@@ -17,9 +17,24 @@ type Product = {
   created_at: string
 }
 
+type StockMovement = {
+  id: string
+  company_id: string
+  product_id: string
+  type: 'in' | 'out'
+  quantity: number
+  previous_stock: number
+  new_stock: number
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export default function ProdutosPage() {
   const [companyId, setCompanyId] = useState('')
+  const [userId, setUserId] = useState('')
   const [products, setProducts] = useState<Product[]>([])
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -39,6 +54,11 @@ export default function ProdutosPage() {
   const [editSalePrice, setEditSalePrice] = useState('')
   const [editCurrentStock, setEditCurrentStock] = useState('')
   const [editMinimumStock, setEditMinimumStock] = useState('')
+
+  const [movementTypes, setMovementTypes] = useState<Record<string, 'in' | 'out'>>({})
+  const [movementQuantities, setMovementQuantities] = useState<Record<string, string>>({})
+  const [movementReasons, setMovementReasons] = useState<Record<string, string>>({})
+  const [savingMovement, setSavingMovement] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     loadData()
@@ -130,6 +150,25 @@ export default function ProdutosPage() {
     }
   }
 
+
+  function getProductMovements(productId: string) {
+    return stockMovements
+      .filter((movement) => movement.product_id === productId)
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+  }
+
+  function getMovementTypeLabel(type: StockMovement['type']) {
+    return type === 'in' ? 'Entrada' : 'Saída'
+  }
+
+  function getMovementReasonPlaceholder(type: 'in' | 'out') {
+    return type === 'in'
+      ? 'Motivo. Ex: compra de fornecedor'
+      : 'Motivo. Ex: uso interno, perda ou ajuste'
+  }
   async function loadData() {
     const {
       data: { user },
@@ -139,6 +178,8 @@ export default function ProdutosPage() {
       window.location.href = '/login'
       return
     }
+
+    setUserId(user.id)
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -168,7 +209,34 @@ export default function ProdutosPage() {
       return
     }
 
-    setProducts((data || []) as Product[])
+    const normalizedProducts = (data || []) as Product[]
+
+    setProducts(normalizedProducts)
+
+    const productIds = normalizedProducts.map((product) => product.id)
+
+    if (productIds.length === 0) {
+      setStockMovements([])
+      return
+    }
+
+    const { data: movementsData, error: movementsError } = await supabase
+      .from('stock_movements')
+      .select(
+        'id, company_id, product_id, type, quantity, previous_stock, new_stock, reason, created_by, created_at'
+      )
+      .eq('company_id', profile.company_id)
+      .in('product_id', productIds)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    if (movementsError) {
+      alert(`Erro ao carregar movimentações: ${movementsError.message}`)
+      setStockMovements([])
+      return
+    }
+
+    setStockMovements((movementsData || []) as StockMovement[])
   }
 
   function resetForm() {
@@ -321,6 +389,97 @@ export default function ProdutosPage() {
     await loadData()
   }
 
+
+  async function registerStockMovement(product: Product) {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    const movementType = movementTypes[product.id] || 'in'
+    const quantity = Number(movementQuantities[product.id] || 0)
+    const reason = (movementReasons[product.id] || '').trim()
+    const currentStockValue = Number(product.current_stock || 0)
+
+    if (!quantity || quantity <= 0) {
+      alert('Informe uma quantidade válida para a movimentação.')
+      return
+    }
+
+    if (!reason) {
+      alert('Informe o motivo da movimentação.')
+      return
+    }
+
+    if (movementType === 'out' && quantity > currentStockValue) {
+      alert('A saída não pode deixar o estoque negativo.')
+      return
+    }
+
+    const newStock =
+      movementType === 'in'
+        ? currentStockValue + quantity
+        : currentStockValue - quantity
+
+    setSavingMovement((current) => ({
+      ...current,
+      [product.id]: true,
+    }))
+
+    const { error: movementError } = await supabase
+      .from('stock_movements')
+      .insert({
+        company_id: companyId,
+        product_id: product.id,
+        type: movementType,
+        quantity,
+        previous_stock: currentStockValue,
+        new_stock: newStock,
+        reason,
+        created_by: userId || null,
+      })
+
+    if (movementError) {
+      setSavingMovement((current) => ({
+        ...current,
+        [product.id]: false,
+      }))
+
+      alert(`Erro ao registrar movimentação: ${movementError.message}`)
+      return
+    }
+
+    const { error: productError } = await supabase
+      .from('products')
+      .update({
+        current_stock: newStock,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', product.id)
+      .eq('company_id', companyId)
+
+    setSavingMovement((current) => ({
+      ...current,
+      [product.id]: false,
+    }))
+
+    if (productError) {
+      alert(`Movimentação registrada, mas houve erro ao atualizar estoque: ${productError.message}`)
+      return
+    }
+
+    setMovementQuantities((current) => ({
+      ...current,
+      [product.id]: '',
+    }))
+
+    setMovementReasons((current) => ({
+      ...current,
+      [product.id]: '',
+    }))
+
+    await loadData()
+  }
   return (
     <div>
       <h1 className="text-4xl font-bold">
@@ -681,6 +840,129 @@ export default function ProdutosPage() {
                     >
                       {product.active ? 'Inativar' : 'Ativar'}
                     </button>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+                    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                      <div>
+                        <h3 className="text-lg font-bold">
+                          Movimentação de estoque
+                        </h3>
+
+                        <p className="mt-1 text-sm text-zinc-500">
+                          Registre entradas e saídas sem deixar o estoque negativo.
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300">
+                        Estoque atual: {formatNumber(product.current_stock)}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-[150px_140px_1fr_auto]">
+                      <select
+                        value={movementTypes[product.id] || 'in'}
+                        onChange={(event) =>
+                          setMovementTypes((current) => ({
+                            ...current,
+                            [product.id]: event.target.value as 'in' | 'out',
+                          }))
+                        }
+                        className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                      >
+                        <option value="in">Entrada</option>
+                        <option value="out">Saída</option>
+                      </select>
+
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={movementQuantities[product.id] || ''}
+                        onChange={(event) =>
+                          setMovementQuantities((current) => ({
+                            ...current,
+                            [product.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Qtd"
+                        className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                      />
+
+                      <input
+                        value={movementReasons[product.id] || ''}
+                        onChange={(event) =>
+                          setMovementReasons((current) => ({
+                            ...current,
+                            [product.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={getMovementReasonPlaceholder(
+                          movementTypes[product.id] || 'in'
+                        )}
+                        className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => registerStockMovement(product)}
+                        disabled={savingMovement[product.id] || !product.active}
+                        className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white transition hover:bg-blue-500 disabled:opacity-50"
+                      >
+                        {savingMovement[product.id] ? 'Salvando...' : 'Registrar'}
+                      </button>
+                    </div>
+
+                    <div className="mt-5">
+                      <p className="text-sm font-bold text-zinc-300">
+                        Histórico recente
+                      </p>
+
+                      <div className="mt-3 space-y-2">
+                        {getProductMovements(product.id).length === 0 && (
+                          <p className="rounded-xl bg-zinc-900 p-3 text-sm text-zinc-500">
+                            Nenhuma movimentação registrada.
+                          </p>
+                        )}
+
+                        {getProductMovements(product.id)
+                          .slice(0, 5)
+                          .map((movement) => (
+                            <div
+                              key={movement.id}
+                              className="grid gap-3 rounded-xl bg-zinc-900 p-3 text-sm md:grid-cols-[120px_100px_100px_1fr_150px]"
+                            >
+                              <span
+                                className={`font-bold ${
+                                  movement.type === 'in'
+                                    ? 'text-green-400'
+                                    : 'text-red-400'
+                                }`}
+                              >
+                                {getMovementTypeLabel(movement.type)}
+                              </span>
+
+                              <span className="text-white">
+                                {movement.type === 'in' ? '+' : '-'}
+                                {formatNumber(movement.quantity)}
+                              </span>
+
+                              <span className="text-zinc-400">
+                                {formatNumber(movement.previous_stock)} →{' '}
+                                {formatNumber(movement.new_stock)}
+                              </span>
+
+                              <span className="text-zinc-400">
+                                {movement.reason || '-'}
+                              </span>
+
+                              <span className="text-zinc-500">
+                                {new Date(movement.created_at).toLocaleString('pt-BR')}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
