@@ -59,6 +59,9 @@ export default function ComandasPage() {
   const [priorityOnly, setPriorityOnly] = useState(false)
   const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
   const [selectedProfessionals, setSelectedProfessionals] = useState<Record<string, string>>({})
+  const [productNames, setProductNames] = useState<Record<string, string>>({})
+  const [productQuantities, setProductQuantities] = useState<Record<string, string>>({})
+  const [productPrices, setProductPrices] = useState<Record<string, string>>({})
   const [paymentByComanda, setPaymentByComanda] = useState<Record<string, string>>({})
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [savingNotes, setSavingNotes] = useState<Record<string, boolean>>({})
@@ -473,6 +476,73 @@ useEffect(() => {
     await loadData()
   }
 
+
+  async function addProductToComanda(comanda: Comanda) {
+    const productName = (productNames[comanda.id] || '').trim()
+    const quantity = Number(productQuantities[comanda.id] || 1)
+    const price = Number(productPrices[comanda.id] || 0)
+
+    if (!productName) {
+      alert('Digite o nome do produto.')
+      return
+    }
+
+    if (!quantity || quantity <= 0) {
+      alert('Informe uma quantidade válida.')
+      return
+    }
+
+    if (!price || price <= 0) {
+      alert('Informe um valor unitário válido.')
+      return
+    }
+
+    const { error: itemError } = await supabase
+      .from('comanda_items')
+      .insert({
+        comanda_id: comanda.id,
+        service_id: null,
+        professional_id: null,
+        description: productName,
+        quantity,
+        price,
+      })
+
+    if (itemError) {
+      alert(`Erro ao adicionar produto: ${itemError.message}`)
+      return
+    }
+
+    const newTotal = Number(comanda.total) + quantity * price
+
+    const { error: totalError } = await supabase
+      .from('comandas')
+      .update({ total: newTotal })
+      .eq('id', comanda.id)
+
+    if (totalError) {
+      alert(`Erro ao atualizar total: ${totalError.message}`)
+      return
+    }
+
+    setProductNames((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
+    setProductQuantities((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
+    setProductPrices((current) => ({
+      ...current,
+      [comanda.id]: '',
+    }))
+
+    await loadData()
+  }
+
   async function removeItemFromComanda(
     comanda: Comanda,
     item: ComandaItem
@@ -765,52 +835,118 @@ useEffect(() => {
 
         <div className="mt-5 border-t border-zinc-700 pt-5">
           {comanda.status === 'open' && (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
-              <select
-                value={selectedServices[comanda.id] || ''}
-                onChange={(event) =>
-                  setSelectedServices((current) => ({
-                    ...current,
-                    [comanda.id]: event.target.value,
-                  }))
-                }
-                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
-              >
-                <option value="">Selecionar serviço</option>
+            <div className="grid gap-4">
+              <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-4">
+                <p className="mb-3 text-sm font-bold text-zinc-300">
+                  Adicionar serviço
+                </p>
 
-                {services.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name} - R$ {service.price.toFixed(2)}
-                  </option>
-                ))}
-              </select>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <select
+                    value={selectedServices[comanda.id] || ''}
+                    onChange={(event) =>
+                      setSelectedServices((current) => ({
+                        ...current,
+                        [comanda.id]: event.target.value,
+                      }))
+                    }
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  >
+                    <option value="">Selecionar serviço</option>
 
-              <select
-                value={selectedProfessionals[comanda.id] || ''}
-                onChange={(event) =>
-                  setSelectedProfessionals((current) => ({
-                    ...current,
-                    [comanda.id]: event.target.value,
-                  }))
-                }
-                className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
-              >
-                <option value="">Selecionar profissional</option>
+                    {services.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name} - R$ {service.price.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
 
-                {professionals.map((professional) => (
-                  <option key={professional.id} value={professional.id}>
-                    {professional.name}
-                  </option>
-                ))}
-              </select>
+                  <select
+                    value={selectedProfessionals[comanda.id] || ''}
+                    onChange={(event) =>
+                      setSelectedProfessionals((current) => ({
+                        ...current,
+                        [comanda.id]: event.target.value,
+                      }))
+                    }
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  >
+                    <option value="">Selecionar profissional</option>
 
-              <button
-                type="button"
-                onClick={() => addServiceToComanda(comanda)}
-                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
-              >
-                Adicionar
-              </button>
+                    {professionals.map((professional) => (
+                      <option key={professional.id} value={professional.id}>
+                        {professional.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => addServiceToComanda(comanda)}
+                    className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
+                  >
+                    Adicionar serviço
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4">
+                <p className="mb-3 text-sm font-bold text-emerald-300">
+                  Adicionar produto manual
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_160px_auto]">
+                  <input
+                    value={productNames[comanda.id] || ''}
+                    onChange={(event) =>
+                      setProductNames((current) => ({
+                        ...current,
+                        [comanda.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Produto. Ex: Pomada modeladora"
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  />
+
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={productQuantities[comanda.id] || ''}
+                    onChange={(event) =>
+                      setProductQuantities((current) => ({
+                        ...current,
+                        [comanda.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Qtd"
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  />
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={productPrices[comanda.id] || ''}
+                    onChange={(event) =>
+                      setProductPrices((current) => ({
+                        ...current,
+                        [comanda.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Valor unitário"
+                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => addProductToComanda(comanda)}
+                    className="rounded-xl bg-emerald-500 px-5 py-3 font-bold text-black transition hover:bg-emerald-400"
+                  >
+                    Adicionar produto
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -829,11 +965,12 @@ useEffect(() => {
                 <div>
                   <p className="font-medium">{item.description}</p>
                   <p className="text-sm text-zinc-500">
-                    Quantidade: {item.quantity}
+                    Quantidade: {item.quantity} · Unitário: R${' '}
+                    {Number(item.price).toFixed(2)}
                   </p>
 
                   <p className="text-sm text-zinc-500">
-                    Profissional: {item.professional_name || 'Não informado'}
+                    Profissional: {item.professional_name || 'Produto / sem profissional'}
                   </p>
                 </div>
 
@@ -854,6 +991,24 @@ useEffect(() => {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-green-900 bg-green-950/30 p-5">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-wide text-green-300">
+                  Total da comanda
+                </p>
+
+                <p className="mt-1 text-xs text-zinc-400">
+                  Soma de serviços e produtos adicionados.
+                </p>
+              </div>
+
+              <strong className="text-3xl font-bold text-green-400">
+                R$ {Number(comanda.total).toFixed(2)}
+              </strong>
+            </div>
           </div>
 
           {comanda.status === 'open' && (
