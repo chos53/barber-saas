@@ -36,6 +36,7 @@ export default function ProdutosPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   const [search, setSearch] = useState('')
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'zero'>('all')
   const [loading, setLoading] = useState(false)
 
   const [name, setName] = useState('')
@@ -67,16 +68,39 @@ export default function ProdutosPage() {
   const filteredProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()
 
-    return products.filter((product) => {
-      if (!normalizedSearch) return true
+    return products
+      .filter((product) => {
+        const currentStockValue = Number(product.current_stock || 0)
+        const minimumStockValue = Number(product.minimum_stock || 0)
 
-      return (
-        product.name.toLowerCase().includes(normalizedSearch) ||
-        String(product.category || '').toLowerCase().includes(normalizedSearch) ||
-        String(product.code || '').toLowerCase().includes(normalizedSearch)
-      )
-    })
-  }, [products, search])
+        const matchesSearch =
+          !normalizedSearch ||
+          product.name.toLowerCase().includes(normalizedSearch) ||
+          String(product.category || '').toLowerCase().includes(normalizedSearch) ||
+          String(product.code || '').toLowerCase().includes(normalizedSearch)
+
+        const matchesStockFilter =
+          stockFilter === 'all' ||
+          (stockFilter === 'zero' && product.active && currentStockValue <= 0) ||
+          (stockFilter === 'low' &&
+            product.active &&
+            currentStockValue > 0 &&
+            minimumStockValue > 0 &&
+            currentStockValue <= minimumStockValue)
+
+        return matchesSearch && matchesStockFilter
+      })
+      .sort((a, b) => {
+        const statusPriorityA = getStockPriority(a)
+        const statusPriorityB = getStockPriority(b)
+
+        if (statusPriorityA !== statusPriorityB) {
+          return statusPriorityA - statusPriorityB
+        }
+
+        return a.name.localeCompare(b.name)
+      })
+  }, [products, search, stockFilter])
 
   const activeProducts = useMemo(() => {
     return products.filter((product) => product.active).length
@@ -91,8 +115,22 @@ export default function ProdutosPage() {
       const current = Number(product.current_stock || 0)
       const minimum = Number(product.minimum_stock || 0)
 
-      return product.active && minimum > 0 && current <= minimum
+      return product.active && current > 0 && minimum > 0 && current <= minimum
     }).length
+  }, [products])
+
+  const zeroStockProducts = useMemo(() => {
+    return products.filter((product) => {
+      const current = Number(product.current_stock || 0)
+
+      return product.active && current <= 0
+    }).length
+  }, [products])
+
+  const activeStockUnits = useMemo(() => {
+    return products
+      .filter((product) => product.active)
+      .reduce((sum, product) => sum + Number(product.current_stock || 0), 0)
   }, [products])
 
   const totalStockValue = useMemo(() => {
@@ -134,20 +172,41 @@ export default function ProdutosPage() {
       return {
         label: 'Inativo',
         className: 'bg-zinc-700 text-zinc-300',
+        cardClassName: 'border-zinc-800 bg-zinc-950 opacity-70',
+      }
+    }
+
+    if (current <= 0) {
+      return {
+        label: 'Estoque zerado',
+        className: 'bg-red-600 text-white',
+        cardClassName: 'border-red-700 bg-red-950/30',
       }
     }
 
     if (minimum > 0 && current <= minimum) {
       return {
         label: 'Estoque baixo',
-        className: 'bg-red-900 text-red-300',
+        className: 'bg-orange-500 text-black',
+        cardClassName: 'border-orange-700 bg-orange-950/30',
       }
     }
 
     return {
       label: 'Estoque ok',
       className: 'bg-green-900 text-green-300',
+      cardClassName: 'border-zinc-800 bg-zinc-900',
     }
+  }
+
+  function getStockPriority(product: Product) {
+    const current = Number(product.current_stock || 0)
+    const minimum = Number(product.minimum_stock || 0)
+
+    if (!product.active) return 4
+    if (current <= 0) return 1
+    if (minimum > 0 && current <= minimum) return 2
+    return 3
   }
 
 
@@ -490,7 +549,7 @@ export default function ProdutosPage() {
         Cadastro básico de produtos para preparar o módulo de estoque e a venda pela comanda.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
           <p className="text-sm text-blue-300">
             Produtos ativos
@@ -511,15 +570,49 @@ export default function ProdutosPage() {
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-red-900 bg-red-950/30 p-6">
-          <p className="text-sm text-red-300">
+        <button
+          type="button"
+          onClick={() => setStockFilter((current) => current === 'zero' ? 'all' : 'zero')}
+          className={`rounded-2xl border p-6 text-left transition ${
+            stockFilter === 'zero'
+              ? 'border-red-500 bg-red-500 text-white'
+              : 'border-red-900 bg-red-950/30 text-white hover:bg-red-950/50'
+          }`}
+        >
+          <p className={stockFilter === 'zero' ? 'text-sm text-white' : 'text-sm text-red-300'}>
+            Estoque zerado
+          </p>
+
+          <strong className="mt-2 block text-3xl">
+            {zeroStockProducts}
+          </strong>
+
+          <span className="mt-2 block text-xs font-bold">
+            {stockFilter === 'zero' ? 'Filtro ativo' : 'Clique para filtrar'}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStockFilter((current) => current === 'low' ? 'all' : 'low')}
+          className={`rounded-2xl border p-6 text-left transition ${
+            stockFilter === 'low'
+              ? 'border-orange-500 bg-orange-500 text-black'
+              : 'border-orange-900 bg-orange-950/30 text-white hover:bg-orange-950/50'
+          }`}
+        >
+          <p className={stockFilter === 'low' ? 'text-sm text-black' : 'text-sm text-orange-300'}>
             Estoque baixo
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-2 block text-3xl">
             {lowStockProducts}
           </strong>
-        </div>
+
+          <span className="mt-2 block text-xs font-bold">
+            {stockFilter === 'low' ? 'Filtro ativo' : 'Clique para filtrar'}
+          </span>
+        </button>
 
         <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-6">
           <p className="text-sm text-yellow-300">
@@ -529,6 +622,10 @@ export default function ProdutosPage() {
           <strong className="mt-2 block text-3xl text-white">
             {formatCurrency(totalStockValue)}
           </strong>
+
+          <p className="mt-2 text-xs text-yellow-100">
+            {formatNumber(activeStockUnits)} unidade(s) em estoque
+          </p>
         </div>
 
         <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
@@ -622,13 +719,57 @@ export default function ProdutosPage() {
         </button>
       </form>
 
-      <div className="mt-8">
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Pesquisar por produto, categoria ou código..."
-          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-white outline-none"
-        />
+      <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Pesquisar por produto, categoria ou código..."
+            className="w-full rounded-xl border border-zinc-700 bg-black p-4 text-white outline-none"
+          />
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setStockFilter('all')}
+              className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                stockFilter === 'all'
+                  ? 'bg-white text-black'
+                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              }`}
+            >
+              Todos
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStockFilter('zero')}
+              className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                stockFilter === 'zero'
+                  ? 'bg-red-500 text-white'
+                  : 'bg-red-950/50 text-red-300 hover:bg-red-950'
+              }`}
+            >
+              Zerados
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStockFilter('low')}
+              className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                stockFilter === 'low'
+                  ? 'bg-orange-500 text-black'
+                  : 'bg-orange-950/50 text-orange-300 hover:bg-orange-950'
+              }`}
+            >
+              Estoque baixo
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-3 text-sm text-zinc-500">
+          Exibindo {filteredProducts.length} de {products.length} produto(s).
+        </p>
       </div>
 
       <div className="mt-8 space-y-4">
@@ -645,11 +786,7 @@ export default function ProdutosPage() {
           return (
             <div
               key={product.id}
-              className={`rounded-2xl border p-5 ${
-                product.active
-                  ? 'border-zinc-800 bg-zinc-900'
-                  : 'border-zinc-800 bg-zinc-950 opacity-70'
-              }`}
+              className={`rounded-2xl border p-5 ${stockStatus.cardClassName}`}
             >
               {isEditing ? (
                 <div className="grid gap-4">
@@ -756,6 +893,21 @@ export default function ProdutosPage() {
                         <p>
                           Código: {product.code || '-'}
                         </p>
+
+                        {product.active && Number(product.current_stock || 0) <= 0 && (
+                          <p className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white">
+                            Atenção: produto zerado. Reposição necessária.
+                          </p>
+                        )}
+
+                        {product.active &&
+                          Number(product.current_stock || 0) > 0 &&
+                          Number(product.minimum_stock || 0) > 0 &&
+                          Number(product.current_stock || 0) <= Number(product.minimum_stock || 0) && (
+                            <p className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-black">
+                              Atenção: estoque abaixo ou igual ao mínimo.
+                            </p>
+                          )}
 
                         <p>
                           Criado em{' '}
