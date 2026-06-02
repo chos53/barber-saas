@@ -7,12 +7,21 @@ type Client = { id: string; name: string }
 type Service = { id: string; name: string; price: number }
 type Professional = { id: string; name: string }
 
+type Product = {
+  id: string
+  name: string
+  sale_price: number | null
+  current_stock: number | null
+  active: boolean
+}
+
 type ComandaItem = {
   id: string
   comanda_id: string
   description: string
   quantity: number
   price: number
+  product_id?: string | null
   professional_id?: string | null
   professional_name?: string | null
 }
@@ -55,6 +64,7 @@ export default function ComandasPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [comandas, setComandas] = useState<Comanda[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
   const [notes, setNotes] = useState('')
@@ -65,9 +75,8 @@ export default function ComandasPage() {
   const [priorityOnly, setPriorityOnly] = useState(false)
   const [selectedServices, setSelectedServices] = useState<Record<string, string>>({})
   const [selectedProfessionals, setSelectedProfessionals] = useState<Record<string, string>>({})
-  const [productNames, setProductNames] = useState<Record<string, string>>({})
-  const [productQuantities, setProductQuantities] = useState<Record<string, string>>({})
-  const [productPrices, setProductPrices] = useState<Record<string, string>>({})
+  const [selectedProductIds, setSelectedProductIds] = useState<Record<string, string>>({})
+  const [registeredProductQuantities, setRegisteredProductQuantities] = useState<Record<string, string>>({})
   const [discountsByComanda, setDiscountsByComanda] = useState<Record<string, string>>({})
   const [discountTypesByComanda, setDiscountTypesByComanda] = useState<Record<string, 'amount' | 'percentage'>>({})
   const [surchargesByComanda, setSurchargesByComanda] = useState<Record<string, string>>({})
@@ -237,9 +246,21 @@ useEffect(() => {
     return Math.min(Number(discountValue.toFixed(2)), subtotal)
   }
 
+  function getComandaSubtotal(comanda: Comanda) {
+    const itemsTotal = comanda.items.reduce((sum, item) => {
+      return sum + Number(item.price || 0) * Number(item.quantity || 0)
+    }, 0)
+
+    if (itemsTotal > 0) {
+      return Number(itemsTotal.toFixed(2))
+    }
+
+    return Number(comanda.total || 0)
+  }
+
   function getComandaDiscount(comanda: Comanda) {
     return calculateDiscountAmount(
-      Number(comanda.total || 0),
+      getComandaSubtotal(comanda),
       getComandaDiscountType(comanda),
       getComandaDiscountValue(comanda)
     )
@@ -269,7 +290,7 @@ useEffect(() => {
 
   function getComandaSurcharge(comanda: Comanda) {
     return calculateSurchargeAmount(
-      Number(comanda.total || 0),
+      getComandaSubtotal(comanda),
       getComandaSurchargeType(comanda),
       getComandaSurchargeValue(comanda)
     )
@@ -277,9 +298,31 @@ useEffect(() => {
 
   function getComandaFinalTotal(comanda: Comanda) {
     return Math.max(
-      Number(comanda.total || 0) - getComandaDiscount(comanda) + getComandaSurcharge(comanda),
+      getComandaSubtotal(comanda) - getComandaDiscount(comanda) + getComandaSurcharge(comanda),
       0
     )
+  }
+
+  async function recalculateComandaTotal(comandaId: string) {
+    const { data: itemsData, error: itemsError } = await supabase
+      .from('comanda_items')
+      .select('quantity, price')
+      .eq('comanda_id', comandaId)
+
+    if (itemsError) {
+      return itemsError
+    }
+
+    const recalculatedTotal = (itemsData || []).reduce((sum, item: any) => {
+      return sum + Number(item.price || 0) * Number(item.quantity || 0)
+    }, 0)
+
+    const { error: totalError } = await supabase
+      .from('comandas')
+      .update({ total: Number(recalculatedTotal.toFixed(2)) })
+      .eq('id', comandaId)
+
+    return totalError
   }
 
   async function loadData() {
@@ -318,6 +361,18 @@ useEffect(() => {
       .eq('active', true)
       .order('name', { ascending: true })
 
+    const { data: productsData, error: productsError } = await supabase
+      .from('products')
+      .select('id, name, sale_price, current_stock, active')
+      .eq('company_id', profile.company_id)
+      .eq('active', true)
+      .order('name', { ascending: true })
+
+    if (productsError) {
+      alert(`Erro ao carregar produtos cadastrados: ${productsError.message}`)
+      return
+    }
+
     const { data: comandasData } = await supabase
       .from('comandas')
       .select(
@@ -332,7 +387,7 @@ useEffect(() => {
       comandaIds.length > 0
         ? await supabase
             .from('comanda_items')
-            .select('id, comanda_id, description, quantity, price, professional_id')
+            .select('id, comanda_id, description, quantity, price, professional_id, product_id')
             .in('comanda_id', comandaIds)
             .order('created_at', { ascending: true })
         : { data: [] }
@@ -341,8 +396,8 @@ useEffect(() => {
       (clientsData || []).map((client) => [client.id, client.name])
     )
 
-    const professionalsMap = new Map(
-      (professionalsData || []).map((professional) => [
+    const professionalsMap = new Map<string, string>(
+      (professionalsData || []).map((professional: any) => [
         professional.id,
         professional.name,
       ])
@@ -350,7 +405,7 @@ useEffect(() => {
 
     const itemsByComanda = new Map<string, ComandaItem[]>()
 
-    ;(itemsData || []).forEach((item) => {
+    ;(itemsData || []).forEach((item: any) => {
       const currentItems = itemsByComanda.get(item.comanda_id) || []
 
       currentItems.push({
@@ -359,6 +414,7 @@ useEffect(() => {
         description: item.description,
         quantity: Number(item.quantity),
         price: Number(item.price),
+        product_id: item.product_id || null,
         professional_id: item.professional_id || null,
         professional_name: item.professional_id
           ? professionalsMap.get(String(item.professional_id)) || 'Profissional não informado'
@@ -405,6 +461,13 @@ useEffect(() => {
     )
 
     setProfessionals(professionalsData || [])
+    setProducts(
+      (productsData || []).map((product) => ({
+        ...product,
+        sale_price: Number(product.sale_price || 0),
+        current_stock: Number(product.current_stock || 0),
+      }))
+    )
 
     setComandas(normalizedComandas)
 
@@ -465,7 +528,7 @@ useEffect(() => {
 
     const discountType = discountTypesByComanda[comanda.id] || 'amount'
     const discountValue = Number(discountsByComanda[comanda.id] || 0)
-    const subtotal = Number(comanda.total || 0)
+    const subtotal = getComandaSubtotal(comanda)
 
     if (discountValue < 0) {
       alert('O desconto não pode ser negativo.')
@@ -524,7 +587,7 @@ useEffect(() => {
 
     const surchargeType = surchargeTypesByComanda[comanda.id] || 'amount'
     const surchargeValue = Number(surchargesByComanda[comanda.id] || 0)
-    const subtotal = Number(comanda.total || 0)
+    const subtotal = getComandaSubtotal(comanda)
 
     if (surchargeValue < 0) {
       alert('O acréscimo não pode ser negativo.')
@@ -669,13 +732,7 @@ useEffect(() => {
       return
     }
 
-    const newTotal =
-      Number(comanda.total) + Number(service.price)
-
-    const { error: totalError } = await supabase
-      .from('comandas')
-      .update({ total: newTotal })
-      .eq('id', comanda.id)
+    const totalError = await recalculateComandaTotal(comanda.id)
 
     if (totalError) {
       alert(
@@ -699,12 +756,11 @@ useEffect(() => {
 
 
   async function addProductToComanda(comanda: Comanda) {
-    const productName = (productNames[comanda.id] || '').trim()
-    const quantity = Number(productQuantities[comanda.id] || 1)
-    const price = Number(productPrices[comanda.id] || 0)
+    const productId = selectedProductIds[comanda.id]
+    const quantity = Number(registeredProductQuantities[comanda.id] || 1)
 
-    if (!productName) {
-      alert('Digite o nome do produto.')
+    if (!productId) {
+      alert('Selecione um produto cadastrado.')
       return
     }
 
@@ -713,8 +769,24 @@ useEffect(() => {
       return
     }
 
-    if (!price || price <= 0) {
-      alert('Informe um valor unitário válido.')
+    const product = products.find((item) => item.id === productId)
+
+    if (!product) {
+      alert('Produto não encontrado.')
+      return
+    }
+
+    const currentStock = Number(product.current_stock || 0)
+
+    if (quantity > currentStock) {
+      alert(`Estoque insuficiente para ${product.name}. Disponível: ${currentStock}.`)
+      return
+    }
+
+    const salePrice = Number(product.sale_price || 0)
+
+    if (salePrice <= 0) {
+      alert('Este produto está sem valor de venda cadastrado.')
       return
     }
 
@@ -723,10 +795,11 @@ useEffect(() => {
       .insert({
         comanda_id: comanda.id,
         service_id: null,
+        product_id: product.id,
         professional_id: null,
-        description: productName,
+        description: product.name,
         quantity,
-        price,
+        price: salePrice,
       })
 
     if (itemError) {
@@ -734,29 +807,19 @@ useEffect(() => {
       return
     }
 
-    const newTotal = Number(comanda.total) + quantity * price
-
-    const { error: totalError } = await supabase
-      .from('comandas')
-      .update({ total: newTotal })
-      .eq('id', comanda.id)
+    const totalError = await recalculateComandaTotal(comanda.id)
 
     if (totalError) {
       alert(`Erro ao atualizar total: ${totalError.message}`)
       return
     }
 
-    setProductNames((current) => ({
+    setSelectedProductIds((current) => ({
       ...current,
       [comanda.id]: '',
     }))
 
-    setProductQuantities((current) => ({
-      ...current,
-      [comanda.id]: '',
-    }))
-
-    setProductPrices((current) => ({
+    setRegisteredProductQuantities((current) => ({
       ...current,
       [comanda.id]: '',
     }))
@@ -785,18 +848,7 @@ useEffect(() => {
       return
     }
 
-    const removedValue =
-      Number(item.price) * Number(item.quantity)
-
-    const newTotal = Math.max(
-      Number(comanda.total) - removedValue,
-      0
-    )
-
-    const { error: totalError } = await supabase
-      .from('comandas')
-      .update({ total: newTotal })
-      .eq('id', comanda.id)
+    const totalError = await recalculateComandaTotal(comanda.id)
 
     if (totalError) {
       alert(
@@ -809,12 +861,108 @@ useEffect(() => {
   }
 
   async function closeComanda(comanda: Comanda) {
-    const paymentMethod =
-      paymentByComanda[comanda.id]
+    const paymentMethod = paymentByComanda[comanda.id]
 
     if (!paymentMethod) {
       alert('Selecione a forma de pagamento.')
       return
+    }
+
+    if (comanda.items.length === 0) {
+      alert('Adicione ao menos um item antes de fechar a comanda.')
+      return
+    }
+
+    const productItems = comanda.items.filter((item) => item.product_id)
+    const quantityByProduct = new Map<string, number>()
+
+    productItems.forEach((item) => {
+      if (!item.product_id) return
+
+      quantityByProduct.set(
+        item.product_id,
+        (quantityByProduct.get(item.product_id) || 0) + Number(item.quantity || 0)
+      )
+    })
+
+    const productIds = Array.from(quantityByProduct.keys())
+
+    if (productIds.length > 0) {
+      const { data: stockProducts, error: stockProductsError } = await supabase
+        .from('products')
+        .select('id, name, current_stock')
+        .eq('company_id', companyId)
+        .in('id', productIds)
+
+      if (stockProductsError) {
+        alert(`Erro ao validar estoque: ${stockProductsError.message}`)
+        return
+      }
+
+      const stockProductMap = new Map(
+        (stockProducts || []).map((product: any) => [product.id, product])
+      )
+
+      for (const productId of productIds) {
+        const product: any = stockProductMap.get(productId)
+        const requestedQuantity = quantityByProduct.get(productId) || 0
+        const currentStock = Number(product?.current_stock || 0)
+
+        if (!product) {
+          alert('Um dos produtos da comanda não foi encontrado no cadastro.')
+          return
+        }
+
+        if (requestedQuantity > currentStock) {
+          alert(
+            `Estoque insuficiente para ${product.name}. Disponível: ${currentStock}. Tentativa de venda: ${requestedQuantity}.`
+          )
+          return
+        }
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      for (const productId of productIds) {
+        const product: any = stockProductMap.get(productId)
+        const quantity = quantityByProduct.get(productId) || 0
+        const previousStock = Number(product?.current_stock || 0)
+        const newStock = previousStock - quantity
+
+        const { error: productUpdateError } = await supabase
+          .from('products')
+          .update({
+            current_stock: newStock,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', productId)
+          .eq('company_id', companyId)
+
+        if (productUpdateError) {
+          alert(`Erro ao baixar estoque: ${productUpdateError.message}`)
+          return
+        }
+
+        const { error: movementError } = await supabase
+          .from('stock_movements')
+          .insert({
+            company_id: companyId,
+            product_id: productId,
+            type: 'out',
+            quantity,
+            previous_stock: previousStock,
+            new_stock: newStock,
+            reason: `Venda na comanda ${comanda.id.slice(0, 8)} - ${comanda.client_name}`,
+            created_by: user?.id || null,
+          })
+
+        if (movementError) {
+          alert(`Erro ao registrar movimentação de estoque: ${movementError.message}`)
+          return
+        }
+      }
     }
 
     const { error: transactionError } =
@@ -948,7 +1096,7 @@ useEffect(() => {
   }
 
   function printComanda(comanda: Comanda) {
-    const subtotal = Number(comanda.total || 0)
+    const subtotal = getComandaSubtotal(comanda)
     const discount = getComandaDiscount(comanda)
     const surcharge = getComandaSurcharge(comanda)
     const finalTotal = getComandaFinalTotal(comanda)
@@ -1442,49 +1590,41 @@ useEffect(() => {
 
               <div className="rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4">
                 <p className="mb-3 text-sm font-bold text-emerald-300">
-                  Adicionar produto manual
+                  Adicionar produto cadastrado
                 </p>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_160px_auto]">
-                  <input
-                    value={productNames[comanda.id] || ''}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_140px_auto]">
+                  <select
+                    value={selectedProductIds[comanda.id] || ''}
                     onChange={(event) =>
-                      setProductNames((current) => ({
+                      setSelectedProductIds((current) => ({
                         ...current,
                         [comanda.id]: event.target.value,
                       }))
                     }
-                    placeholder="Produto. Ex: Pomada modeladora"
                     className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
-                  />
+                  >
+                    <option value="">Selecionar produto</option>
+
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} - R$ {Number(product.sale_price || 0).toFixed(2)} · estoque {Number(product.current_stock || 0)}
+                      </option>
+                    ))}
+                  </select>
 
                   <input
                     type="number"
                     min="1"
                     step="1"
-                    value={productQuantities[comanda.id] || ''}
+                    value={registeredProductQuantities[comanda.id] || ''}
                     onChange={(event) =>
-                      setProductQuantities((current) => ({
+                      setRegisteredProductQuantities((current) => ({
                         ...current,
                         [comanda.id]: event.target.value,
                       }))
                     }
                     placeholder="Qtd"
-                    className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
-                  />
-
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={productPrices[comanda.id] || ''}
-                    onChange={(event) =>
-                      setProductPrices((current) => ({
-                        ...current,
-                        [comanda.id]: event.target.value,
-                      }))
-                    }
-                    placeholder="Valor unitário"
                     className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
                   />
 
@@ -1496,6 +1636,10 @@ useEffect(() => {
                     Adicionar produto
                   </button>
                 </div>
+
+                <p className="mt-3 text-xs text-emerald-200">
+                  O estoque será baixado automaticamente quando a comanda for fechada.
+                </p>
               </div>
             </div>
           )}
@@ -1520,7 +1664,9 @@ useEffect(() => {
                   </p>
 
                   <p className="text-sm text-zinc-500">
-                    Profissional: {item.professional_name || 'Produto / sem profissional'}
+                    {item.product_id
+                      ? 'Produto cadastrado'
+                      : `Profissional: ${item.professional_name || 'Produto / sem profissional'}`}
                   </p>
                 </div>
 
@@ -1664,7 +1810,7 @@ useEffect(() => {
                 </p>
 
                 <strong className="mt-1 block text-2xl font-bold text-white">
-                  R$ {Number(comanda.total).toFixed(2)}
+                  R$ {getComandaSubtotal(comanda).toFixed(2)}
                 </strong>
               </div>
 
