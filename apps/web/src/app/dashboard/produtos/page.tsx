@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -545,9 +546,18 @@ export default function ProdutosPage() {
         Produtos
       </h1>
 
-      <p className="mt-2 text-zinc-400">
-        Cadastro básico de produtos para preparar o módulo de estoque e a venda pela comanda.
-      </p>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <p className="mt-2 text-zinc-400">
+          Cadastro básico de produtos para preparar o módulo de estoque e a venda pela comanda.
+        </p>
+
+        <Link
+          href="/dashboard/produtos/dashboard"
+          className="rounded-xl bg-white px-5 py-3 text-center font-bold text-black transition hover:bg-zinc-200"
+        >
+          Dashboard de produtos
+        </Link>
+      </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">

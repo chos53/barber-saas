@@ -86,6 +86,11 @@ const menuItems: MenuItem[] = [
     roles: ['owner', 'administrator', 'manager'],
   },
   {
+    label: 'Dashboard Produtos',
+    href: '/dashboard/produtos/dashboard',
+    roles: ['owner', 'administrator', 'manager'],
+  },
+  {
     label: 'Configurações',
     href: '/dashboard/configuracoes',
     roles: ['owner', 'administrator'],
