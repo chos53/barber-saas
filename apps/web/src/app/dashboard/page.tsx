@@ -49,8 +49,11 @@ type Comanda = {
 type ComandaItem = {
   id: string
   comanda_id: string
+  description?: string | null
   quantity: number
   price: number
+  product_id?: string | null
+  professional_id?: string | null
 }
 
 type LoyaltyRedemption = {
@@ -58,6 +61,18 @@ type LoyaltyRedemption = {
   client_id: string
   reward_description: string
   created_at: string
+}
+
+type Professional = {
+  id: string
+  name: string
+}
+
+type RankingItem = {
+  id: string
+  name: string
+  quantity: number
+  revenue: number
 }
 
 type CommercialStats = {
@@ -113,6 +128,9 @@ export default function DashboardPage() {
     newClientsThisMonth: 0,
     clientsWithoutBirthday: 0,
   })
+  const [topServices, setTopServices] = useState<RankingItem[]>([])
+  const [topProducts, setTopProducts] = useState<RankingItem[]>([])
+  const [topProfessionals, setTopProfessionals] = useState<RankingItem[]>([])
 
   useEffect(() => {
     const now = new Date()
@@ -214,6 +232,63 @@ export default function DashboardPage() {
     return diffDays >= 60
   }
 
+  function renderRankingCard(
+    title: string,
+    description: string,
+    items: RankingItem[],
+    emptyMessage: string
+  ) {
+    return (
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold">{title}</h2>
+            <p className="mt-1 text-sm text-zinc-500">{description}</p>
+          </div>
+
+          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
+            Top {items.length}
+          </span>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {items.length === 0 && (
+            <p className="rounded-xl bg-zinc-950 p-4 text-sm text-zinc-500">
+              {emptyMessage}
+            </p>
+          )}
+
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+            >
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-black">
+                      #{index + 1}
+                    </span>
+
+                    <strong className="text-white">{item.name}</strong>
+                  </div>
+
+                  <p className="mt-2 text-sm text-zinc-500">
+                    Quantidade: {item.quantity.toLocaleString('pt-BR')}
+                  </p>
+                </div>
+
+                <strong className="text-lg text-green-400">
+                  {formatCurrency(item.revenue)}
+                </strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
   async function loadDashboard(currentDate: string, firstDayOfMonth: string) {
     setLoading(true)
 
@@ -260,6 +335,7 @@ export default function DashboardPage() {
       clientsCommercialResult,
       closedComandasResult,
       monthLoyaltyRedemptionsResult,
+      professionalsRankingResult,
     ] = await Promise.all([
       supabase
         .from('appointments')
@@ -336,6 +412,11 @@ export default function DashboardPage() {
         .eq('company_id', profile.company_id)
         .gte('created_at', firstDayOfMonth + 'T00:00:00.000Z')
         .lte('created_at', currentDate + 'T23:59:59.999Z'),
+
+      supabase
+        .from('professionals')
+        .select('id, name')
+        .eq('company_id', profile.company_id),
     ])
 
     const todayAppointments = todayAppointmentsResult.data || []
@@ -383,7 +464,7 @@ export default function DashboardPage() {
       closedComandaIds.length > 0
         ? await supabase
             .from('comanda_items')
-            .select('id, comanda_id, quantity, price')
+            .select('id, comanda_id, description, quantity, price, product_id, professional_id')
             .in('comanda_id', closedComandaIds)
         : { data: [] }
 
@@ -395,8 +476,11 @@ export default function DashboardPage() {
       currentItems.push({
         id: item.id,
         comanda_id: item.comanda_id,
+        description: item.description || 'Item sem descrição',
         quantity: Number(item.quantity || 0),
         price: Number(item.price || 0),
+        product_id: item.product_id || null,
+        professional_id: item.professional_id || null,
       })
 
       itemsByComanda.set(item.comanda_id, currentItems)
@@ -453,6 +537,86 @@ export default function DashboardPage() {
         currentDate + 'T23:59:59.999Z'
       )
     }).length
+
+    const professionalsMap = new Map(
+      ((professionalsRankingResult.data || []) as Professional[]).map((professional) => [
+        professional.id,
+        professional.name,
+      ])
+    )
+
+    const serviceRankingMap = new Map<string, RankingItem>()
+    const productRankingMap = new Map<string, RankingItem>()
+    const professionalRankingMap = new Map<string, RankingItem>()
+
+    monthClosedComandas.forEach((comanda) => {
+      const items = itemsByComanda.get(comanda.id) || []
+
+      items.forEach((item) => {
+        const quantity = Number(item.quantity || 0)
+        const revenue = Number(item.price || 0) * quantity
+        const itemName = item.description || 'Item sem descrição'
+
+        if (item.product_id) {
+          const currentProduct = productRankingMap.get(item.product_id) || {
+            id: item.product_id,
+            name: itemName,
+            quantity: 0,
+            revenue: 0,
+          }
+
+          currentProduct.quantity += quantity
+          currentProduct.revenue += revenue
+          productRankingMap.set(item.product_id, currentProduct)
+          return
+        }
+
+        const serviceKey = itemName.toLowerCase().trim()
+        const currentService = serviceRankingMap.get(serviceKey) || {
+          id: serviceKey,
+          name: itemName,
+          quantity: 0,
+          revenue: 0,
+        }
+
+        currentService.quantity += quantity
+        currentService.revenue += revenue
+        serviceRankingMap.set(serviceKey, currentService)
+
+        if (item.professional_id) {
+          const professionalName =
+            professionalsMap.get(item.professional_id) || 'Profissional não informado'
+          const currentProfessional = professionalRankingMap.get(item.professional_id) || {
+            id: item.professional_id,
+            name: professionalName,
+            quantity: 0,
+            revenue: 0,
+          }
+
+          currentProfessional.quantity += quantity
+          currentProfessional.revenue += revenue
+          professionalRankingMap.set(item.professional_id, currentProfessional)
+        }
+      })
+    })
+
+    setTopServices(
+      Array.from(serviceRankingMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5)
+    )
+
+    setTopProducts(
+      Array.from(productRankingMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5)
+    )
+
+    setTopProfessionals(
+      Array.from(professionalRankingMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5)
+    )
 
     setCommercialStats({
       averageTicket,
@@ -721,6 +885,30 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
+      </div>
+
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-3">
+        {renderRankingCard(
+          'Top serviços do mês',
+          'Serviços com maior faturamento em comandas fechadas.',
+          topServices,
+          'Nenhum serviço vendido no mês.'
+        )}
+
+        {renderRankingCard(
+          'Top produtos do mês',
+          'Produtos mais vendidos em comandas fechadas.',
+          topProducts,
+          'Nenhum produto vendido no mês.'
+        )}
+
+        {renderRankingCard(
+          'Ranking de profissionais',
+          'Faturamento gerado por serviços executados.',
+          topProfessionals,
+          'Nenhum profissional com serviço fechado no mês.'
+        )}
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
