@@ -13,9 +13,18 @@ type Client = {
 
 type LoyaltyStats = {
   completedAppointments: number
+  redemptions: number
   rewardsAvailable: number
   progress: number
   remaining: number
+}
+
+type LoyaltyRedemption = {
+  id: string
+  company_id: string
+  client_id: string
+  reward_description: string
+  created_at: string
 }
 
 const loyaltyGoal = 10
@@ -23,6 +32,8 @@ const loyaltyGoal = 10
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loyaltyByClient, setLoyaltyByClient] = useState<Record<string, LoyaltyStats>>({})
+  const [loyaltyRedemptions, setLoyaltyRedemptions] = useState<LoyaltyRedemption[]>([])
+  const [redeemingClient, setRedeemingClient] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
 
   const [name, setName] = useState('')
@@ -129,6 +140,19 @@ export default function ClientsPage() {
       return
     }
 
+    const { data: redemptionsData, error: redemptionsError } = await supabase
+      .from('loyalty_redemptions')
+      .select('id, company_id, client_id, reward_description, created_at')
+      .eq('company_id', profile.company_id)
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false })
+
+    if (redemptionsError) {
+      setLoyaltyRedemptions([])
+    } else {
+      setLoyaltyRedemptions((redemptionsData || []) as LoyaltyRedemption[])
+    }
+
     const completedByClient: Record<string, number> = {}
 
     ;(appointmentsData || []).forEach((appointment) => {
@@ -138,16 +162,26 @@ export default function ClientsPage() {
         (completedByClient[appointment.client_id] || 0) + 1
     })
 
+    const redemptionsByClient: Record<string, number> = {}
+
+    ;(redemptionsData || []).forEach((redemption) => {
+      redemptionsByClient[redemption.client_id] =
+        (redemptionsByClient[redemption.client_id] || 0) + 1
+    })
+
     const nextLoyaltyByClient: Record<string, LoyaltyStats> = {}
 
     normalizedClients.forEach((client) => {
       const completedAppointments = completedByClient[client.id] || 0
-      const rewardsAvailable = Math.floor(completedAppointments / loyaltyGoal)
+      const redemptions = redemptionsByClient[client.id] || 0
+      const earnedRewards = Math.floor(completedAppointments / loyaltyGoal)
+      const rewardsAvailable = Math.max(earnedRewards - redemptions, 0)
       const progress = completedAppointments % loyaltyGoal
       const remaining = progress === 0 && completedAppointments > 0 ? 0 : loyaltyGoal - progress
 
       nextLoyaltyByClient[client.id] = {
         completedAppointments,
+        redemptions,
         rewardsAvailable,
         progress,
         remaining,
@@ -244,6 +278,7 @@ export default function ClientsPage() {
     return (
       loyaltyByClient[clientId] || {
         completedAppointments: 0,
+        redemptions: 0,
         rewardsAvailable: 0,
         progress: 0,
         remaining: loyaltyGoal,
@@ -267,6 +302,51 @@ export default function ClientsPage() {
     }
 
     return `Faltam ${stats.remaining} atendimento(s) para ganhar uma recompensa`
+  }
+
+
+  function getClientRedemptions(clientId: string) {
+    return loyaltyRedemptions.filter((redemption) => redemption.client_id === clientId)
+  }
+
+  async function redeemReward(client: Client) {
+    const stats = getLoyaltyStats(client.id)
+
+    if (stats.rewardsAvailable <= 0) {
+      alert('Este cliente ainda não possui recompensa disponível.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Confirmar resgate de recompensa para ${client.name}?`
+    )
+
+    if (!confirmed) return
+
+    setRedeemingClient((current) => ({
+      ...current,
+      [client.id]: true,
+    }))
+
+    const { error } = await supabase
+      .from('loyalty_redemptions')
+      .insert({
+        company_id: companyId,
+        client_id: client.id,
+        reward_description: 'Recompensa de fidelidade',
+      })
+
+    setRedeemingClient((current) => ({
+      ...current,
+      [client.id]: false,
+    }))
+
+    if (error) {
+      alert(`Erro ao resgatar recompensa: ${error.message}`)
+      return
+    }
+
+    await loadData()
   }
 
   return (
@@ -501,7 +581,7 @@ export default function ClientsPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-center text-sm md:grid-cols-4">
                         <div className="rounded-xl bg-zinc-900 p-3">
                           <p className="text-xs text-zinc-500">
                             Concluídos
@@ -524,11 +604,21 @@ export default function ClientsPage() {
 
                         <div className="rounded-xl bg-zinc-900 p-3">
                           <p className="text-xs text-zinc-500">
-                            Recompensas
+                            Disponíveis
                           </p>
 
                           <strong className="mt-1 block text-green-400">
                             {loyaltyStats.rewardsAvailable}
+                          </strong>
+                        </div>
+
+                        <div className="rounded-xl bg-zinc-900 p-3">
+                          <p className="text-xs text-zinc-500">
+                            Resgates
+                          </p>
+
+                          <strong className="mt-1 block text-yellow-400">
+                            {loyaltyStats.redemptions}
                           </strong>
                         </div>
                       </div>
@@ -536,6 +626,46 @@ export default function ClientsPage() {
                       <p className="mt-3 text-sm text-zinc-300">
                         {getLoyaltyMessage(loyaltyStats)}
                       </p>
+
+                      {loyaltyStats.rewardsAvailable > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => redeemReward(client)}
+                          disabled={redeemingClient[client.id]}
+                          className="mt-3 w-full rounded-xl bg-green-500 px-4 py-3 font-bold text-black transition hover:bg-green-400 disabled:opacity-50"
+                        >
+                          {redeemingClient[client.id] ? 'Resgatando...' : 'Resgatar recompensa'}
+                        </button>
+                      )}
+
+                      <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+                          Histórico de resgates
+                        </p>
+
+                        <div className="mt-2 space-y-2">
+                          {getClientRedemptions(client.id).length === 0 && (
+                            <p className="rounded-lg bg-zinc-900 p-2 text-xs text-zinc-500">
+                              Nenhum resgate registrado.
+                            </p>
+                          )}
+
+                          {getClientRedemptions(client.id)
+                            .slice(0, 3)
+                            .map((redemption) => (
+                              <div
+                                key={redemption.id}
+                                className="rounded-lg bg-zinc-900 p-2 text-xs text-zinc-300"
+                              >
+                                <strong className="text-green-400">
+                                  {redemption.reward_description}
+                                </strong>
+                                {' '}em{' '}
+                                {new Date(redemption.created_at).toLocaleString('pt-BR')}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
