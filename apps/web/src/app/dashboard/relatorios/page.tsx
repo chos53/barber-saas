@@ -43,6 +43,7 @@ type CommissionRanking = {
 const chartColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
 
 export default function ReportsPage() {
+  const [companyName, setCompanyName] = useState('Barber SaaS')
   const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [realizedRevenue, setRealizedRevenue] = useState(0)
   const [appointmentsCount, setAppointmentsCount] = useState(0)
@@ -71,6 +72,15 @@ export default function ReportsPage() {
     }).format(value)
   }
 
+  function escapePdfText(value: string | number | null | undefined) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;')
+  }
+
   function generatePdfReport() {
     const today = new Date().toLocaleDateString('pt-BR')
 
@@ -81,7 +91,7 @@ export default function ReportsPage() {
               (professional, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${professional.professional_name}</td>
+                  <td>${escapePdfText(professional.professional_name)}</td>
                   <td>${professional.commission_percentage.toFixed(2)}%</td>
                   <td>${formatCurrency(professional.revenue)}</td>
                   <td>${formatCurrency(professional.commission)}</td>
@@ -95,6 +105,25 @@ export default function ReportsPage() {
           </tr>
         `
 
+    const professionalRows =
+      topProfessionals.length > 0
+        ? topProfessionals
+            .map(
+              (professional, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${escapePdfText(professional.professional_name)}</td>
+                  <td>${formatCurrency(professional.total)}</td>
+                </tr>
+              `
+            )
+            .join('')
+        : `
+          <tr>
+            <td colspan="3">Nenhum profissional encontrado.</td>
+          </tr>
+        `
+
     const serviceRows =
       topServices.length > 0
         ? topServices
@@ -102,7 +131,7 @@ export default function ReportsPage() {
               (service, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${service.service_name}</td>
+                  <td>${escapePdfText(service.service_name)}</td>
                   <td>${service.total}</td>
                 </tr>
               `
@@ -119,7 +148,7 @@ export default function ReportsPage() {
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Relatório Gerencial</title>
+          <title>Relatório Gerencial - ${escapePdfText(companyName)}</title>
 
           <style>
             * {
@@ -129,23 +158,27 @@ export default function ReportsPage() {
             body {
               font-family: Arial, sans-serif;
               color: #111827;
-              margin: 32px;
+              margin: 28px;
+              background: #ffffff;
             }
 
             h1 {
               margin: 0;
-              font-size: 28px;
+              font-size: 30px;
+              color: #111827;
             }
 
             h2 {
-              margin-top: 28px;
-              border-bottom: 1px solid #d1d5db;
+              margin-top: 30px;
+              border-bottom: 2px solid #111827;
               padding-bottom: 8px;
               font-size: 20px;
+              color: #111827;
             }
 
             p {
               color: #4b5563;
+              margin: 6px 0;
             }
 
             .header {
@@ -153,9 +186,28 @@ export default function ReportsPage() {
               justify-content: space-between;
               gap: 20px;
               align-items: flex-start;
-              border-bottom: 2px solid #111827;
-              padding-bottom: 16px;
+              border-bottom: 3px solid #111827;
+              padding-bottom: 18px;
               margin-bottom: 24px;
+            }
+
+            .company {
+              font-size: 16px;
+              font-weight: 700;
+              color: #374151;
+              margin-top: 6px;
+            }
+
+            .badge {
+              display: inline-block;
+              border-radius: 999px;
+              background: #111827;
+              color: #ffffff;
+              padding: 8px 12px;
+              font-size: 12px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: .08em;
             }
 
             .grid {
@@ -165,27 +217,56 @@ export default function ReportsPage() {
               margin-top: 16px;
             }
 
+            .grid-4 {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 12px;
+              margin-top: 16px;
+            }
+
             .card {
               border: 1px solid #d1d5db;
               border-radius: 12px;
               padding: 14px;
+              min-height: 86px;
             }
 
             .label {
               font-size: 12px;
               color: #6b7280;
               margin-bottom: 6px;
+              text-transform: uppercase;
+              letter-spacing: .04em;
             }
 
             .value {
               font-size: 22px;
               font-weight: 700;
+              color: #111827;
+            }
+
+            .green {
+              color: #047857;
+            }
+
+            .red {
+              color: #b91c1c;
+            }
+
+            .blue {
+              color: #1d4ed8;
             }
 
             table {
               width: 100%;
               border-collapse: collapse;
               margin-top: 12px;
+              page-break-inside: auto;
+            }
+
+            tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
             }
 
             th,
@@ -198,6 +279,19 @@ export default function ReportsPage() {
 
             th {
               background: #f3f4f6;
+              color: #374151;
+              text-transform: uppercase;
+              letter-spacing: .04em;
+              font-size: 11px;
+            }
+
+            .footer {
+              margin-top: 34px;
+              padding-top: 14px;
+              border-top: 1px solid #d1d5db;
+              color: #6b7280;
+              font-size: 11px;
+              text-align: center;
             }
 
             @media print {
@@ -206,7 +300,11 @@ export default function ReportsPage() {
               }
 
               body {
-                margin: 20px;
+                margin: 18px;
+              }
+
+              h2 {
+                page-break-after: avoid;
               }
             }
           </style>
@@ -216,7 +314,13 @@ export default function ReportsPage() {
           <div class="header">
             <div>
               <h1>Relatório Gerencial</h1>
-              <p>Emitido em ${today} - Período: últimos ${period} dia(s)</p>
+              <div class="company">${escapePdfText(companyName)}</div>
+              <p>Emitido em ${today}</p>
+              <p>Período: últimos ${period} dia(s)</p>
+            </div>
+
+            <div>
+              <span class="badge">Barber SaaS</span>
             </div>
           </div>
 
@@ -230,7 +334,7 @@ export default function ReportsPage() {
 
             <div class="card">
               <div class="label">Faturamento realizado</div>
-              <div class="value">${formatCurrency(realizedRevenue)}</div>
+              <div class="value green">${formatCurrency(realizedRevenue)}</div>
             </div>
 
             <div class="card">
@@ -240,23 +344,23 @@ export default function ReportsPage() {
 
             <div class="card">
               <div class="label">Concluídos</div>
-              <div class="value">${completedCount}</div>
+              <div class="value green">${completedCount}</div>
             </div>
 
             <div class="card">
               <div class="label">Cancelados</div>
-              <div class="value">${cancelledCount}</div>
+              <div class="value red">${cancelledCount}</div>
             </div>
 
             <div class="card">
               <div class="label">Comissão total do mês</div>
-              <div class="value">${formatCurrency(totalCommission)}</div>
+              <div class="value blue">${formatCurrency(totalCommission)}</div>
             </div>
           </div>
 
           <h2>Formas de pagamento</h2>
 
-          <div class="grid">
+          <div class="grid-4">
             <div class="card">
               <div class="label">Dinheiro</div>
               <div class="value">${formatCurrency(cashRevenue)}</div>
@@ -295,6 +399,21 @@ export default function ReportsPage() {
             </tbody>
           </table>
 
+          <h2>Ranking de profissionais</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Profissional</th>
+                <th>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${professionalRows}
+            </tbody>
+          </table>
+
           <h2>Serviços mais vendidos</h2>
 
           <table>
@@ -309,6 +428,9 @@ export default function ReportsPage() {
               ${serviceRows}
             </tbody>
           </table>
+          <div class="footer">
+            Relatório gerado automaticamente pelo sistema em ${today}.
+          </div>
         </body>
       </html>
     `
@@ -343,6 +465,16 @@ export default function ReportsPage() {
       .single()
 
     if (!profile?.company_id) return
+
+    const { data: settings } = await supabase
+      .from('company_settings')
+      .select('company_name')
+      .eq('company_id', profile.company_id)
+      .maybeSingle()
+
+    if (settings?.company_name) {
+      setCompanyName(settings.company_name)
+    }
 
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - Number(period))
