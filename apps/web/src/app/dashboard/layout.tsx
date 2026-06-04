@@ -134,6 +134,8 @@ export default function DashboardLayout({
   const [userRole, setUserRole] = useState<UserRole>('reception')
   const [visualRole, setVisualRole] = useState<UserRole | ''>('')
   const [loadingPermissions, setLoadingPermissions] = useState(true)
+  const [subscriptionBlocked, setSubscriptionBlocked] = useState(false)
+  const [subscriptionBlockMessage, setSubscriptionBlockMessage] = useState('')
 
   useEffect(() => {
     loadCompanyBrand()
@@ -163,6 +165,29 @@ export default function DashboardLayout({
     }
   }, [pathname, router, userRole, loadingPermissions])
 
+
+  function isTrialExpired(trialEndsAt: string | null | undefined) {
+    if (!trialEndsAt) return false
+
+    return new Date(trialEndsAt).getTime() < new Date().getTime()
+  }
+
+  function getSubscriptionBlockMessage(status: string | null | undefined) {
+    if (status === 'suspended') {
+      return 'Sua assinatura está suspensa. Entre em contato com o administrador do sistema para reativar o acesso.'
+    }
+
+    if (status === 'cancelled') {
+      return 'Sua assinatura foi cancelada. Entre em contato com o administrador do sistema para contratar um novo plano.'
+    }
+
+    if (status === 'trial_expired') {
+      return 'Seu período de teste expirou. Entre em contato com o administrador do sistema para ativar sua assinatura.'
+    }
+
+    return 'Sua assinatura está indisponível. Entre em contato com o administrador do sistema.'
+  }
+
   async function loadCompanyBrand() {
     const {
       data: { user },
@@ -183,6 +208,32 @@ export default function DashboardLayout({
     if (!profile?.company_id) {
       setLoadingPermissions(false)
       return
+    }
+
+    const { data: subscription } = await supabase
+      .from('company_subscriptions')
+      .select('status, trial_ends_at, subscription_ends_at')
+      .eq('company_id', profile.company_id)
+      .maybeSingle()
+
+    const subscriptionStatus = subscription?.status || 'trial'
+    const trialExpired =
+      subscriptionStatus === 'trial' && isTrialExpired(subscription?.trial_ends_at)
+
+    if (
+      subscriptionStatus === 'suspended' ||
+      subscriptionStatus === 'cancelled' ||
+      trialExpired
+    ) {
+      setSubscriptionBlocked(true)
+      setSubscriptionBlockMessage(
+        getSubscriptionBlockMessage(
+          trialExpired ? 'trial_expired' : subscriptionStatus
+        )
+      )
+    } else {
+      setSubscriptionBlocked(false)
+      setSubscriptionBlockMessage('')
     }
 
     const normalizedRole = normalizeRole(profile.role)
@@ -343,6 +394,34 @@ export default function DashboardLayout({
           <div className="flex min-h-[300px] items-center justify-center">
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-8 py-6">
               <p className="text-zinc-400">Carregando permissões...</p>
+            </div>
+          </div>
+        ) : subscriptionBlocked ? (
+          <div className="flex min-h-[70vh] items-center justify-center">
+            <div className="w-full max-w-xl rounded-3xl border border-red-900 bg-red-950/30 p-8 text-center shadow-2xl">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-3xl font-bold text-white">
+                !
+              </div>
+
+              <h2 className="mt-6 text-3xl font-bold">
+                Assinatura indisponível
+              </h2>
+
+              <p className="mt-4 text-red-100">
+                {subscriptionBlockMessage}
+              </p>
+
+              <p className="mt-4 text-sm text-zinc-400">
+                Seus dados continuam seguros. O acesso será liberado automaticamente após a regularização pelo administrador do SaaS.
+              </p>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="mt-8 rounded-xl bg-white px-6 py-3 font-bold text-black transition hover:bg-zinc-200"
+              >
+                Sair
+              </button>
             </div>
           </div>
         ) : (
