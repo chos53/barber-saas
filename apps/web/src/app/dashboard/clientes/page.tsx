@@ -27,12 +27,25 @@ type LoyaltyRedemption = {
   created_at: string
 }
 
-const loyaltyGoal = 10
+type LoyaltySettings = {
+  enabled: boolean
+  goal_count: number
+  reward_description: string
+}
+
+const defaultLoyaltySettings: LoyaltySettings = {
+  enabled: true,
+  goal_count: 10,
+  reward_description: 'Recompensa de fidelidade',
+}
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loyaltyByClient, setLoyaltyByClient] = useState<Record<string, LoyaltyStats>>({})
   const [loyaltyRedemptions, setLoyaltyRedemptions] = useState<LoyaltyRedemption[]>([])
+  const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings>(defaultLoyaltySettings)
+  const [userRole, setUserRole] = useState('')
+  const [savingLoyaltySettings, setSavingLoyaltySettings] = useState(false)
   const [redeemingClient, setRedeemingClient] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
 
@@ -40,6 +53,9 @@ export default function ClientsPage() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [companyId, setCompanyId] = useState('')
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(true)
+  const [loyaltyGoalValue, setLoyaltyGoalValue] = useState('10')
+  const [loyaltyRewardDescription, setLoyaltyRewardDescription] = useState('Recompensa de fidelidade')
 
   const [editingClientId, setEditingClientId] = useState('')
   const [editName, setEditName] = useState('')
@@ -85,8 +101,9 @@ export default function ClientsPage() {
       const stats = loyaltyByClient[client.id]
 
       return (
+        loyaltySettings.enabled &&
         Number(stats?.rewardsAvailable || 0) === 0 &&
-        Number(stats?.progress || 0) >= 7
+        Number(stats?.progress || 0) >= Math.max(loyaltySettings.goal_count - 3, 1)
       )
     }).length
   }, [clients, loyaltyByClient])
@@ -103,13 +120,33 @@ export default function ClientsPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('company_id')
+      .select('company_id, role')
       .eq('id', user.id)
       .single()
 
     if (!profile?.company_id) return
 
     setCompanyId(profile.company_id)
+    setUserRole(String(profile.role || ''))
+
+    const { data: loyaltySettingsData } = await supabase
+      .from('company_loyalty_settings')
+      .select('enabled, goal_count, reward_description')
+      .eq('company_id', profile.company_id)
+      .maybeSingle()
+
+    const currentLoyaltySettings: LoyaltySettings = {
+      enabled: Boolean(loyaltySettingsData?.enabled ?? defaultLoyaltySettings.enabled),
+      goal_count: Number(loyaltySettingsData?.goal_count || defaultLoyaltySettings.goal_count),
+      reward_description:
+        loyaltySettingsData?.reward_description ||
+        defaultLoyaltySettings.reward_description,
+    }
+
+    setLoyaltySettings(currentLoyaltySettings)
+    setLoyaltyEnabled(currentLoyaltySettings.enabled)
+    setLoyaltyGoalValue(String(currentLoyaltySettings.goal_count))
+    setLoyaltyRewardDescription(currentLoyaltySettings.reward_description)
 
     const { data: clientsData } = await supabase
       .from('clients')
@@ -125,6 +162,7 @@ export default function ClientsPage() {
 
     if (clientIds.length === 0) {
       setLoyaltyByClient({})
+      setLoyaltyRedemptions([])
       return
     }
 
@@ -174,10 +212,10 @@ export default function ClientsPage() {
     normalizedClients.forEach((client) => {
       const completedAppointments = completedByClient[client.id] || 0
       const redemptions = redemptionsByClient[client.id] || 0
-      const earnedRewards = Math.floor(completedAppointments / loyaltyGoal)
+      const earnedRewards = Math.floor(completedAppointments / currentLoyaltySettings.goal_count)
       const rewardsAvailable = Math.max(earnedRewards - redemptions, 0)
-      const progress = completedAppointments % loyaltyGoal
-      const remaining = progress === 0 && completedAppointments > 0 ? 0 : loyaltyGoal - progress
+      const progress = completedAppointments % currentLoyaltySettings.goal_count
+      const remaining = progress === 0 && completedAppointments > 0 ? 0 : currentLoyaltySettings.goal_count - progress
 
       nextLoyaltyByClient[client.id] = {
         completedAppointments,
@@ -281,7 +319,7 @@ export default function ClientsPage() {
         redemptions: 0,
         rewardsAvailable: 0,
         progress: 0,
-        remaining: loyaltyGoal,
+        remaining: loyaltySettings.goal_count,
       }
     )
   }
@@ -289,7 +327,7 @@ export default function ClientsPage() {
   function getProgressPercent(stats: LoyaltyStats) {
     if (stats.rewardsAvailable > 0) return 100
 
-    return Math.min((stats.progress / loyaltyGoal) * 100, 100)
+    return Math.min((stats.progress / loyaltySettings.goal_count) * 100, 100)
   }
 
   function getLoyaltyMessage(stats: LoyaltyStats) {
@@ -333,7 +371,7 @@ export default function ClientsPage() {
       .insert({
         company_id: companyId,
         client_id: client.id,
-        reward_description: 'Recompensa de fidelidade',
+        reward_description: loyaltySettings.reward_description || defaultLoyaltySettings.reward_description,
       })
 
     setRedeemingClient((current) => ({
@@ -343,6 +381,68 @@ export default function ClientsPage() {
 
     if (error) {
       alert(`Erro ao resgatar recompensa: ${error.message}`)
+      return
+    }
+
+    await loadData()
+  }
+
+
+  function canManageLoyaltySettings() {
+    const normalizedRole = userRole.toLowerCase()
+
+    return (
+      normalizedRole === 'owner' ||
+      normalizedRole === 'proprietario' ||
+      normalizedRole === 'proprietário' ||
+      normalizedRole === 'administrator' ||
+      normalizedRole === 'admin' ||
+      normalizedRole === 'administrador' ||
+      normalizedRole === 'manager' ||
+      normalizedRole === 'gerente'
+    )
+  }
+
+  async function saveLoyaltySettings() {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    const goalCount = Number(loyaltyGoalValue || 0)
+    const rewardDescription = loyaltyRewardDescription.trim()
+
+    if (goalCount <= 0) {
+      alert('A quantidade para recompensa precisa ser maior que zero.')
+      return
+    }
+
+    if (!rewardDescription) {
+      alert('Informe a descrição da recompensa.')
+      return
+    }
+
+    setSavingLoyaltySettings(true)
+
+    const { error } = await supabase
+      .from('company_loyalty_settings')
+      .upsert(
+        {
+          company_id: companyId,
+          enabled: loyaltyEnabled,
+          goal_count: goalCount,
+          reward_description: rewardDescription,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'company_id',
+        }
+      )
+
+    setSavingLoyaltySettings(false)
+
+    if (error) {
+      alert(`Erro ao salvar configuração de fidelidade: ${error.message}`)
       return
     }
 
@@ -378,30 +478,119 @@ export default function ClientsPage() {
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
-          <p className="text-sm text-green-300">
-            Com recompensa
-          </p>
+        {loyaltySettings.enabled ? (
+          <>
+            <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
+              <p className="text-sm text-green-300">
+                Com recompensa
+              </p>
 
-          <strong className="mt-2 block text-3xl text-white">
-            {clientsWithReward}
-          </strong>
-        </div>
+              <strong className="mt-2 block text-3xl text-white">
+                {clientsWithReward}
+              </strong>
+            </div>
 
-        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
-          <p className="text-sm text-yellow-300">
-            Próximos da recompensa
-          </p>
+            <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
+              <p className="text-sm text-yellow-300">
+                Próximos da recompensa
+              </p>
 
-          <strong className="mt-2 block text-3xl text-white">
-            {nearlyRewardClients}
-          </strong>
+              <strong className="mt-2 block text-3xl text-white">
+                {nearlyRewardClients}
+              </strong>
 
-          <p className="mt-2 text-xs text-yellow-100">
-            7 ou mais atendimentos no ciclo
-          </p>
-        </div>
+              <p className="mt-2 text-xs text-yellow-100">
+                A até 3 atendimentos da recompensa
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-5 md:col-span-2">
+            <p className="text-sm text-zinc-400">
+              Fidelidade
+            </p>
+
+            <strong className="mt-2 block text-2xl text-white">
+              Desativada
+            </strong>
+
+            <p className="mt-2 text-xs text-zinc-500">
+              Ative nas configurações abaixo.
+            </p>
+          </div>
+        )}
       </div>
+
+      {canManageLoyaltySettings() && (
+        <div className="mt-8 rounded-2xl border border-purple-900 bg-purple-950/20 p-6">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">
+                Configurações da fidelidade
+              </h2>
+
+              <p className="mt-1 text-sm text-purple-200">
+                Defina se a fidelidade estará ativa, quantos atendimentos geram recompensa e qual será o benefício.
+              </p>
+            </div>
+
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold ${
+                loyaltySettings.enabled
+                  ? 'bg-green-500 text-black'
+                  : 'bg-zinc-700 text-zinc-300'
+              }`}
+            >
+              {loyaltySettings.enabled ? 'Ativa' : 'Desativada'}
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-[180px_220px_1fr_auto]">
+            <label className="flex items-center gap-3 rounded-xl border border-purple-900 bg-black/30 p-3">
+              <input
+                type="checkbox"
+                checked={loyaltyEnabled}
+                onChange={(event) => setLoyaltyEnabled(event.target.checked)}
+                className="h-5 w-5"
+              />
+
+              <span className="font-bold text-white">
+                Fidelidade ativa
+              </span>
+            </label>
+
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={loyaltyGoalValue}
+              onChange={(event) => setLoyaltyGoalValue(event.target.value)}
+              placeholder="Qtd. atendimentos"
+              className="rounded-xl border border-purple-900 bg-black/30 p-3 text-white outline-none"
+            />
+
+            <input
+              value={loyaltyRewardDescription}
+              onChange={(event) => setLoyaltyRewardDescription(event.target.value)}
+              placeholder="Descrição da recompensa. Ex: Corte grátis"
+              className="rounded-xl border border-purple-900 bg-black/30 p-3 text-white outline-none"
+            />
+
+            <button
+              type="button"
+              onClick={saveLoyaltySettings}
+              disabled={savingLoyaltySettings}
+              className="rounded-xl bg-purple-500 px-5 py-3 font-bold text-white transition hover:bg-purple-400 disabled:opacity-50"
+            >
+              {savingLoyaltySettings ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+
+          <p className="mt-3 text-sm text-purple-100">
+            Regra atual: {loyaltySettings.enabled ? `${loyaltySettings.goal_count} atendimento(s) = ${loyaltySettings.reward_description}` : 'fidelidade desativada'}.
+          </p>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">
@@ -462,9 +651,9 @@ export default function ClientsPage() {
             <div
               key={client.id}
               className={`rounded-xl border p-4 ${
-                loyaltyStats.rewardsAvailable > 0
+                loyaltySettings.enabled && loyaltyStats.rewardsAvailable > 0
                   ? 'border-green-700 bg-green-950/30'
-                  : loyaltyStats.progress >= 7
+                  : loyaltySettings.enabled && loyaltyStats.progress >= Math.max(loyaltySettings.goal_count - 3, 1)
                     ? 'border-yellow-700 bg-yellow-950/20'
                     : 'border-zinc-800 bg-zinc-900'
               }`}
@@ -533,6 +722,7 @@ export default function ClientsPage() {
                       </p>
                     </div>
 
+                    {loyaltySettings.enabled && (
                     <div className="w-full rounded-2xl border border-zinc-800 bg-black/30 p-4 xl:max-w-md">
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -541,7 +731,7 @@ export default function ClientsPage() {
                           </p>
 
                           <p className="mt-1 text-xs text-zinc-400">
-                            Regra: {loyaltyGoal} atendimentos concluídos = 1 recompensa
+                            Regra: {loyaltySettings.goal_count} atendimento(s) concluído(s) = {loyaltySettings.reward_description}
                           </p>
                         </div>
 
@@ -560,8 +750,8 @@ export default function ClientsPage() {
 
                           <strong className="text-white">
                             {loyaltyStats.rewardsAvailable > 0
-                              ? `${loyaltyGoal}/${loyaltyGoal}`
-                              : `${loyaltyStats.progress}/${loyaltyGoal}`}
+                              ? `${loyaltySettings.goal_count}/${loyaltySettings.goal_count}`
+                              : `${loyaltyStats.progress}/${loyaltySettings.goal_count}`}
                           </strong>
                         </div>
 
@@ -598,7 +788,7 @@ export default function ClientsPage() {
                           </p>
 
                           <strong className="mt-1 block text-white">
-                            {loyaltyStats.progress}/{loyaltyGoal}
+                            {loyaltyStats.progress}/{loyaltySettings.goal_count}
                           </strong>
                         </div>
 
@@ -667,6 +857,7 @@ export default function ClientsPage() {
                         </div>
                       </div>
                     </div>
+                    )}
                   </div>
 
                   <div className="mt-4 flex gap-2">
