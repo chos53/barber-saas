@@ -506,25 +506,67 @@ export default function ClientsPage() {
     setLoyaltyByClient(nextLoyaltyByClient)
   }
 
+
+  async function createAuditLog(
+    action: 'create' | 'update' | 'cancel',
+    module: string,
+    description: string,
+    recordId?: string | null,
+    metadata: Record<string, unknown> = {}
+  ) {
+    if (!companyId) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    await supabase.from('audit_logs').insert({
+      company_id: companyId,
+      user_id: user?.id || null,
+      action,
+      module,
+      record_id: recordId || null,
+      description,
+      metadata,
+    })
+  }
+
   async function createClient() {
     if (!name.trim()) {
       alert('Digite o nome do cliente.')
       return
     }
 
-    const { error } = await supabase.from('clients').insert({
-      company_id: companyId,
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      birth_date: birthDate || null,
-      active: true,
-    })
+    const { data, error } = await supabase
+      .from('clients')
+      .insert({
+        company_id: companyId,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        birth_date: birthDate || null,
+        active: true,
+      })
+      .select('id, name')
+      .single()
 
     if (error) {
       alert(error.message)
       return
     }
+
+    await createAuditLog(
+      'create',
+      'clientes',
+      `Cliente ${data?.name || name.trim()} criado`,
+      data?.id || null,
+      {
+        name: data?.name || name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        birth_date: birthDate || null,
+      }
+    )
 
     setName('')
     setPhone('')
@@ -556,6 +598,8 @@ export default function ClientsPage() {
       return
     }
 
+    const currentClient = clients.find((client) => client.id === clientId)
+
     const { error } = await supabase
       .from('clients')
       .update({
@@ -571,6 +615,22 @@ export default function ClientsPage() {
       return
     }
 
+    await createAuditLog(
+      'update',
+      'clientes',
+      `Cliente ${editName.trim()} editado`,
+      clientId,
+      {
+        before: currentClient || null,
+        after: {
+          name: editName.trim(),
+          phone: editPhone.trim(),
+          email: editEmail.trim(),
+          birth_date: editBirthDate || null,
+        },
+      }
+    )
+
     cancelEditing()
     loadData()
   }
@@ -579,10 +639,13 @@ export default function ClientsPage() {
     clientId: string,
     active: boolean
   ) {
+    const client = clients.find((item) => item.id === clientId)
+    const nextActive = !active
+
     const { error } = await supabase
       .from('clients')
       .update({
-        active: !active,
+        active: nextActive,
       })
       .eq('id', clientId)
 
@@ -590,6 +653,17 @@ export default function ClientsPage() {
       alert(error.message)
       return
     }
+
+    await createAuditLog(
+      'update',
+      'clientes',
+      `Cliente ${client?.name || clientId} ${nextActive ? 'ativado' : 'inativado'}`,
+      clientId,
+      {
+        previous_active: active,
+        active: nextActive,
+      }
+    )
 
     loadData()
   }
@@ -648,13 +722,18 @@ export default function ClientsPage() {
       [client.id]: true,
     }))
 
-    const { error } = await supabase
+    const rewardDescription =
+      loyaltySettings.reward_description || defaultLoyaltySettings.reward_description
+
+    const { data, error } = await supabase
       .from('loyalty_redemptions')
       .insert({
         company_id: companyId,
         client_id: client.id,
-        reward_description: loyaltySettings.reward_description || defaultLoyaltySettings.reward_description,
+        reward_description: rewardDescription,
       })
+      .select('id')
+      .single()
 
     setRedeemingClient((current) => ({
       ...current,
@@ -665,6 +744,18 @@ export default function ClientsPage() {
       alert(`Erro ao resgatar recompensa: ${error.message}`)
       return
     }
+
+    await createAuditLog(
+      'create',
+      'fidelidade',
+      `Recompensa resgatada para o cliente ${client.name}`,
+      data?.id || client.id,
+      {
+        client_id: client.id,
+        client_name: client.name,
+        reward_description: rewardDescription,
+      }
+    )
 
     await loadData()
   }
@@ -968,6 +1059,21 @@ export default function ClientsPage() {
       alert(`Erro ao salvar configuração de fidelidade: ${error.message}`)
       return
     }
+
+    await createAuditLog(
+      'update',
+      'fidelidade',
+      'Configurações de fidelidade alteradas',
+      companyId,
+      {
+        before: loyaltySettings,
+        after: {
+          enabled: loyaltyEnabled,
+          goal_count: goalCount,
+          reward_description: rewardDescription,
+        },
+      }
+    )
 
     await loadData()
   }
