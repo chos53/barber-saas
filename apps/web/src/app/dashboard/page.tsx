@@ -75,6 +75,34 @@ type RankingItem = {
   revenue: number
 }
 
+type ProductStock = {
+  id: string
+  name: string
+  current_stock: number | null
+  minimum_stock: number | null
+  active: boolean
+}
+
+type StockMovement = {
+  id: string
+  product_id: string
+  type: 'in' | 'out'
+  quantity: number
+  created_at: string
+}
+
+type StockAlertStats = {
+  lowStockCount: number
+  zeroStockCount: number
+  stoppedProductsCount: number
+}
+
+type StoppedProduct = {
+  product: ProductStock
+  lastMovementAt: string | null
+  daysWithoutMovement: number | null
+}
+
 type CommercialStats = {
   averageTicket: number
   birthdayClientsThisMonth: number
@@ -131,6 +159,13 @@ export default function DashboardPage() {
   const [topServices, setTopServices] = useState<RankingItem[]>([])
   const [topProducts, setTopProducts] = useState<RankingItem[]>([])
   const [topProfessionals, setTopProfessionals] = useState<RankingItem[]>([])
+  const [lowStockProducts, setLowStockProducts] = useState<ProductStock[]>([])
+  const [stoppedProducts, setStoppedProducts] = useState<StoppedProduct[]>([])
+  const [stockAlertStats, setStockAlertStats] = useState<StockAlertStats>({
+    lowStockCount: 0,
+    zeroStockCount: 0,
+    stoppedProductsCount: 0,
+  })
 
   useEffect(() => {
     const now = new Date()
@@ -289,6 +324,152 @@ export default function DashboardPage() {
     )
   }
 
+
+  function getDaysWithoutMovement(value: string | null) {
+    if (!value) return null
+
+    const diffMs = Date.now() - new Date(value).getTime()
+
+    return Math.floor(diffMs / 1000 / 60 / 60 / 24)
+  }
+
+  function renderStockAlertCard() {
+    return (
+      <section className="rounded-2xl border border-red-900 bg-red-950/20 p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Alertas de estoque</h2>
+            <p className="mt-1 text-sm text-red-200">
+              Produtos zerados, abaixo do mínimo ou precisando de atenção.
+            </p>
+          </div>
+
+          <Link
+            href="/dashboard/produtos"
+            className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-black"
+          >
+            Ver produtos
+          </Link>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-red-900 bg-black/30 p-4">
+            <p className="text-sm text-red-300">Zerados</p>
+            <strong className="mt-2 block text-3xl text-white">
+              {stockAlertStats.zeroStockCount}
+            </strong>
+          </div>
+
+          <div className="rounded-2xl border border-orange-900 bg-black/30 p-4">
+            <p className="text-sm text-orange-300">Estoque baixo</p>
+            <strong className="mt-2 block text-3xl text-white">
+              {stockAlertStats.lowStockCount}
+            </strong>
+          </div>
+
+          <div className="rounded-2xl border border-yellow-900 bg-black/30 p-4">
+            <p className="text-sm text-yellow-300">Sem movimentação</p>
+            <strong className="mt-2 block text-3xl text-white">
+              {stockAlertStats.stoppedProductsCount}
+            </strong>
+            <p className="mt-2 text-xs text-yellow-100">
+              30+ dias sem entrada ou saída
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <div>
+            <h3 className="text-lg font-bold text-white">
+              Produtos críticos
+            </h3>
+
+            <div className="mt-3 space-y-3">
+              {lowStockProducts.length === 0 && (
+                <p className="rounded-xl bg-black/30 p-4 text-sm text-red-100">
+                  Nenhum produto com estoque crítico.
+                </p>
+              )}
+
+              {lowStockProducts.map((product) => {
+                const currentStock = Number(product.current_stock || 0)
+                const minimumStock = Number(product.minimum_stock || 0)
+
+                return (
+                  <div
+                    key={product.id}
+                    className="rounded-xl border border-red-900 bg-black/30 p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <strong className="text-white">
+                          {product.name}
+                        </strong>
+
+                        <p className="mt-1 text-sm text-zinc-400">
+                          Atual: {currentStock.toLocaleString('pt-BR')} · Mínimo: {minimumStock.toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          currentStock <= 0
+                            ? 'bg-red-500 text-white'
+                            : 'bg-orange-500 text-black'
+                        }`}
+                      >
+                        {currentStock <= 0 ? 'Zerado' : 'Baixo'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-bold text-white">
+              Produtos sem movimentação
+            </h3>
+
+            <div className="mt-3 space-y-3">
+              {stoppedProducts.length === 0 && (
+                <p className="rounded-xl bg-black/30 p-4 text-sm text-yellow-100">
+                  Nenhum produto parado encontrado.
+                </p>
+              )}
+
+              {stoppedProducts.map((item) => (
+                <div
+                  key={item.product.id}
+                  className="rounded-xl border border-yellow-900 bg-black/30 p-4"
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <strong className="text-white">
+                        {item.product.name}
+                      </strong>
+
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Estoque atual: {Number(item.product.current_stock || 0).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-bold text-black">
+                      {item.daysWithoutMovement === null
+                        ? 'Sem movimentação'
+                        : `${item.daysWithoutMovement} dia(s)`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   async function loadDashboard(currentDate: string, firstDayOfMonth: string) {
     setLoading(true)
 
@@ -336,6 +517,8 @@ export default function DashboardPage() {
       closedComandasResult,
       monthLoyaltyRedemptionsResult,
       professionalsRankingResult,
+      productsStockResult,
+      stockMovementsResult,
     ] = await Promise.all([
       supabase
         .from('appointments')
@@ -417,6 +600,18 @@ export default function DashboardPage() {
         .from('professionals')
         .select('id, name')
         .eq('company_id', profile.company_id),
+
+      supabase
+        .from('products')
+        .select('id, name, current_stock, minimum_stock, active')
+        .eq('company_id', profile.company_id)
+        .eq('active', true),
+
+      supabase
+        .from('stock_movements')
+        .select('id, product_id, type, quantity, created_at')
+        .eq('company_id', profile.company_id)
+        .order('created_at', { ascending: false }),
     ])
 
     const todayAppointments = todayAppointmentsResult.data || []
@@ -617,6 +812,59 @@ export default function DashboardPage() {
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5)
     )
+
+    const activeProducts = (productsStockResult.data || []) as ProductStock[]
+    const stockMovements = (stockMovementsResult.data || []) as StockMovement[]
+
+    const criticalProducts = activeProducts
+      .filter((product) => {
+        const currentStock = Number(product.current_stock || 0)
+        const minimumStock = Number(product.minimum_stock || 0)
+
+        return currentStock <= 0 || (minimumStock > 0 && currentStock <= minimumStock)
+      })
+      .sort((a, b) => Number(a.current_stock || 0) - Number(b.current_stock || 0))
+
+    const zeroStockCount = activeProducts.filter((product) => {
+      return Number(product.current_stock || 0) <= 0
+    }).length
+
+    const lastMovementByProduct = new Map<string, string>()
+
+    stockMovements.forEach((movement) => {
+      if (!lastMovementByProduct.has(movement.product_id)) {
+        lastMovementByProduct.set(movement.product_id, movement.created_at)
+      }
+    })
+
+    const stoppedProductsList = activeProducts
+      .map((product) => {
+        const lastMovementAt = lastMovementByProduct.get(product.id) || null
+        const daysWithoutMovement = getDaysWithoutMovement(lastMovementAt)
+
+        return {
+          product,
+          lastMovementAt,
+          daysWithoutMovement,
+        }
+      })
+      .filter((item) => {
+        return item.daysWithoutMovement === null || item.daysWithoutMovement >= 30
+      })
+      .sort((a, b) => {
+        const daysA = a.daysWithoutMovement ?? 99999
+        const daysB = b.daysWithoutMovement ?? 99999
+
+        return daysB - daysA
+      })
+
+    setLowStockProducts(criticalProducts.slice(0, 8))
+    setStoppedProducts(stoppedProductsList.slice(0, 8))
+    setStockAlertStats({
+      lowStockCount: criticalProducts.filter((product) => Number(product.current_stock || 0) > 0).length,
+      zeroStockCount,
+      stoppedProductsCount: stoppedProductsList.length,
+    })
 
     setCommercialStats({
       averageTicket,
@@ -909,6 +1157,10 @@ export default function DashboardPage() {
           topProfessionals,
           'Nenhum profissional com serviço fechado no mês.'
         )}
+      </div>
+
+      <div className="mt-8">
+        {renderStockAlertCard()}
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
