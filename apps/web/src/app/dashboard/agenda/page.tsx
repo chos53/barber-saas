@@ -694,6 +694,47 @@ export default function AgendaPage() {
     }
   }
 
+  function getPaymentMethodLabel(paymentMethod: string) {
+    switch (paymentMethod) {
+      case 'cash':
+        return 'Dinheiro'
+      case 'pix':
+        return 'Pix'
+      case 'credit_card':
+        return 'Cartão de crédito'
+      case 'debit_card':
+        return 'Cartão de débito'
+      case 'transfer':
+        return 'Transferência'
+      default:
+        return paymentMethod
+    }
+  }
+
+  async function createAuditLog(
+    action: 'create' | 'update' | 'cancel',
+    module: string,
+    description: string,
+    recordId?: string | null,
+    metadata: Record<string, unknown> = {}
+  ) {
+    if (!companyId) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    await supabase.from('audit_logs').insert({
+      company_id: companyId,
+      user_id: user?.id || null,
+      action,
+      module,
+      record_id: recordId || null,
+      description,
+      metadata,
+    })
+  }
+
   async function loadData() {
     const {
       data: { user },
@@ -1105,6 +1146,23 @@ export default function AgendaPage() {
       accumulatedMinutes += Number((serviceData as any)?.duration_minutes || intervalMinutes)
     }
 
+    await createAuditLog(
+      'update',
+      'agenda',
+      `${rescheduleSequence.length || 1} agendamento(s) reagendado(s) de ${rescheduleAppointment.appointment_date} ${rescheduleAppointment.appointment_time.slice(0, 5)} para ${rescheduleDate} ${rescheduleTime}`,
+      rescheduleAppointment.id,
+      {
+        appointment_ids: sequence.map((item) => item.id),
+        client_name: rescheduleAppointment.clients?.name || 'Cliente não informado',
+        previous_professional_id: rescheduleAppointment.professional_id,
+        new_professional_id: rescheduleProfessionalId,
+        previous_date: rescheduleAppointment.appointment_date,
+        previous_time: rescheduleAppointment.appointment_time,
+        new_date: rescheduleDate,
+        new_time: rescheduleTime,
+      }
+    )
+
     setSavingReschedule(false)
     setRescheduleAppointment(null)
     setSelectedAppointment(null)
@@ -1219,9 +1277,10 @@ export default function AgendaPage() {
       }
     })
 
-    const { error } = await supabase
+    const { data: createdAppointments, error } = await supabase
       .from('appointments')
       .insert(appointmentsToInsert)
+      .select('id, appointment_time')
 
     if (error) {
       if (error.code === '23505') {
@@ -1232,6 +1291,34 @@ export default function AgendaPage() {
       alert(error.message)
       return
     }
+
+    const selectedClient = clients.find((client) => client.id === clientId)
+    const selectedProfessional = professionals.find(
+      (professional) => professional.id === professionalId
+    )
+    const serviceNames = selectedServices.map((service) => service.name)
+    const createdAppointmentIds = (createdAppointments || []).map(
+      (appointment) => appointment.id
+    )
+
+    await createAuditLog(
+      'create',
+      'agenda',
+      `Cliente ${selectedClient?.name || 'não informado'} agendado para ${date} às ${time}`,
+      createdAppointmentIds[0] || null,
+      {
+        appointment_ids: createdAppointmentIds,
+        client_id: clientId,
+        client_name: selectedClient?.name || null,
+        professional_id: professionalId,
+        professional_name: selectedProfessional?.name || null,
+        service_ids: serviceIds,
+        service_names: serviceNames,
+        appointment_date: date,
+        appointment_time: time,
+        notes,
+      }
+    )
 
     setClientId('')
     setServiceIds([])
@@ -1332,6 +1419,21 @@ export default function AgendaPage() {
         alert(`Erro ao lançar entrada no financeiro: ${incomeError.message}`)
         return
       }
+
+      await createAuditLog(
+        'create',
+        'financeiro',
+        `Entrada financeira automática criada para ${serviceName} via ${getPaymentMethodLabel(selectedMethod)}`,
+        fullAppointment.id,
+        {
+          appointment_id: fullAppointment.id,
+          service_name: serviceName,
+          amount: servicePrice,
+          payment_method: selectedMethod,
+          payment_method_label: getPaymentMethodLabel(selectedMethod),
+          transaction_date: fullAppointment.appointment_date,
+        }
+      )
     }
 
     if (
@@ -1358,6 +1460,22 @@ export default function AgendaPage() {
 
       if (commissionError) {
         alert(`Erro ao lançar comissão automática: ${commissionError.message}`)
+      } else {
+        await createAuditLog(
+          'create',
+          'financeiro',
+          `Comissão automática criada para ${professionalName}`,
+          fullAppointment.id,
+          {
+            appointment_id: fullAppointment.id,
+            professional_id: fullAppointment.professional_id,
+            professional_name: professionalName,
+            service_name: serviceName,
+            commission_percentage: commissionPercentage,
+            commission_amount: commissionAmount,
+            payment_method: selectedMethod,
+          }
+        )
       }
     }
   }
@@ -1392,6 +1510,30 @@ export default function AgendaPage() {
         selectedMethod
       )
     }
+
+    const statusAction = status === 'cancelled' ? 'cancel' : 'update'
+    const paymentMethodLabel = getPaymentMethodLabel(selectedMethod)
+
+    await createAuditLog(
+      statusAction,
+      'agenda',
+      `Agendamento de ${appointment.clients?.name || 'Cliente não informado'} marcado como ${getStatusLabel(status)}${status === 'completed' ? ` com pagamento via ${paymentMethodLabel}` : ''}`,
+      appointmentId,
+      {
+        previous_status: appointment.status,
+        status,
+        client_id: appointment.client_id,
+        client_name: appointment.clients?.name || null,
+        professional_id: appointment.professional_id,
+        professional_name: appointment.professionals?.name || null,
+        service_id: appointment.service_id,
+        service_name: appointment.services?.name || null,
+        appointment_date: appointment.appointment_date,
+        appointment_time: appointment.appointment_time,
+        payment_method: status === 'completed' ? selectedMethod : null,
+        payment_method_label: status === 'completed' ? paymentMethodLabel : null,
+      }
+    )
 
     if (selectedAppointment?.id === appointmentId) {
       setSelectedAppointment({
@@ -1457,6 +1599,23 @@ export default function AgendaPage() {
         selectedMethod
       )
     }
+
+    await createAuditLog(
+      'update',
+      'agenda',
+      `Sequência de ${appointmentIds.length} serviço(s) concluída para ${appointment.clients?.name || 'Cliente não informado'} com pagamento via ${getPaymentMethodLabel(selectedMethod)}`,
+      appointmentIds[0] || appointment.id,
+      {
+        appointment_ids: appointmentIds,
+        client_id: appointment.client_id,
+        client_name: appointment.clients?.name || null,
+        professional_id: appointment.professional_id,
+        professional_name: appointment.professionals?.name || null,
+        appointment_date: appointment.appointment_date,
+        payment_method: selectedMethod,
+        payment_method_label: getPaymentMethodLabel(selectedMethod),
+      }
+    )
 
     if (selectedAppointment) {
       setSelectedAppointment({
