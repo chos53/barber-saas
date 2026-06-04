@@ -68,6 +68,11 @@ type ClientCrmStats = {
   comandas: ClientComandaHistory[]
 }
 
+type ClientRankingItem = {
+  client: Client
+  stats: ClientCrmStats
+}
+
 const defaultLoyaltySettings: LoyaltySettings = {
   enabled: true,
   goal_count: 10,
@@ -148,6 +153,53 @@ export default function ClientsPage() {
 
   const clientsWithVisit = useMemo(() => {
     return clients.filter((client) => Number(crmByClient[client.id]?.visits || 0) > 0).length
+  }, [clients, crmByClient])
+
+  const topClientsByRevenue = useMemo<ClientRankingItem[]>(() => {
+    return clients
+      .map((client) => ({
+        client,
+        stats: getClientCrmStats(client.id),
+      }))
+      .filter((item) => item.stats.totalSpent > 0)
+      .sort((a, b) => b.stats.totalSpent - a.stats.totalSpent)
+      .slice(0, 10)
+  }, [clients, crmByClient])
+
+  const topClientsByVisits = useMemo<ClientRankingItem[]>(() => {
+    return clients
+      .map((client) => ({
+        client,
+        stats: getClientCrmStats(client.id),
+      }))
+      .filter((item) => item.stats.visits > 0)
+      .sort((a, b) => b.stats.visits - a.stats.visits)
+      .slice(0, 10)
+  }, [clients, crmByClient])
+
+  const inactiveClientsByVisit = useMemo<ClientRankingItem[]>(() => {
+    const sixtyDaysAgo = new Date()
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+
+    return clients
+      .map((client) => ({
+        client,
+        stats: getClientCrmStats(client.id),
+      }))
+      .filter((item) => {
+        if (!item.client.active) return false
+        if (item.stats.visits <= 0) return false
+        if (!item.stats.lastVisit) return false
+
+        return new Date(item.stats.lastVisit).getTime() < sixtyDaysAgo.getTime()
+      })
+      .sort((a, b) => {
+        return (
+          new Date(a.stats.lastVisit || 0).getTime() -
+          new Date(b.stats.lastVisit || 0).getTime()
+        )
+      })
+      .slice(0, 10)
   }, [clients, crmByClient])
 
   const birthdayClientsThisMonth = useMemo(() => {
@@ -710,6 +762,154 @@ export default function ClientsPage() {
     return `https://wa.me/55${phoneNumbers}?text=${message}`
   }
 
+  function getWhatsAppReturnLink(client: Client) {
+    const phoneNumbers = String(client.phone || '').replace(/\D/g, '')
+
+    if (!phoneNumbers) return ''
+
+    const message = encodeURIComponent(
+      `Olá, ${client.name}! Sentimos sua falta por aqui. Que tal agendar um novo horário na barbearia? Temos uma condição especial esperando por você.`
+    )
+
+    return `https://wa.me/55${phoneNumbers}?text=${message}`
+  }
+
+  function getDaysSinceLastVisit(value: string | null) {
+    if (!value) return null
+
+    const diffMs = Date.now() - new Date(value).getTime()
+
+    return Math.floor(diffMs / 1000 / 60 / 60 / 24)
+  }
+
+  function renderRankingList(
+    title: string,
+    description: string,
+    items: ClientRankingItem[],
+    type: 'revenue' | 'visits' | 'inactive'
+  ) {
+    return (
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">
+              {title}
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              {description}
+            </p>
+          </div>
+
+          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
+            {items.length} cliente(s)
+          </span>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {items.length === 0 && (
+            <p className="rounded-xl bg-black/30 p-4 text-sm text-zinc-500">
+              Nenhum cliente encontrado para este ranking.
+            </p>
+          )}
+
+          {items.map((item, index) => {
+            const whatsappReturnLink = getWhatsAppReturnLink(item.client)
+            const daysSinceLastVisit = getDaysSinceLastVisit(item.stats.lastVisit)
+
+            return (
+              <div
+                key={item.client.id}
+                className="rounded-xl border border-zinc-800 bg-black/30 p-4"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-black">
+                        #{index + 1}
+                      </span>
+
+                      <strong className="text-white">
+                        {item.client.name}
+                      </strong>
+                    </div>
+
+                    <p className="mt-2 text-sm text-zinc-400">
+                      {item.client.phone || 'Telefone não informado'}
+                    </p>
+
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Última visita: {item.stats.lastVisit ? formatDateTime(item.stats.lastVisit) : 'Sem registro'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-center text-sm md:min-w-[280px]">
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <p className="text-xs text-zinc-500">
+                        Gasto
+                      </p>
+
+                      <strong className="mt-1 block text-green-400">
+                        {formatCurrency(item.stats.totalSpent)}
+                      </strong>
+                    </div>
+
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <p className="text-xs text-zinc-500">
+                        Visitas
+                      </p>
+
+                      <strong className="mt-1 block text-blue-300">
+                        {item.stats.visits}
+                      </strong>
+                    </div>
+
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <p className="text-xs text-zinc-500">
+                        Ticket
+                      </p>
+
+                      <strong className="mt-1 block text-purple-300">
+                        {formatCurrency(item.stats.averageTicket)}
+                      </strong>
+                    </div>
+
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <p className="text-xs text-zinc-500">
+                        Sem visitar
+                      </p>
+
+                      <strong className={type === 'inactive' ? 'mt-1 block text-yellow-300' : 'mt-1 block text-zinc-300'}>
+                        {daysSinceLastVisit === null ? '-' : `${daysSinceLastVisit}d`}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {type === 'inactive' && (
+                  whatsappReturnLink ? (
+                    <a
+                      href={whatsappReturnLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 block rounded-lg bg-green-500 px-4 py-2 text-center text-sm font-bold text-black transition hover:bg-green-400"
+                    >
+                      Chamar no WhatsApp
+                    </a>
+                  ) : (
+                    <p className="mt-3 rounded-lg bg-zinc-900 p-2 text-xs text-zinc-500">
+                      Cadastre o telefone para liberar campanha de retorno.
+                    </p>
+                  )
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+    )
+  }
+
 
   function canManageLoyaltySettings() {
     const normalizedRole = userRole.toLowerCase()
@@ -849,6 +1049,20 @@ export default function ClientsPage() {
           </strong>
         </div>
 
+        <div className="min-h-[150px] rounded-2xl border border-orange-900 bg-orange-950/30 p-5">
+          <p className="text-sm text-orange-300">
+            Inativos 60+ dias
+          </p>
+
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
+            {inactiveClientsByVisit.length}
+          </strong>
+
+          <p className="mt-2 text-xs text-orange-100">
+            Clientes para campanha de retorno
+          </p>
+        </div>
+
         {loyaltySettings.enabled ? (
           <>
             <div className="min-h-[150px] rounded-2xl border border-green-900 bg-green-950/30 p-5">
@@ -963,6 +1177,30 @@ export default function ClientsPage() {
         </div>
       )}
 
+
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-3">
+        {renderRankingList(
+          'Top clientes por faturamento',
+          'Clientes que mais gastaram em comandas fechadas.',
+          topClientsByRevenue,
+          'revenue'
+        )}
+
+        {renderRankingList(
+          'Top clientes por frequência',
+          'Clientes com mais visitas registradas no histórico.',
+          topClientsByVisits,
+          'visits'
+        )}
+
+        {renderRankingList(
+          'Clientes inativos 60+ dias',
+          'Clientes ativos que não retornam há mais de 60 dias.',
+          inactiveClientsByVisit,
+          'inactive'
+        )}
+      </div>
 
       <div className="mt-8 rounded-2xl border border-pink-900 bg-pink-950/20 p-6">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
