@@ -51,6 +51,7 @@ export default function MasterPage() {
   const [plans, setPlans] = useState<SaasPlan[]>([])
   const [subscriptions, setSubscriptions] = useState<CompanySubscription[]>([])
   const [currentEmail, setCurrentEmail] = useState('')
+  const [savingCompanyId, setSavingCompanyId] = useState('')
 
   useEffect(() => {
     loadMasterData()
@@ -151,10 +152,6 @@ export default function MasterPage() {
     const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
     const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
     const loadedPlans = (plansResult.data || []) as SaasPlan[]
-    console.log('PLANOS', loadedPlans)
-console.log('ERRO PLANOS', plansResult.error)
-console.log('ASSINATURAS', loadedSubscriptions)
-console.log('ERRO ASSINATURAS', subscriptionsResult.error)
     const settingsByCompany = new Map<string, CompanySettings>()
     const subscriptionByCompany = new Map<string, CompanySubscription>()
 
@@ -181,6 +178,66 @@ console.log('ERRO ASSINATURAS', subscriptionsResult.error)
     setSubscriptions(loadedSubscriptions)
     setPlans(loadedPlans)
     setLoading(false)
+  }
+
+
+  function getDateInputValue(value: string | null | undefined) {
+    if (!value) return ''
+
+    return value.split('T')[0]
+  }
+
+  async function saveCompanySubscription(
+    company: CompanyRow,
+    nextPlanId: string,
+    nextStatus: string,
+    nextTrialEndsAt: string,
+    nextSubscriptionEndsAt: string
+  ) {
+    if (!nextPlanId) {
+      alert('Selecione um plano.')
+      return
+    }
+
+    if (!nextStatus) {
+      alert('Selecione um status.')
+      return
+    }
+
+    setSavingCompanyId(company.id)
+
+    const { error } = await supabase
+      .from('company_subscriptions')
+      .upsert(
+        {
+          company_id: company.id,
+          plan_id: nextPlanId,
+          status: nextStatus,
+          trial_ends_at: nextTrialEndsAt ? `${nextTrialEndsAt}T23:59:59` : null,
+          subscription_starts_at:
+            company.subscription?.subscription_starts_at || new Date().toISOString(),
+          subscription_ends_at: nextSubscriptionEndsAt
+            ? `${nextSubscriptionEndsAt}T23:59:59`
+            : null,
+          blocked_at:
+            nextStatus === 'suspended'
+              ? company.subscription?.blocked_at || new Date().toISOString()
+              : null,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'company_id',
+        }
+      )
+
+    setSavingCompanyId('')
+
+    if (error) {
+      alert(`Erro ao salvar assinatura: ${error.message}`)
+      return
+    }
+
+    await loadMasterData()
   }
 
   async function handleLogout() {
@@ -312,8 +369,12 @@ console.log('ERRO ASSINATURAS', subscriptionsResult.error)
               </span>
             </div>
 
+            <div className="mt-4 rounded-xl border border-blue-900 bg-blue-950/20 p-4 text-sm text-blue-100">
+              Altere plano, status, trial e vencimento diretamente na linha da empresa e clique em Salvar.
+            </div>
+
             <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-500">
                     <th className="py-3 pr-4">Empresa</th>
@@ -334,25 +395,82 @@ console.log('ERRO ASSINATURAS', subscriptionsResult.error)
                       </td>
 
                       <td className="py-4 pr-4 text-zinc-300">
-                        {company.subscription?.saas_plans?.name || '-'}
+                        <select
+                          defaultValue={company.subscription?.plan_id || ''}
+                          id={`plan-${company.id}`}
+                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                        >
+                          <option value="">Selecione</option>
+
+                          {plans.map((plan) => (
+                            <option key={plan.id} value={plan.id}>
+                              {plan.name}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
                       <td className="py-4 pr-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusClass(company.subscription?.status)}`}>
+                        <select
+                          defaultValue={company.subscription?.status || 'trial'}
+                          id={`status-${company.id}`}
+                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                        >
+                          <option value="trial">Trial</option>
+                          <option value="active">Ativa</option>
+                          <option value="suspended">Suspensa</option>
+                          <option value="cancelled">Cancelada</option>
+                        </select>
+
+                        <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getStatusClass(company.subscription?.status)}`}>
                           {getStatusLabel(company.subscription?.status)}
                         </span>
                       </td>
 
                       <td className="py-4 pr-4 text-zinc-400">
-                        {formatDate(company.subscription?.trial_ends_at || null)}
+                        <input
+                          type="date"
+                          defaultValue={getDateInputValue(company.subscription?.trial_ends_at)}
+                          id={`trial-${company.id}`}
+                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                        />
                       </td>
 
                       <td className="py-4 pr-4 text-zinc-400">
-                        {formatDate(company.subscription?.subscription_ends_at || null)}
+                        <input
+                          type="date"
+                          defaultValue={getDateInputValue(company.subscription?.subscription_ends_at)}
+                          id={`ends-${company.id}`}
+                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                        />
                       </td>
 
                       <td className="py-4 pr-4 text-zinc-400">
-                        {formatDate(company.created_at)}
+                        <div className="space-y-2">
+                          <p>{formatDate(company.created_at)}</p>
+
+                          <button
+                            type="button"
+                            disabled={savingCompanyId === company.id}
+                            onClick={() => {
+                              const planInput = document.getElementById(`plan-${company.id}`) as HTMLSelectElement | null
+                              const statusInput = document.getElementById(`status-${company.id}`) as HTMLSelectElement | null
+                              const trialInput = document.getElementById(`trial-${company.id}`) as HTMLInputElement | null
+                              const endsInput = document.getElementById(`ends-${company.id}`) as HTMLInputElement | null
+
+                              saveCompanySubscription(
+                                company,
+                                planInput?.value || '',
+                                statusInput?.value || 'trial',
+                                trialInput?.value || '',
+                                endsInput?.value || ''
+                              )
+                            }}
+                            className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                          >
+                            {savingCompanyId === company.id ? 'Salvando...' : 'Salvar'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
