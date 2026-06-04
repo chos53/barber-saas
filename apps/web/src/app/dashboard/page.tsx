@@ -126,6 +126,11 @@ type DashboardStats = {
   monthExpenses: number
 }
 
+type DashboardSettings = {
+  monthly_goal: number
+  monthly_clients_goal: number
+}
+
 export default function DashboardPage() {
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('Barber SaaS')
@@ -166,6 +171,13 @@ export default function DashboardPage() {
     zeroStockCount: 0,
     stoppedProductsCount: 0,
   })
+  const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings>({
+    monthly_goal: 0,
+    monthly_clients_goal: 0,
+  })
+  const [monthlyGoalValue, setMonthlyGoalValue] = useState('')
+  const [monthlyClientsGoalValue, setMonthlyClientsGoalValue] = useState('')
+  const [savingGoals, setSavingGoals] = useState(false)
 
   useEffect(() => {
     const now = new Date()
@@ -470,6 +482,203 @@ export default function DashboardPage() {
     )
   }
 
+  function getProgressPercentage(realized: number, goal: number) {
+    if (!goal || goal <= 0) return 0
+
+    return Math.min(Number(((realized / goal) * 100).toFixed(2)), 999)
+  }
+
+  function getProjectedMonthRevenue(currentRevenue: number, currentDate: string) {
+    const date = new Date(`${currentDate}T12:00:00`)
+    const currentDay = date.getDate()
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+
+    if (currentDay <= 0) return 0
+
+    return Number(((currentRevenue / currentDay) * lastDay).toFixed(2))
+  }
+
+  function renderProgressBar(percentage: number, colorClass: string) {
+    const safePercentage = Math.min(Math.max(percentage, 0), 100)
+
+    return (
+      <div className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className={`h-full rounded-full ${colorClass}`}
+          style={{ width: `${safePercentage}%` }}
+        />
+      </div>
+    )
+  }
+
+  async function saveDashboardGoals() {
+    if (!companyId) {
+      alert('Empresa não identificada.')
+      return
+    }
+
+    const monthlyGoal = Number(monthlyGoalValue || 0)
+    const monthlyClientsGoal = Number(monthlyClientsGoalValue || 0)
+
+    if (monthlyGoal < 0 || monthlyClientsGoal < 0) {
+      alert('As metas não podem ser negativas.')
+      return
+    }
+
+    setSavingGoals(true)
+
+    const { error } = await supabase
+      .from('company_dashboard_settings')
+      .upsert(
+        {
+          company_id: companyId,
+          monthly_goal: monthlyGoal,
+          monthly_clients_goal: monthlyClientsGoal,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'company_id',
+        }
+      )
+
+    setSavingGoals(false)
+
+    if (error) {
+      alert(`Erro ao salvar metas: ${error.message}`)
+      return
+    }
+
+    setDashboardSettings({
+      monthly_goal: monthlyGoal,
+      monthly_clients_goal: monthlyClientsGoal,
+    })
+  }
+
+  function renderGoalsCard() {
+    const revenueGoal = Number(dashboardSettings.monthly_goal || 0)
+    const clientsGoal = Number(dashboardSettings.monthly_clients_goal || 0)
+    const revenuePercentage = getProgressPercentage(stats.monthIncome, revenueGoal)
+    const clientsPercentage = getProgressPercentage(
+      commercialStats.newClientsThisMonth,
+      clientsGoal
+    )
+    const projectedRevenue = getProjectedMonthRevenue(stats.monthIncome, today)
+
+    return (
+      <section className="mt-6 rounded-2xl border border-blue-900 bg-blue-950/20 p-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Metas do proprietário</h2>
+            <p className="mt-1 text-sm text-blue-200">
+              Acompanhe o progresso mensal de faturamento e novos clientes.
+            </p>
+          </div>
+
+          <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">
+            Mês atual
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          <div className="rounded-2xl border border-blue-900 bg-black/30 p-5">
+            <p className="text-sm text-blue-300">Meta de faturamento</p>
+
+            <p className="mt-3 text-3xl font-bold text-white">
+              {formatCurrency(revenueGoal)}
+            </p>
+
+            <p className="mt-2 text-sm text-zinc-300">
+              Realizado: {formatCurrency(stats.monthIncome)}
+            </p>
+
+            {renderProgressBar(revenuePercentage, 'bg-blue-500')}
+
+            <p className="mt-2 text-sm text-blue-100">
+              {revenuePercentage.toFixed(2)}% atingido
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-green-900 bg-black/30 p-5">
+            <p className="text-sm text-green-300">Projeção do mês</p>
+
+            <p className="mt-3 text-3xl font-bold text-white">
+              {formatCurrency(projectedRevenue)}
+            </p>
+
+            <p className="mt-2 text-sm text-zinc-300">
+              Com base no faturamento médio diário.
+            </p>
+
+            <span
+              className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-bold ${
+                revenueGoal > 0 && projectedRevenue >= revenueGoal
+                  ? 'bg-green-500 text-black'
+                  : 'bg-yellow-500 text-black'
+              }`}
+            >
+              {revenueGoal > 0 && projectedRevenue >= revenueGoal
+                ? 'Tendência acima da meta'
+                : 'Acompanhar evolução'}
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-purple-900 bg-black/30 p-5">
+            <p className="text-sm text-purple-300">Meta de novos clientes</p>
+
+            <p className="mt-3 text-3xl font-bold text-white">
+              {clientsGoal}
+            </p>
+
+            <p className="mt-2 text-sm text-zinc-300">
+              Realizado: {commercialStats.newClientsThisMonth}
+            </p>
+
+            {renderProgressBar(clientsPercentage, 'bg-purple-500')}
+
+            <p className="mt-2 text-sm text-purple-100">
+              {clientsPercentage.toFixed(2)}% atingido
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+          <h3 className="text-lg font-bold">Configurar metas</h3>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={monthlyGoalValue}
+              onChange={(event) => setMonthlyGoalValue(event.target.value)}
+              placeholder="Meta mensal de faturamento"
+              className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+            />
+
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={monthlyClientsGoalValue}
+              onChange={(event) => setMonthlyClientsGoalValue(event.target.value)}
+              placeholder="Meta de novos clientes"
+              className="rounded-xl border border-zinc-700 bg-black p-3 text-white outline-none"
+            />
+
+            <button
+              type="button"
+              onClick={saveDashboardGoals}
+              disabled={savingGoals}
+              className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+            >
+              {savingGoals ? 'Salvando...' : 'Salvar metas'}
+            </button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   async function loadDashboard(currentDate: string, firstDayOfMonth: string) {
     setLoading(true)
 
@@ -519,6 +728,7 @@ export default function DashboardPage() {
       professionalsRankingResult,
       productsStockResult,
       stockMovementsResult,
+      dashboardSettingsResult,
     ] = await Promise.all([
       supabase
         .from('appointments')
@@ -612,6 +822,12 @@ export default function DashboardPage() {
         .select('id, product_id, type, quantity, created_at')
         .eq('company_id', profile.company_id)
         .order('created_at', { ascending: false }),
+
+      supabase
+        .from('company_dashboard_settings')
+        .select('monthly_goal, monthly_clients_goal')
+        .eq('company_id', profile.company_id)
+        .maybeSingle(),
     ])
 
     const todayAppointments = todayAppointmentsResult.data || []
@@ -647,6 +863,25 @@ export default function DashboardPage() {
           transaction.type === 'expense' && transaction.status !== 'cancelled'
       )
       .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+
+    const currentDashboardSettings: DashboardSettings = {
+      monthly_goal: Number(dashboardSettingsResult.data?.monthly_goal || 0),
+      monthly_clients_goal: Number(
+        dashboardSettingsResult.data?.monthly_clients_goal || 0
+      ),
+    }
+
+    setDashboardSettings(currentDashboardSettings)
+    setMonthlyGoalValue(
+      currentDashboardSettings.monthly_goal > 0
+        ? String(currentDashboardSettings.monthly_goal)
+        : ''
+    )
+    setMonthlyClientsGoalValue(
+      currentDashboardSettings.monthly_clients_goal > 0
+        ? String(currentDashboardSettings.monthly_clients_goal)
+        : ''
+    )
 
     const commercialClients = (clientsCommercialResult.data || []) as Client[]
     const allClosedComandas = (closedComandasResult.data || []) as Comanda[]
@@ -1045,6 +1280,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
+
+      {renderGoalsCard()}
 
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
