@@ -151,7 +151,10 @@ export default function MasterPage() {
     const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
     const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
     const loadedPlans = (plansResult.data || []) as SaasPlan[]
-
+    console.log('PLANOS', loadedPlans)
+console.log('ERRO PLANOS', plansResult.error)
+console.log('ASSINATURAS', loadedSubscriptions)
+console.log('ERRO ASSINATURAS', subscriptionsResult.error)
     const settingsByCompany = new Map<string, CompanySettings>()
     const subscriptionByCompany = new Map<string, CompanySubscription>()
 
