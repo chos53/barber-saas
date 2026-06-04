@@ -8,6 +8,7 @@ type Client = {
   name: string
   phone: string | null
   email: string | null
+  birth_date: string | null
   active: boolean
 }
 
@@ -87,6 +88,7 @@ export default function ClientsPage() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [birthDate, setBirthDate] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(true)
   const [loyaltyGoalValue, setLoyaltyGoalValue] = useState('10')
@@ -96,6 +98,7 @@ export default function ClientsPage() {
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
+  const [editBirthDate, setEditBirthDate] = useState('')
 
   useEffect(() => {
     loadData()
@@ -146,6 +149,38 @@ export default function ClientsPage() {
   const clientsWithVisit = useMemo(() => {
     return clients.filter((client) => Number(crmByClient[client.id]?.visits || 0) > 0).length
   }, [clients, crmByClient])
+
+  const birthdayClientsThisMonth = useMemo(() => {
+    const currentMonth = new Date().getMonth() + 1
+
+    return clients
+      .filter((client) => {
+        if (!client.birth_date) return false
+
+        const [, month] = client.birth_date.split('-').map(Number)
+
+        return month === currentMonth
+      })
+      .sort((a, b) => getBirthdayDay(a.birth_date) - getBirthdayDay(b.birth_date))
+  }, [clients])
+
+  const birthdayClientsToday = useMemo(() => {
+    const today = new Date()
+    const currentMonth = today.getMonth() + 1
+    const currentDay = today.getDate()
+
+    return clients.filter((client) => {
+      if (!client.birth_date) return false
+
+      const [, month, day] = client.birth_date.split('-').map(Number)
+
+      return month === currentMonth && day === currentDay
+    }).length
+  }, [clients])
+
+  const clientsWithoutBirthday = useMemo(() => {
+    return clients.filter((client) => !client.birth_date).length
+  }, [clients])
 
   const clientsWithReward = useMemo(() => {
     return clients.filter((client) => {
@@ -209,7 +244,7 @@ export default function ClientsPage() {
 
     const { data: clientsData } = await supabase
       .from('clients')
-      .select('id, name, phone, email, active')
+      .select('id, name, phone, email, birth_date, active')
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
@@ -430,6 +465,7 @@ export default function ClientsPage() {
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      birth_date: birthDate || null,
       active: true,
     })
 
@@ -441,6 +477,7 @@ export default function ClientsPage() {
     setName('')
     setPhone('')
     setEmail('')
+    setBirthDate('')
 
     loadData()
   }
@@ -450,6 +487,7 @@ export default function ClientsPage() {
     setEditName(client.name)
     setEditPhone(client.phone || '')
     setEditEmail(client.email || '')
+    setEditBirthDate(client.birth_date || '')
   }
 
   function cancelEditing() {
@@ -457,6 +495,7 @@ export default function ClientsPage() {
     setEditName('')
     setEditPhone('')
     setEditEmail('')
+    setEditBirthDate('')
   }
 
   async function updateClient(clientId: string) {
@@ -471,6 +510,7 @@ export default function ClientsPage() {
         name: editName.trim(),
         phone: editPhone.trim(),
         email: editEmail.trim(),
+        birth_date: editBirthDate || null,
       })
       .eq('id', clientId)
 
@@ -617,6 +657,59 @@ export default function ClientsPage() {
       .join(' + ')
   }
 
+  function getBirthdayDay(value: string | null | undefined) {
+    if (!value) return 99
+
+    const [, , day] = value.split('-').map(Number)
+
+    return day || 99
+  }
+
+  function formatBirthDate(value: string | null | undefined) {
+    if (!value) return 'Data não informada'
+
+    const [, month, day] = value.split('-')
+
+    return `${day}/${month}`
+  }
+
+  function getBirthdayStatus(client: Client) {
+    if (!client.birth_date) return null
+
+    const today = new Date()
+    const currentMonth = today.getMonth() + 1
+    const currentDay = today.getDate()
+    const [, birthMonth, birthDay] = client.birth_date.split('-').map(Number)
+
+    if (birthMonth === currentMonth && birthDay === currentDay) {
+      return {
+        label: 'Aniversariante hoje',
+        className: 'bg-green-500 text-black',
+      }
+    }
+
+    if (birthMonth === currentMonth) {
+      return {
+        label: 'Aniversariante do mês',
+        className: 'bg-purple-500 text-white',
+      }
+    }
+
+    return null
+  }
+
+  function getWhatsAppBirthdayLink(client: Client) {
+    const phoneNumbers = String(client.phone || '').replace(/\D/g, '')
+
+    if (!phoneNumbers) return ''
+
+    const message = encodeURIComponent(
+      `Olá, ${client.name}! Feliz aniversário! A equipe da barbearia deseja muitas felicidades. Temos uma condição especial para você neste mês.`
+    )
+
+    return `https://wa.me/55${phoneNumbers}?text=${message}`
+  }
+
 
   function canManageLoyaltySettings() {
     const normalizedRole = userRole.toLowerCase()
@@ -684,46 +777,46 @@ export default function ClientsPage() {
       <h1 className="text-4xl font-bold">Clientes</h1>
 
       <p className="mt-2 text-zinc-400">
-        Cadastro, busca e acompanhamento de fidelidade dos clientes.
+        Cadastro, histórico, aniversariantes, fidelidade e CRM dos clientes.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="min-h-[150px] rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
           <p className="text-sm text-blue-300">
             Clientes ativos
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
             {activeClients}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+        <div className="min-h-[150px] rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
           <p className="text-sm text-zinc-400">
             Clientes inativos
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
             {inactiveClients}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
+        <div className="min-h-[150px] rounded-2xl border border-green-900 bg-green-950/30 p-5">
           <p className="text-sm text-green-300">
             Total gasto
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
             {formatCurrency(totalSpent)}
           </strong>
         </div>
 
-        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
+        <div className="min-h-[150px] rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
           <p className="text-sm text-purple-300">
             Ticket médio
           </p>
 
-          <strong className="mt-2 block text-3xl text-white">
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
             {formatCurrency(averageTicket)}
           </strong>
 
@@ -732,24 +825,48 @@ export default function ClientsPage() {
           </p>
         </div>
 
+        <div className="min-h-[150px] rounded-2xl border border-pink-900 bg-pink-950/30 p-5">
+          <p className="text-sm text-pink-300">
+            Aniversariantes do mês
+          </p>
+
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
+            {birthdayClientsThisMonth.length}
+          </strong>
+
+          <p className="mt-2 text-xs text-pink-100">
+            {birthdayClientsToday} hoje
+          </p>
+        </div>
+
+        <div className="min-h-[150px] rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
+          <p className="text-sm text-zinc-400">
+            Sem nascimento
+          </p>
+
+          <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
+            {clientsWithoutBirthday}
+          </strong>
+        </div>
+
         {loyaltySettings.enabled ? (
           <>
-            <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
+            <div className="min-h-[150px] rounded-2xl border border-green-900 bg-green-950/30 p-5">
               <p className="text-sm text-green-300">
                 Com recompensa
               </p>
 
-              <strong className="mt-2 block text-3xl text-white">
+              <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
                 {clientsWithReward}
               </strong>
             </div>
 
-            <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
+            <div className="min-h-[150px] rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
               <p className="text-sm text-yellow-300">
                 Próximos da recompensa
               </p>
 
-              <strong className="mt-2 block text-3xl text-white">
+              <strong className="mt-2 block break-words text-2xl font-bold text-white 2xl:text-3xl">
                 {nearlyRewardClients}
               </strong>
 
@@ -759,12 +876,12 @@ export default function ClientsPage() {
             </div>
           </>
         ) : (
-          <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-5 md:col-span-2">
+          <div className="min-h-[150px] rounded-2xl border border-zinc-700 bg-zinc-900 p-5">
             <p className="text-sm text-zinc-400">
               Fidelidade
             </p>
 
-            <strong className="mt-2 block text-2xl text-white">
+            <strong className="mt-2 block break-words text-2xl font-bold text-white">
               Desativada
             </strong>
 
@@ -846,6 +963,82 @@ export default function ClientsPage() {
         </div>
       )}
 
+
+      <div className="mt-8 rounded-2xl border border-pink-900 bg-pink-950/20 p-6">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">
+              Aniversariantes do mês
+            </h2>
+
+            <p className="mt-1 text-sm text-pink-200">
+              Use esta lista para ações de relacionamento e campanhas pelo WhatsApp.
+            </p>
+          </div>
+
+          <span className="rounded-full bg-pink-500 px-3 py-1 text-xs font-bold text-white">
+            {birthdayClientsThisMonth.length} cliente(s)
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {birthdayClientsThisMonth.length === 0 && (
+            <p className="rounded-xl bg-black/30 p-4 text-sm text-pink-100 xl:col-span-3">
+              Nenhum aniversariante cadastrado para este mês.
+            </p>
+          )}
+
+          {birthdayClientsThisMonth.map((client) => {
+            const status = getBirthdayStatus(client)
+            const whatsappLink = getWhatsAppBirthdayLink(client)
+
+            return (
+              <div
+                key={client.id}
+                className="rounded-xl border border-pink-900 bg-black/30 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <strong className="text-white">
+                      {client.name}
+                    </strong>
+
+                    <p className="mt-1 text-sm text-pink-200">
+                      Aniversário: {formatBirthDate(client.birth_date)}
+                    </p>
+
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {client.phone || 'Telefone não informado'}
+                    </p>
+                  </div>
+
+                  {status && (
+                    <span className={`rounded-full px-2 py-1 text-xs font-bold ${status.className}`}>
+                      {status.label}
+                    </span>
+                  )}
+                </div>
+
+                {whatsappLink ? (
+                  <a
+                    href={whatsappLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 block rounded-lg bg-green-500 px-4 py-2 text-center text-sm font-bold text-black transition hover:bg-green-400"
+                  >
+                    Enviar WhatsApp
+                  </a>
+                ) : (
+                  <p className="mt-3 rounded-lg bg-zinc-900 p-2 text-xs text-zinc-500">
+                    Cadastre o telefone para liberar WhatsApp.
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">
           Cadastrar cliente
@@ -871,6 +1064,19 @@ export default function ClientsPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+
+        <div>
+          <label className="mb-2 block text-sm text-zinc-400">
+            Data de nascimento
+          </label>
+
+          <input
+            type="date"
+            className="w-full rounded-lg bg-zinc-800 p-3"
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
+          />
+        </div>
 
         <button
           onClick={createClient}
@@ -933,6 +1139,19 @@ export default function ClientsPage() {
                     onChange={(e) => setEditEmail(e.target.value)}
                   />
 
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-400">
+                      Data de nascimento
+                    </label>
+
+                    <input
+                      type="date"
+                      className="w-full rounded-lg bg-zinc-800 p-3"
+                      value={editBirthDate}
+                      onChange={(e) => setEditBirthDate(e.target.value)}
+                    />
+                  </div>
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => updateClient(client.id)}
@@ -962,6 +1181,18 @@ export default function ClientsPage() {
                       <p className="text-zinc-500">
                         {client.email || 'Email não informado'}
                       </p>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <p className="text-sm text-zinc-500">
+                          Nascimento: {formatBirthDate(client.birth_date)}
+                        </p>
+
+                        {getBirthdayStatus(client) && (
+                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${getBirthdayStatus(client)?.className}`}>
+                            {getBirthdayStatus(client)?.label}
+                          </span>
+                        )}
+                      </div>
 
                       <p className="mt-2 text-sm text-zinc-500">
                         Status:{' '}
