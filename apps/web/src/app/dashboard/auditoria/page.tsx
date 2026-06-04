@@ -30,6 +30,8 @@ export default function AuditPage() {
   const [search, setSearch] = useState('')
   const [moduleFilter, setModuleFilter] = useState('all')
   const [actionFilter, setActionFilter] = useState('all')
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [currentUserEmail, setCurrentUserEmail] = useState('')
 
   useEffect(() => {
     loadAuditLogs()
@@ -57,7 +59,7 @@ export default function AuditPage() {
 
       return matchesModule && matchesAction && matchesSearch
     })
-  }, [logs, search, moduleFilter, actionFilter])
+  }, [logs, search, moduleFilter, actionFilter, currentUserId, currentUserEmail])
 
   const availableModules = useMemo(() => {
     return Array.from(new Set(logs.map((log) => log.module.toLowerCase())))
@@ -82,6 +84,9 @@ export default function AuditPage() {
       window.location.href = '/login'
       return
     }
+
+    setCurrentUserId(user.id)
+    setCurrentUserEmail(user.email || '')
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -122,7 +127,13 @@ export default function AuditPage() {
   }
 
   function getUserName(log: AuditLog) {
-    return log.user_id || 'Usuário não informado'
+    if (!log.user_id) return 'Usuário não informado'
+
+    if (log.user_id === currentUserId && currentUserEmail) {
+      return currentUserEmail
+    }
+
+    return log.user_id
   }
 
   function formatDateTime(value: string) {

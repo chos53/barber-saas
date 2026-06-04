@@ -148,6 +148,26 @@ export default function ReportsPage() {
     return profile.company_id
   }
 
+
+  async function createAuditLog(description: string, metadata: Record<string, unknown> = {}) {
+    const currentCompanyId = await ensureCompanyId()
+
+    if (!currentCompanyId) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    await supabase.from('audit_logs').insert({
+      company_id: currentCompanyId,
+      user_id: user?.id || null,
+      action: 'export',
+      module: 'relatorios',
+      description,
+      metadata,
+    })
+  }
+
   async function exportClientsCsv() {
     const currentCompanyId = await ensureCompanyId()
 
@@ -176,6 +196,11 @@ export default function ReportsPage() {
         client.created_at,
       ])
     )
+
+    createAuditLog('Exportou clientes em CSV', {
+      file: `clientes-${getExportDate()}.csv`,
+      total: data?.length || 0,
+    })
   }
 
   async function exportServicesCsv() {
@@ -205,6 +230,11 @@ export default function ReportsPage() {
         service.created_at,
       ])
     )
+
+    createAuditLog('Exportou serviços em CSV', {
+      file: `servicos-${getExportDate()}.csv`,
+      total: data?.length || 0,
+    })
   }
 
   async function exportProductsCsv() {
@@ -236,6 +266,11 @@ export default function ReportsPage() {
         product.created_at,
       ])
     )
+
+    createAuditLog('Exportou produtos em CSV', {
+      file: `produtos-${getExportDate()}.csv`,
+      total: data?.length || 0,
+    })
   }
 
   async function exportFinancialCsv() {
@@ -268,6 +303,11 @@ export default function ReportsPage() {
         transaction.created_at,
       ])
     )
+
+    createAuditLog('Exportou financeiro em CSV', {
+      file: `financeiro-${getExportDate()}.csv`,
+      total: data?.length || 0,
+    })
   }
 
   async function exportAppointmentsCsv() {
@@ -310,6 +350,11 @@ export default function ReportsPage() {
         appointment.created_at,
       ])
     )
+
+    createAuditLog('Exportou agendamentos em CSV', {
+      file: `agendamentos-${getExportDate()}.csv`,
+      total: data?.length || 0,
+    })
   }
 
   function generatePdfReport() {
@@ -680,6 +725,15 @@ export default function ReportsPage() {
     setTimeout(() => {
       reportWindow.print()
     }, 300)
+
+    createAuditLog('Gerou relatório PDF', {
+      period,
+      expectedRevenue,
+      realizedRevenue,
+      appointmentsCount,
+      completedCount,
+      cancelledCount,
+    })
   }
 
   async function loadData() {
