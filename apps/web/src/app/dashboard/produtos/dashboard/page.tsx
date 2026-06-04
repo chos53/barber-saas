@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 
 type Product = {
   id: string
-  company_id: string
   name: string
   category: string | null
   code: string | null
@@ -15,19 +14,13 @@ type Product = {
   current_stock: number | null
   minimum_stock: number | null
   active: boolean
-  created_at: string
 }
 
 type StockMovement = {
   id: string
-  company_id: string
   product_id: string
   type: 'in' | 'out'
   quantity: number
-  previous_stock: number
-  new_stock: number
-  reason: string | null
-  created_by: string | null
   created_at: string
 }
 
@@ -40,18 +33,14 @@ type ComandaItem = {
   created_at?: string | null
 }
 
-type ProductRanking = {
+type ProductPerformance = {
   product_id: string
   name: string
   quantity: number
-  total: number
-}
-
-type MovementRanking = {
-  product_id: string
-  name: string
-  quantity: number
-  movements: number
+  revenue: number
+  estimatedCost: number
+  estimatedProfit: number
+  margin: number
 }
 
 export default function ProdutosDashboardPage() {
@@ -64,88 +53,84 @@ export default function ProdutosDashboardPage() {
     loadData()
   }, [])
 
-  const activeProducts = useMemo(() => products.filter((product) => product.active).length, [products])
-  const inactiveProducts = useMemo(() => products.filter((product) => !product.active).length, [products])
-
-  const zeroStockProducts = useMemo(() => {
-    return products.filter((product) => product.active && Number(product.current_stock || 0) <= 0).length
+  const productMap = useMemo(() => {
+    return new Map(products.map((product) => [product.id, product]))
   }, [products])
 
-  const lowStockProducts = useMemo(() => {
-    return products.filter((product) => {
-      const current = Number(product.current_stock || 0)
-      const minimum = Number(product.minimum_stock || 0)
-
-      return product.active && current > 0 && minimum > 0 && current <= minimum
-    }).length
-  }, [products])
-
-  const totalStockValue = useMemo(() => {
-    return products.reduce((sum, product) => {
-      return sum + Number(product.current_stock || 0) * Number(product.cost_price || 0)
-    }, 0)
-  }, [products])
-
-  const totalSalePotential = useMemo(() => {
-    return products.reduce((sum, product) => {
-      return sum + Number(product.current_stock || 0) * Number(product.sale_price || 0)
-    }, 0)
-  }, [products])
-
-  const totalUnits = useMemo(() => {
-    return products
-      .filter((product) => product.active)
-      .reduce((sum, product) => sum + Number(product.current_stock || 0), 0)
-  }, [products])
-
-  const topSoldProducts = useMemo<ProductRanking[]>(() => {
-    const rankingMap = new Map<string, ProductRanking>()
-    const productsMap = new Map(products.map((product) => [product.id, product]))
+  const performance = useMemo<ProductPerformance[]>(() => {
+    const map = new Map<string, ProductPerformance>()
 
     comandaItems.forEach((item) => {
       if (!item.product_id) return
 
-      const product = productsMap.get(item.product_id)
-      const current = rankingMap.get(item.product_id) || {
+      const product = productMap.get(item.product_id)
+      const quantity = Number(item.quantity || 0)
+      const revenue = quantity * Number(item.price || 0)
+      const estimatedCost = quantity * Number(product?.cost_price || 0)
+      const current = map.get(item.product_id) || {
         product_id: item.product_id,
         name: product?.name || item.description || 'Produto não identificado',
         quantity: 0,
-        total: 0,
+        revenue: 0,
+        estimatedCost: 0,
+        estimatedProfit: 0,
+        margin: 0,
       }
 
-      current.quantity += Number(item.quantity || 0)
-      current.total += Number(item.quantity || 0) * Number(item.price || 0)
+      current.quantity += quantity
+      current.revenue += revenue
+      current.estimatedCost += estimatedCost
+      current.estimatedProfit = current.revenue - current.estimatedCost
+      current.margin =
+        current.revenue > 0
+          ? Number(((current.estimatedProfit / current.revenue) * 100).toFixed(2))
+          : 0
 
-      rankingMap.set(item.product_id, current)
+      map.set(item.product_id, current)
     })
 
-    return Array.from(rankingMap.values())
+    return Array.from(map.values())
+  }, [comandaItems, productMap])
+
+  const totalRevenue = useMemo(() => {
+    return performance.reduce((sum, product) => sum + product.revenue, 0)
+  }, [performance])
+
+  const totalEstimatedCost = useMemo(() => {
+    return performance.reduce((sum, product) => sum + product.estimatedCost, 0)
+  }, [performance])
+
+  const totalEstimatedProfit = useMemo(() => {
+    return totalRevenue - totalEstimatedCost
+  }, [totalRevenue, totalEstimatedCost])
+
+  const averageMargin = useMemo(() => {
+    if (totalRevenue <= 0) return 0
+
+    return Number(((totalEstimatedProfit / totalRevenue) * 100).toFixed(2))
+  }, [totalRevenue, totalEstimatedProfit])
+
+  const totalSoldUnits = useMemo(() => {
+    return performance.reduce((sum, product) => sum + product.quantity, 0)
+  }, [performance])
+
+  const topByQuantity = useMemo(() => {
+    return [...performance]
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 10)
-  }, [comandaItems, products])
+  }, [performance])
 
-  const topMovedProducts = useMemo<MovementRanking[]>(() => {
-    const rankingMap = new Map<string, MovementRanking>()
-    const productsMap = new Map(products.map((product) => [product.id, product]))
-
-    stockMovements.forEach((movement) => {
-      const current = rankingMap.get(movement.product_id) || {
-        product_id: movement.product_id,
-        name: productsMap.get(movement.product_id)?.name || 'Produto não identificado',
-        quantity: 0,
-        movements: 0,
-      }
-
-      current.quantity += Number(movement.quantity || 0)
-      current.movements += 1
-
-      rankingMap.set(movement.product_id, current)
-    })
-
-    return Array.from(rankingMap.values())
-      .sort((a, b) => b.quantity - a.quantity)
+  const topByRevenue = useMemo(() => {
+    return [...performance]
+      .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10)
-  }, [stockMovements, products])
+  }, [performance])
+
+  const topByProfit = useMemo(() => {
+    return [...performance]
+      .sort((a, b) => b.estimatedProfit - a.estimatedProfit)
+      .slice(0, 10)
+  }, [performance])
 
   const criticalProducts = useMemo(() => {
     return products
@@ -158,6 +143,29 @@ export default function ProdutosDashboardPage() {
       .sort((a, b) => Number(a.current_stock || 0) - Number(b.current_stock || 0))
       .slice(0, 10)
   }, [products])
+
+  const topMovedProducts = useMemo(() => {
+    const map = new Map<string, { product_id: string; name: string; quantity: number; movements: number }>()
+
+    stockMovements.forEach((movement) => {
+      const product = productMap.get(movement.product_id)
+      const current = map.get(movement.product_id) || {
+        product_id: movement.product_id,
+        name: product?.name || 'Produto não identificado',
+        quantity: 0,
+        movements: 0,
+      }
+
+      current.quantity += Number(movement.quantity || 0)
+      current.movements += 1
+
+      map.set(movement.product_id, current)
+    })
+
+    return Array.from(map.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10)
+  }, [stockMovements, productMap])
 
   const stoppedProducts = useMemo(() => {
     const last30Days = new Date()
@@ -214,7 +222,7 @@ export default function ProdutosDashboardPage() {
 
     const { data: productsData, error: productsError } = await supabase
       .from('products')
-      .select('id, company_id, name, category, code, cost_price, sale_price, current_stock, minimum_stock, active, created_at')
+      .select('id, name, category, code, cost_price, sale_price, current_stock, minimum_stock, active')
       .eq('company_id', profile.company_id)
       .order('name', { ascending: true })
 
@@ -238,7 +246,7 @@ export default function ProdutosDashboardPage() {
 
     const { data: movementsData } = await supabase
       .from('stock_movements')
-      .select('id, company_id, product_id, type, quantity, previous_stock, new_stock, reason, created_by, created_at')
+      .select('id, product_id, type, quantity, created_at')
       .eq('company_id', profile.company_id)
       .in('product_id', productIds)
       .order('created_at', { ascending: false })
@@ -269,6 +277,10 @@ export default function ProdutosDashboardPage() {
     return Number(value || 0).toLocaleString('pt-BR')
   }
 
+  function formatPercent(value: number) {
+    return `${Number(value || 0).toFixed(2)}%`
+  }
+
   function getStockLabel(product: Product) {
     const current = Number(product.current_stock || 0)
     const minimum = Number(product.minimum_stock || 0)
@@ -277,6 +289,64 @@ export default function ProdutosDashboardPage() {
     if (current <= 0) return 'Zerado'
     if (minimum > 0 && current <= minimum) return 'Baixo'
     return 'Ok'
+  }
+
+  function renderPerformanceList(
+    title: string,
+    description: string,
+    productsList: ProductPerformance[],
+    highlight: 'quantity' | 'revenue' | 'profit'
+  ) {
+    return (
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="text-2xl font-bold">
+          {title}
+        </h2>
+
+        <p className="mt-1 text-sm text-zinc-500">
+          {description}
+        </p>
+
+        <div className="mt-5 space-y-3">
+          {productsList.length === 0 && (
+            <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">
+              Nenhuma venda de produto registrada ainda.
+            </p>
+          )}
+
+          {productsList.map((product, index) => (
+            <div
+              key={product.product_id}
+              className="grid gap-3 rounded-xl bg-zinc-950 p-4 md:grid-cols-[60px_1fr_110px_140px_140px_110px]"
+            >
+              <strong className="text-zinc-500">
+                #{index + 1}
+              </strong>
+
+              <span className="font-bold text-white">
+                {product.name}
+              </span>
+
+              <span className={highlight === 'quantity' ? 'font-bold text-blue-400' : 'text-zinc-300'}>
+                {formatNumber(product.quantity)} un.
+              </span>
+
+              <span className={highlight === 'revenue' ? 'font-bold text-green-400' : 'text-zinc-300'}>
+                {formatCurrency(product.revenue)}
+              </span>
+
+              <span className={highlight === 'profit' ? 'font-bold text-yellow-400' : 'text-zinc-300'}>
+                {formatCurrency(product.estimatedProfit)}
+              </span>
+
+              <span className={product.margin >= 50 ? 'font-bold text-green-400' : 'font-bold text-orange-300'}>
+                {formatPercent(product.margin)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -288,7 +358,7 @@ export default function ProdutosDashboardPage() {
           </h1>
 
           <p className="mt-2 text-zinc-400">
-            Indicadores gerenciais de estoque, vendas e movimentações de produtos.
+            Análise gerencial de vendas, faturamento, lucro estimado e giro de produtos.
           </p>
         </div>
 
@@ -306,119 +376,204 @@ export default function ProdutosDashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-6">
-              <p className="text-sm text-blue-300">Produtos cadastrados</p>
-              <strong className="mt-2 block text-3xl text-white">{products.length}</strong>
+              <p className="text-sm text-blue-300">
+                Unidades vendidas
+              </p>
+
+              <strong className="mt-2 block text-3xl text-white">
+                {formatNumber(totalSoldUnits)}
+              </strong>
             </div>
 
             <div className="rounded-2xl border border-green-900 bg-green-950/30 p-6">
-              <p className="text-sm text-green-300">Produtos ativos</p>
-              <strong className="mt-2 block text-3xl text-white">{activeProducts}</strong>
-              <p className="mt-2 text-xs text-green-100">{inactiveProducts} inativo(s)</p>
-            </div>
+              <p className="text-sm text-green-300">
+                Faturamento em produtos
+              </p>
 
-            <div className="rounded-2xl border border-red-900 bg-red-950/30 p-6">
-              <p className="text-sm text-red-300">Zerados</p>
-              <strong className="mt-2 block text-3xl text-white">{zeroStockProducts}</strong>
-            </div>
-
-            <div className="rounded-2xl border border-orange-900 bg-orange-950/30 p-6">
-              <p className="text-sm text-orange-300">Estoque baixo</p>
-              <strong className="mt-2 block text-3xl text-white">{lowStockProducts}</strong>
+              <strong className="mt-2 block text-3xl text-white">
+                {formatCurrency(totalRevenue)}
+              </strong>
             </div>
 
             <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-6">
-              <p className="text-sm text-yellow-300">Valor em estoque</p>
-              <strong className="mt-2 block text-3xl text-white">{formatCurrency(totalStockValue)}</strong>
-              <p className="mt-2 text-xs text-yellow-100">{formatNumber(totalUnits)} unidade(s)</p>
+              <p className="text-sm text-yellow-300">
+                Lucro estimado
+              </p>
+
+              <strong className="mt-2 block text-3xl text-white">
+                {formatCurrency(totalEstimatedProfit)}
+              </strong>
+
+              <p className="mt-2 text-xs text-yellow-100">
+                Custo estimado: {formatCurrency(totalEstimatedCost)}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-6">
-              <p className="text-sm text-purple-300">Potencial de venda</p>
-              <strong className="mt-2 block text-3xl text-white">{formatCurrency(totalSalePotential)}</strong>
+              <p className="text-sm text-purple-300">
+                Margem média
+              </p>
+
+              <strong className="mt-2 block text-3xl text-white">
+                {formatPercent(averageMargin)}
+              </strong>
+            </div>
+
+            <div className="rounded-2xl border border-red-900 bg-red-950/30 p-6">
+              <p className="text-sm text-red-300">
+                Produtos críticos
+              </p>
+
+              <strong className="mt-2 block text-3xl text-white">
+                {criticalProducts.length}
+              </strong>
+
+              <p className="mt-2 text-xs text-red-100">
+                Zerados ou abaixo do mínimo
+              </p>
             </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Top produtos vendidos</h2>
-              <p className="mt-1 text-sm text-zinc-500">Ranking baseado nos produtos vendidos em comandas.</p>
+          <div className="mt-8 space-y-6">
+            {renderPerformanceList(
+              'Top produtos por faturamento',
+              'Produtos que mais geraram receita nas comandas.',
+              topByRevenue,
+              'revenue'
+            )}
 
-              <div className="mt-5 space-y-3">
-                {topSoldProducts.length === 0 && (
-                  <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">Nenhuma venda de produto cadastrada ainda.</p>
-                )}
+            {renderPerformanceList(
+              'Top produtos por lucro estimado',
+              'Lucro calculado por preço de venda menos custo cadastrado.',
+              topByProfit,
+              'profit'
+            )}
 
-                {topSoldProducts.map((product, index) => (
-                  <div key={product.product_id} className="grid gap-3 rounded-xl bg-zinc-950 p-4 md:grid-cols-[60px_1fr_120px_150px]">
-                    <strong className="text-zinc-500">#{index + 1}</strong>
-                    <span className="font-bold text-white">{product.name}</span>
-                    <span className="text-zinc-300">{formatNumber(product.quantity)} un.</span>
-                    <span className="text-green-400">{formatCurrency(product.total)}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
+            {renderPerformanceList(
+              'Top produtos por quantidade vendida',
+              'Produtos com maior volume de unidades vendidas.',
+              topByQuantity,
+              'quantity'
+            )}
+          </div>
 
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Top produtos movimentados</h2>
-              <p className="mt-1 text-sm text-zinc-500">Ranking baseado em entradas e saídas de estoque.</p>
-
-              <div className="mt-5 space-y-3">
-                {topMovedProducts.length === 0 && (
-                  <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">Nenhuma movimentação de estoque registrada ainda.</p>
-                )}
-
-                {topMovedProducts.map((product, index) => (
-                  <div key={product.product_id} className="grid gap-3 rounded-xl bg-zinc-950 p-4 md:grid-cols-[60px_1fr_120px_150px]">
-                    <strong className="text-zinc-500">#{index + 1}</strong>
-                    <span className="font-bold text-white">{product.name}</span>
-                    <span className="text-zinc-300">{formatNumber(product.quantity)} un.</span>
-                    <span className="text-blue-400">{formatNumber(product.movements)} mov.</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-
+          <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
             <section className="rounded-2xl border border-red-900 bg-red-950/20 p-6">
-              <h2 className="text-2xl font-bold">Produtos críticos</h2>
-              <p className="mt-1 text-sm text-red-200">Produtos zerados ou abaixo do estoque mínimo.</p>
+              <h2 className="text-2xl font-bold">
+                Produtos críticos
+              </h2>
+
+              <p className="mt-1 text-sm text-red-200">
+                Produtos zerados ou abaixo do estoque mínimo.
+              </p>
 
               <div className="mt-5 space-y-3">
                 {criticalProducts.length === 0 && (
-                  <p className="rounded-xl bg-black/30 p-4 text-red-100">Nenhum produto crítico no momento.</p>
+                  <p className="rounded-xl bg-black/30 p-4 text-red-100">
+                    Nenhum produto crítico no momento.
+                  </p>
                 )}
 
                 {criticalProducts.map((product) => (
-                  <div key={product.id} className="grid gap-3 rounded-xl bg-black/30 p-4 md:grid-cols-[1fr_120px_120px_120px]">
-                    <strong className="text-white">{product.name}</strong>
-                    <span className="text-zinc-300">Atual: {formatNumber(product.current_stock)}</span>
-                    <span className="text-zinc-300">Mín.: {formatNumber(product.minimum_stock)}</span>
-                    <span className={Number(product.current_stock || 0) <= 0 ? 'font-bold text-red-300' : 'font-bold text-orange-300'}>
-                      {getStockLabel(product)}
-                    </span>
+                  <div
+                    key={product.id}
+                    className="grid gap-3 rounded-xl bg-black/30 p-4"
+                  >
+                    <strong className="text-white">
+                      {product.name}
+                    </strong>
+
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <span className="text-zinc-300">
+                        Atual: {formatNumber(product.current_stock)}
+                      </span>
+
+                      <span className="text-zinc-300">
+                        Mín.: {formatNumber(product.minimum_stock)}
+                      </span>
+
+                      <span className={Number(product.current_stock || 0) <= 0 ? 'font-bold text-red-300' : 'font-bold text-orange-300'}>
+                        {getStockLabel(product)}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
 
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-2xl font-bold">Produtos parados</h2>
-              <p className="mt-1 text-sm text-zinc-500">Produtos sem venda ou movimentação nos últimos 30 dias.</p>
+              <h2 className="text-2xl font-bold">
+                Top movimentados
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Produtos com mais entradas e saídas no estoque.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {topMovedProducts.length === 0 && (
+                  <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">
+                    Nenhuma movimentação registrada.
+                  </p>
+                )}
+
+                {topMovedProducts.map((product, index) => (
+                  <div
+                    key={product.product_id}
+                    className="grid gap-2 rounded-xl bg-zinc-950 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <strong className="text-white">
+                        #{index + 1} {product.name}
+                      </strong>
+
+                      <span className="text-blue-400">
+                        {formatNumber(product.movements)} mov.
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-zinc-400">
+                      Volume movimentado: {formatNumber(product.quantity)} un.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h2 className="text-2xl font-bold">
+                Produtos parados
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Sem venda ou movimentação nos últimos 30 dias.
+              </p>
 
               <div className="mt-5 space-y-3">
                 {stoppedProducts.length === 0 && (
-                  <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">Nenhum produto parado identificado.</p>
+                  <p className="rounded-xl bg-zinc-950 p-4 text-zinc-500">
+                    Nenhum produto parado identificado.
+                  </p>
                 )}
 
                 {stoppedProducts.map((product) => (
-                  <div key={product.id} className="grid gap-3 rounded-xl bg-zinc-950 p-4 md:grid-cols-[1fr_120px_150px]">
-                    <strong className="text-white">{product.name}</strong>
-                    <span className="text-zinc-300">Estoque: {formatNumber(product.current_stock)}</span>
-                    <span className="text-yellow-400">
-                      {formatCurrency(Number(product.current_stock || 0) * Number(product.cost_price || 0))}
-                    </span>
+                  <div
+                    key={product.id}
+                    className="grid gap-2 rounded-xl bg-zinc-950 p-4"
+                  >
+                    <strong className="text-white">
+                      {product.name}
+                    </strong>
+
+                    <p className="text-sm text-zinc-400">
+                      Estoque: {formatNumber(product.current_stock)} · Valor em custo:{' '}
+                      {formatCurrency(
+                        Number(product.current_stock || 0) *
+                          Number(product.cost_price || 0)
+                      )}
+                    </p>
                   </div>
                 ))}
               </div>
