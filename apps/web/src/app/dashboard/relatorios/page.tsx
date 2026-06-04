@@ -43,6 +43,7 @@ type CommissionRanking = {
 const chartColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
 
 export default function ReportsPage() {
+  const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('Barber SaaS')
   const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [realizedRevenue, setRealizedRevenue] = useState(0)
@@ -79,6 +80,236 @@ export default function ReportsPage() {
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;')
+  }
+
+
+  function escapeCsvValue(value: string | number | boolean | null | undefined) {
+    const text = String(value ?? '')
+      .replaceAll('"', '""')
+      .replaceAll('\n', ' ')
+      .replaceAll('\r', ' ')
+
+    return `"${text}"`
+  }
+
+  function downloadCsv(
+    filename: string,
+    headers: string[],
+    rows: Array<Array<string | number | boolean | null | undefined>>
+  ) {
+    const csvContent = [
+      headers.map(escapeCsvValue).join(';'),
+      ...rows.map((row) => row.map(escapeCsvValue).join(';')),
+    ].join('\n')
+
+    const blob = new Blob([`\ufeff${csvContent}`], {
+      type: 'text/csv;charset=utf-8;',
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = filename
+    link.click()
+
+    URL.revokeObjectURL(url)
+  }
+
+  function getExportDate() {
+    return new Date().toISOString().split('T')[0]
+  }
+
+  async function ensureCompanyId() {
+    if (companyId) return companyId
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      window.location.href = '/login'
+      return ''
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.company_id) {
+      alert('Empresa não identificada.')
+      return ''
+    }
+
+    setCompanyId(profile.company_id)
+
+    return profile.company_id
+  }
+
+  async function exportClientsCsv() {
+    const currentCompanyId = await ensureCompanyId()
+
+    if (!currentCompanyId) return
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('name, phone, email, birth_date, active, created_at')
+      .eq('company_id', currentCompanyId)
+      .order('name', { ascending: true })
+
+    if (error) {
+      alert(`Erro ao exportar clientes: ${error.message}`)
+      return
+    }
+
+    downloadCsv(
+      `clientes-${getExportDate()}.csv`,
+      ['Nome', 'Telefone', 'Email', 'Nascimento', 'Ativo', 'Criado em'],
+      (data || []).map((client: any) => [
+        client.name,
+        client.phone,
+        client.email,
+        client.birth_date,
+        client.active ? 'Sim' : 'Não',
+        client.created_at,
+      ])
+    )
+  }
+
+  async function exportServicesCsv() {
+    const currentCompanyId = await ensureCompanyId()
+
+    if (!currentCompanyId) return
+
+    const { data, error } = await supabase
+      .from('services')
+      .select('name, price, duration_minutes, active, created_at')
+      .eq('company_id', currentCompanyId)
+      .order('name', { ascending: true })
+
+    if (error) {
+      alert(`Erro ao exportar serviços: ${error.message}`)
+      return
+    }
+
+    downloadCsv(
+      `servicos-${getExportDate()}.csv`,
+      ['Nome', 'Preço', 'Duração em minutos', 'Ativo', 'Criado em'],
+      (data || []).map((service: any) => [
+        service.name,
+        Number(service.price || 0).toFixed(2),
+        service.duration_minutes,
+        service.active ? 'Sim' : 'Não',
+        service.created_at,
+      ])
+    )
+  }
+
+  async function exportProductsCsv() {
+    const currentCompanyId = await ensureCompanyId()
+
+    if (!currentCompanyId) return
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('name, current_stock, minimum_stock, sale_price, cost_price, active, created_at')
+      .eq('company_id', currentCompanyId)
+      .order('name', { ascending: true })
+
+    if (error) {
+      alert(`Erro ao exportar produtos: ${error.message}`)
+      return
+    }
+
+    downloadCsv(
+      `produtos-${getExportDate()}.csv`,
+      ['Nome', 'Estoque atual', 'Estoque mínimo', 'Preço venda', 'Preço custo', 'Ativo', 'Criado em'],
+      (data || []).map((product: any) => [
+        product.name,
+        product.current_stock,
+        product.minimum_stock,
+        Number(product.sale_price || 0).toFixed(2),
+        Number(product.cost_price || 0).toFixed(2),
+        product.active ? 'Sim' : 'Não',
+        product.created_at,
+      ])
+    )
+  }
+
+  async function exportFinancialCsv() {
+    const currentCompanyId = await ensureCompanyId()
+
+    if (!currentCompanyId) return
+
+    const { data, error } = await supabase
+      .from('financial_transactions')
+      .select('transaction_date, type, category, description, amount, payment_method, status, created_at')
+      .eq('company_id', currentCompanyId)
+      .order('transaction_date', { ascending: false })
+
+    if (error) {
+      alert(`Erro ao exportar financeiro: ${error.message}`)
+      return
+    }
+
+    downloadCsv(
+      `financeiro-${getExportDate()}.csv`,
+      ['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor', 'Método', 'Status', 'Criado em'],
+      (data || []).map((transaction: any) => [
+        transaction.transaction_date,
+        transaction.type === 'income' ? 'Entrada' : 'Despesa',
+        transaction.category,
+        transaction.description,
+        Number(transaction.amount || 0).toFixed(2),
+        transaction.payment_method,
+        transaction.status,
+        transaction.created_at,
+      ])
+    )
+  }
+
+  async function exportAppointmentsCsv() {
+    const currentCompanyId = await ensureCompanyId()
+
+    if (!currentCompanyId) return
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .select(`
+        appointment_date,
+        appointment_time,
+        status,
+        price,
+        clients ( name ),
+        services ( name ),
+        professionals ( name ),
+        created_at
+      `)
+      .eq('company_id', currentCompanyId)
+      .order('appointment_date', { ascending: false })
+      .order('appointment_time', { ascending: false })
+
+    if (error) {
+      alert(`Erro ao exportar agendamentos: ${error.message}`)
+      return
+    }
+
+    downloadCsv(
+      `agendamentos-${getExportDate()}.csv`,
+      ['Data', 'Hora', 'Cliente', 'Serviço', 'Profissional', 'Status', 'Valor', 'Criado em'],
+      (data || []).map((appointment: any) => [
+        appointment.appointment_date,
+        appointment.appointment_time,
+        appointment.clients?.name || 'Cliente não informado',
+        appointment.services?.name || 'Serviço não informado',
+        appointment.professionals?.name || 'Profissional não informado',
+        appointment.status,
+        Number(appointment.price || 0).toFixed(2),
+        appointment.created_at,
+      ])
+    )
   }
 
   function generatePdfReport() {
@@ -466,6 +697,8 @@ export default function ReportsPage() {
 
     if (!profile?.company_id) return
 
+    setCompanyId(profile.company_id)
+
     const { data: settings } = await supabase
       .from('company_settings')
       .select('company_name')
@@ -790,6 +1023,66 @@ export default function ReportsPage() {
             {value === '1' ? 'Hoje' : `${value} dias`}
           </button>
         ))}
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-blue-900 bg-blue-950/20 p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">
+              Exportar dados
+            </h2>
+
+            <p className="mt-1 text-sm text-blue-200">
+              Gere backups em CSV compatíveis com Excel, Google Sheets e LibreOffice.
+            </p>
+          </div>
+
+          <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">
+            Backup manual
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <button
+            type="button"
+            onClick={exportClientsCsv}
+            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+          >
+            Exportar clientes CSV
+          </button>
+
+          <button
+            type="button"
+            onClick={exportServicesCsv}
+            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+          >
+            Exportar serviços CSV
+          </button>
+
+          <button
+            type="button"
+            onClick={exportProductsCsv}
+            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+          >
+            Exportar produtos CSV
+          </button>
+
+          <button
+            type="button"
+            onClick={exportFinancialCsv}
+            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+          >
+            Exportar financeiro CSV
+          </button>
+
+          <button
+            type="button"
+            onClick={exportAppointmentsCsv}
+            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+          >
+            Exportar agendamentos CSV
+          </button>
+        </div>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-5">
