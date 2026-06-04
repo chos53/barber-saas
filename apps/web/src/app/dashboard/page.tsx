@@ -22,6 +22,54 @@ type FinancialTransaction = {
   transaction_date: string
 }
 
+type Client = {
+  id: string
+  name: string
+  phone: string | null
+  birth_date: string | null
+  active: boolean
+  created_at: string
+}
+
+type Comanda = {
+  id: string
+  client_id: string | null
+  status: string
+  total: number
+  discount?: number | null
+  discount_type?: 'amount' | 'percentage' | null
+  discount_value?: number | null
+  surcharge?: number | null
+  surcharge_type?: 'amount' | 'percentage' | null
+  surcharge_value?: number | null
+  created_at: string
+  closed_at?: string | null
+}
+
+type ComandaItem = {
+  id: string
+  comanda_id: string
+  quantity: number
+  price: number
+}
+
+type LoyaltyRedemption = {
+  id: string
+  client_id: string
+  reward_description: string
+  created_at: string
+}
+
+type CommercialStats = {
+  averageTicket: number
+  birthdayClientsThisMonth: number
+  birthdayClientsToday: number
+  recoveredClients: number
+  loyaltyRedemptionsThisMonth: number
+  newClientsThisMonth: number
+  clientsWithoutBirthday: number
+}
+
 type DashboardStats = {
   todayAppointments: number
   scheduledAppointments: number
@@ -56,6 +104,15 @@ export default function DashboardPage() {
   const [upcomingAppointments, setUpcomingAppointments] = useState<
     Appointment[]
   >([])
+  const [commercialStats, setCommercialStats] = useState<CommercialStats>({
+    averageTicket: 0,
+    birthdayClientsThisMonth: 0,
+    birthdayClientsToday: 0,
+    recoveredClients: 0,
+    loyaltyRedemptionsThisMonth: 0,
+    newClientsThisMonth: 0,
+    clientsWithoutBirthday: 0,
+  })
 
   useEffect(() => {
     const now = new Date()
@@ -76,6 +133,85 @@ export default function DashboardPage() {
       style: 'currency',
       currency: 'BRL',
     }).format(value)
+  }
+
+  function getComandaFinalTotal(comanda: Comanda, items: ComandaItem[]) {
+    const itemsTotal = items.reduce((sum, item) => {
+      return sum + Number(item.price || 0) * Number(item.quantity || 0)
+    }, 0)
+
+    const subtotal = itemsTotal > 0 ? itemsTotal : Number(comanda.total || 0)
+    const discountValue = Number(comanda.discount_value ?? comanda.discount ?? 0)
+    const discountType =
+      comanda.discount_type === 'percentage' ? 'percentage' : 'amount'
+    const discount =
+      discountType === 'percentage'
+        ? Math.min((subtotal * discountValue) / 100, subtotal)
+        : Math.min(discountValue, subtotal)
+
+    const surchargeValue = Number(comanda.surcharge_value ?? comanda.surcharge ?? 0)
+    const surchargeType =
+      comanda.surcharge_type === 'percentage' ? 'percentage' : 'amount'
+    const surcharge =
+      surchargeType === 'percentage'
+        ? (subtotal * surchargeValue) / 100
+        : surchargeValue
+
+    return Math.max(Number((subtotal - discount + surcharge).toFixed(2)), 0)
+  }
+
+  function isClientRecoveredThisMonth(
+    clientId: string,
+    clientComandas: Comanda[],
+    firstDayOfMonth: string,
+    currentDate: string
+  ) {
+    const closedComandas = clientComandas
+      .filter((comanda) => comanda.client_id === clientId)
+      .sort((a, b) => {
+        return (
+          new Date(a.closed_at || a.created_at).getTime() -
+          new Date(b.closed_at || b.created_at).getTime()
+        )
+      })
+
+    if (closedComandas.length < 2) return false
+
+    const visitsThisMonth = closedComandas.filter((comanda) => {
+      const visitDate = comanda.closed_at || comanda.created_at
+
+      return visitDate >= firstDayOfMonth && visitDate <= currentDate
+    })
+
+    if (visitsThisMonth.length === 0) return false
+
+    const firstVisitThisMonth = visitsThisMonth[0]
+    const firstVisitDate = new Date(
+      firstVisitThisMonth.closed_at || firstVisitThisMonth.created_at
+    )
+
+    const previousVisits = closedComandas.filter((comanda) => {
+      const visitDate = new Date(comanda.closed_at || comanda.created_at)
+
+      return visitDate.getTime() < firstVisitDate.getTime()
+    })
+
+    if (previousVisits.length === 0) return false
+
+    const lastPreviousVisit = previousVisits[previousVisits.length - 1]
+    const lastPreviousVisitDate = new Date(
+      lastPreviousVisit.closed_at || lastPreviousVisit.created_at
+    )
+
+    const diffDays = Math.floor(
+      (firstVisitDate.getTime() - lastPreviousVisitDate.getTime()) /
+        1000 /
+        60 /
+        60 /
+        24
+    )
+
+    return diffDays >= 60
   }
 
   async function loadDashboard(currentDate: string, firstDayOfMonth: string) {
@@ -121,6 +257,9 @@ export default function DashboardPage() {
       todayTransactionsResult,
       monthTransactionsResult,
       upcomingAppointmentsResult,
+      clientsCommercialResult,
+      closedComandasResult,
+      monthLoyaltyRedemptionsResult,
     ] = await Promise.all([
       supabase
         .from('appointments')
@@ -176,6 +315,27 @@ export default function DashboardPage() {
         .order('appointment_date', { ascending: true })
         .order('appointment_time', { ascending: true })
         .limit(8),
+
+      supabase
+        .from('clients')
+        .select('id, name, phone, birth_date, active, created_at')
+        .eq('company_id', profile.company_id),
+
+      supabase
+        .from('comandas')
+        .select(
+          'id, client_id, status, total, discount, discount_type, discount_value, surcharge, surcharge_type, surcharge_value, created_at, closed_at'
+        )
+        .eq('company_id', profile.company_id)
+        .eq('status', 'closed')
+        .lte('closed_at', currentDate + 'T23:59:59.999Z'),
+
+      supabase
+        .from('loyalty_redemptions')
+        .select('id, client_id, reward_description, created_at')
+        .eq('company_id', profile.company_id)
+        .gte('created_at', firstDayOfMonth + 'T00:00:00.000Z')
+        .lte('created_at', currentDate + 'T23:59:59.999Z'),
     ])
 
     const todayAppointments = todayAppointmentsResult.data || []
@@ -211,6 +371,98 @@ export default function DashboardPage() {
           transaction.type === 'expense' && transaction.status !== 'cancelled'
       )
       .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)
+
+    const commercialClients = (clientsCommercialResult.data || []) as Client[]
+    const allClosedComandas = (closedComandasResult.data || []) as Comanda[]
+    const monthLoyaltyRedemptions =
+      (monthLoyaltyRedemptionsResult.data || []) as LoyaltyRedemption[]
+
+    const closedComandaIds = allClosedComandas.map((comanda) => comanda.id)
+
+    const { data: comandaItemsData } =
+      closedComandaIds.length > 0
+        ? await supabase
+            .from('comanda_items')
+            .select('id, comanda_id, quantity, price')
+            .in('comanda_id', closedComandaIds)
+        : { data: [] }
+
+    const itemsByComanda = new Map<string, ComandaItem[]>()
+
+    ;((comandaItemsData || []) as ComandaItem[]).forEach((item) => {
+      const currentItems = itemsByComanda.get(item.comanda_id) || []
+
+      currentItems.push({
+        id: item.id,
+        comanda_id: item.comanda_id,
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0),
+      })
+
+      itemsByComanda.set(item.comanda_id, currentItems)
+    })
+
+    const monthClosedComandas = allClosedComandas.filter((comanda) => {
+      const closedDate = comanda.closed_at || comanda.created_at
+
+      return closedDate >= firstDayOfMonth && closedDate <= currentDate + 'T23:59:59.999Z'
+    })
+
+    const monthComandaRevenue = monthClosedComandas.reduce((sum, comanda) => {
+      return sum + getComandaFinalTotal(comanda, itemsByComanda.get(comanda.id) || [])
+    }, 0)
+
+    const averageTicket =
+      monthClosedComandas.length > 0
+        ? monthComandaRevenue / monthClosedComandas.length
+        : 0
+
+    const now = new Date()
+    const currentMonth = now.getMonth() + 1
+    const currentDay = now.getDate()
+
+    const birthdayClientsThisMonth = commercialClients.filter((client) => {
+      if (!client.birth_date) return false
+
+      const [, month] = client.birth_date.split('-').map(Number)
+
+      return month === currentMonth
+    }).length
+
+    const birthdayClientsToday = commercialClients.filter((client) => {
+      if (!client.birth_date) return false
+
+      const [, month, day] = client.birth_date.split('-').map(Number)
+
+      return month === currentMonth && day === currentDay
+    }).length
+
+    const clientsWithoutBirthday = commercialClients.filter((client) => {
+      return !client.birth_date
+    }).length
+
+    const newClientsThisMonth = commercialClients.filter((client) => {
+      return client.created_at >= firstDayOfMonth && client.created_at <= currentDate + 'T23:59:59.999Z'
+    }).length
+
+    const recoveredClients = commercialClients.filter((client) => {
+      return isClientRecoveredThisMonth(
+        client.id,
+        allClosedComandas,
+        firstDayOfMonth,
+        currentDate + 'T23:59:59.999Z'
+      )
+    }).length
+
+    setCommercialStats({
+      averageTicket,
+      birthdayClientsThisMonth,
+      birthdayClientsToday,
+      recoveredClients,
+      loyaltyRedemptionsThisMonth: monthLoyaltyRedemptions.length,
+      newClientsThisMonth,
+      clientsWithoutBirthday,
+    })
 
     setStats({
       todayAppointments: todayAppointmentsResult.count || 0,
@@ -298,7 +550,7 @@ export default function DashboardPage() {
           <h1 className="mt-2 text-4xl font-bold">{companyName}</h1>
 
           <p className="mt-2 text-zinc-400">
-            Resumo operacional e financeiro do seu negócio.
+            Resumo operacional, financeiro e comercial do seu negócio.
           </p>
         </div>
 
@@ -378,6 +630,96 @@ export default function DashboardPage() {
           >
             {formatCurrency(monthBalance)}
           </p>
+        </div>
+      </div>
+
+
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Indicadores Comerciais</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Visão rápida de relacionamento, fidelidade e retorno de clientes no mês.
+            </p>
+          </div>
+
+          <Link
+            href="/dashboard/clientes"
+            className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-black"
+          >
+            Ver clientes
+          </Link>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
+            <p className="text-sm text-purple-300">Ticket médio geral</p>
+            <p className="mt-3 break-words text-3xl font-bold text-white">
+              {formatCurrency(commercialStats.averageTicket)}
+            </p>
+            <p className="mt-2 text-sm text-purple-100">
+              Base: comandas fechadas do mês.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-pink-900 bg-pink-950/30 p-5">
+            <p className="text-sm text-pink-300">Aniversariantes do mês</p>
+            <p className="mt-3 text-3xl font-bold text-white">
+              {commercialStats.birthdayClientsThisMonth}
+            </p>
+            <p className="mt-2 text-sm text-pink-100">
+              {commercialStats.birthdayClientsToday} aniversariante(s) hoje.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-orange-900 bg-orange-950/30 p-5">
+            <p className="text-sm text-orange-300">Clientes recuperados</p>
+            <p className="mt-3 text-3xl font-bold text-white">
+              {commercialStats.recoveredClients}
+            </p>
+            <p className="mt-2 text-sm text-orange-100">
+              Voltaram após 60+ dias sem visita.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
+            <p className="text-sm text-green-300">Recompensas resgatadas</p>
+            <p className="mt-3 text-3xl font-bold text-white">
+              {commercialStats.loyaltyRedemptionsThisMonth}
+            </p>
+            <p className="mt-2 text-sm text-green-100">
+              {commercialStats.newClientsThisMonth} novo(s) cliente(s) no mês.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            <p className="text-sm text-zinc-500">Clientes sem nascimento</p>
+            <p className="mt-2 text-2xl font-bold text-white">
+              {commercialStats.clientsWithoutBirthday}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Complete o cadastro para campanhas de aniversário.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            <p className="text-sm text-zinc-500">Novos clientes no mês</p>
+            <p className="mt-2 text-2xl font-bold text-blue-300">
+              {commercialStats.newClientsThisMonth}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Clientes cadastrados desde o início do mês.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            <p className="text-sm text-zinc-500">Ações sugeridas</p>
+            <p className="mt-2 text-sm text-zinc-300">
+              Envie WhatsApp para aniversariantes e clientes sem retorno recente.
+            </p>
+          </div>
         </div>
       </div>
 
