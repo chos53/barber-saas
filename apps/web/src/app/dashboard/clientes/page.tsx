@@ -33,6 +33,40 @@ type LoyaltySettings = {
   reward_description: string
 }
 
+type ClientComandaItem = {
+  id: string
+  comanda_id: string
+  description: string
+  quantity: number
+  price: number
+  product_id?: string | null
+  professional_id?: string | null
+}
+
+type ClientComandaHistory = {
+  id: string
+  client_id: string
+  status: string
+  total: number
+  discount?: number | null
+  discount_type?: 'amount' | 'percentage' | null
+  discount_value?: number | null
+  surcharge?: number | null
+  surcharge_type?: 'amount' | 'percentage' | null
+  surcharge_value?: number | null
+  created_at: string
+  closed_at?: string | null
+  items: ClientComandaItem[]
+}
+
+type ClientCrmStats = {
+  visits: number
+  totalSpent: number
+  averageTicket: number
+  lastVisit: string | null
+  comandas: ClientComandaHistory[]
+}
+
 const defaultLoyaltySettings: LoyaltySettings = {
   enabled: true,
   goal_count: 10,
@@ -41,6 +75,7 @@ const defaultLoyaltySettings: LoyaltySettings = {
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
+  const [crmByClient, setCrmByClient] = useState<Record<string, ClientCrmStats>>({})
   const [loyaltyByClient, setLoyaltyByClient] = useState<Record<string, LoyaltyStats>>({})
   const [loyaltyRedemptions, setLoyaltyRedemptions] = useState<LoyaltyRedemption[]>([])
   const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings>(defaultLoyaltySettings)
@@ -87,6 +122,30 @@ export default function ClientsPage() {
   const inactiveClients = useMemo(() => {
     return clients.filter((client) => !client.active).length
   }, [clients])
+
+  const totalVisits = useMemo(() => {
+    return Object.values(crmByClient).reduce(
+      (sum, stats) => sum + Number(stats.visits || 0),
+      0
+    )
+  }, [crmByClient])
+
+  const totalSpent = useMemo(() => {
+    return Object.values(crmByClient).reduce(
+      (sum, stats) => sum + Number(stats.totalSpent || 0),
+      0
+    )
+  }, [crmByClient])
+
+  const averageTicket = useMemo(() => {
+    if (totalVisits <= 0) return 0
+
+    return totalSpent / totalVisits
+  }, [totalSpent, totalVisits])
+
+  const clientsWithVisit = useMemo(() => {
+    return clients.filter((client) => Number(crmByClient[client.id]?.visits || 0) > 0).length
+  }, [clients, crmByClient])
 
   const clientsWithReward = useMemo(() => {
     return clients.filter((client) => {
@@ -163,6 +222,7 @@ export default function ClientsPage() {
     if (clientIds.length === 0) {
       setLoyaltyByClient({})
       setLoyaltyRedemptions([])
+      setCrmByClient({})
       return
     }
 
@@ -177,6 +237,136 @@ export default function ClientsPage() {
       setLoyaltyByClient({})
       return
     }
+
+    const { data: comandasData } = await supabase
+      .from('comandas')
+      .select(
+        'id, client_id, status, total, discount, discount_type, discount_value, surcharge, surcharge_type, surcharge_value, created_at, closed_at'
+      )
+      .eq('company_id', profile.company_id)
+      .in('client_id', clientIds)
+      .eq('status', 'closed')
+      .order('closed_at', { ascending: false })
+
+    const closedComandaIds = (comandasData || []).map((comanda) => comanda.id)
+
+    const { data: comandaItemsData } =
+      closedComandaIds.length > 0
+        ? await supabase
+            .from('comanda_items')
+            .select('id, comanda_id, description, quantity, price, product_id, professional_id')
+            .in('comanda_id', closedComandaIds)
+            .order('created_at', { ascending: true })
+        : { data: [] }
+
+    const itemsByComanda = new Map<string, ClientComandaItem[]>()
+
+    ;(comandaItemsData || []).forEach((item: any) => {
+      const currentItems = itemsByComanda.get(item.comanda_id) || []
+
+      currentItems.push({
+        id: item.id,
+        comanda_id: item.comanda_id,
+        description: item.description,
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0),
+        product_id: item.product_id || null,
+        professional_id: item.professional_id || null,
+      })
+
+      itemsByComanda.set(item.comanda_id, currentItems)
+    })
+
+    const crmStatsByClient: Record<string, ClientCrmStats> = {}
+
+    normalizedClients.forEach((client) => {
+      crmStatsByClient[client.id] = {
+        visits: 0,
+        totalSpent: 0,
+        averageTicket: 0,
+        lastVisit: null,
+        comandas: [],
+      }
+    })
+
+    ;(comandasData || []).forEach((comanda: any) => {
+      if (!comanda.client_id) return
+
+      const items = itemsByComanda.get(comanda.id) || []
+      const subtotal = items.reduce((sum, item) => {
+        return sum + Number(item.price || 0) * Number(item.quantity || 0)
+      }, 0)
+
+      const discountValue = Number(comanda.discount_value ?? comanda.discount ?? 0)
+      const discountType =
+        comanda.discount_type === 'percentage' ? 'percentage' : 'amount'
+      const discount =
+        discountType === 'percentage'
+          ? Math.min((subtotal * discountValue) / 100, subtotal)
+          : Math.min(discountValue, subtotal)
+
+      const surchargeValue = Number(comanda.surcharge_value ?? comanda.surcharge ?? 0)
+      const surchargeType =
+        comanda.surcharge_type === 'percentage' ? 'percentage' : 'amount'
+      const surcharge =
+        surchargeType === 'percentage'
+          ? (subtotal * surchargeValue) / 100
+          : surchargeValue
+
+      const finalTotal = Math.max(subtotal - discount + surcharge, 0)
+      const stats = crmStatsByClient[comanda.client_id] || {
+        visits: 0,
+        totalSpent: 0,
+        averageTicket: 0,
+        lastVisit: null,
+        comandas: [],
+      }
+
+      stats.visits += 1
+      stats.totalSpent += Number(finalTotal.toFixed(2))
+
+      const visitDate = comanda.closed_at || comanda.created_at
+
+      if (!stats.lastVisit || new Date(visitDate).getTime() > new Date(stats.lastVisit).getTime()) {
+        stats.lastVisit = visitDate
+      }
+
+      stats.comandas.push({
+        id: comanda.id,
+        client_id: comanda.client_id,
+        status: comanda.status,
+        total: Number(finalTotal.toFixed(2)),
+        discount: Number(comanda.discount || 0),
+        discount_type: discountType,
+        discount_value: discountValue,
+        surcharge: Number(comanda.surcharge || 0),
+        surcharge_type: surchargeType,
+        surcharge_value: surchargeValue,
+        created_at: comanda.created_at,
+        closed_at: comanda.closed_at,
+        items,
+      })
+
+      crmStatsByClient[comanda.client_id] = stats
+    })
+
+    Object.keys(crmStatsByClient).forEach((clientId) => {
+      const stats = crmStatsByClient[clientId]
+
+      stats.averageTicket =
+        stats.visits > 0 ? Number((stats.totalSpent / stats.visits).toFixed(2)) : 0
+
+      stats.comandas = stats.comandas
+        .sort((a, b) => {
+          return (
+            new Date(b.closed_at || b.created_at).getTime() -
+            new Date(a.closed_at || a.created_at).getTime()
+          )
+        })
+        .slice(0, 5)
+    })
+
+    setCrmByClient(crmStatsByClient)
 
     const { data: redemptionsData, error: redemptionsError } = await supabase
       .from('loyalty_redemptions')
@@ -388,6 +578,46 @@ export default function ClientsPage() {
   }
 
 
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(Number(value || 0))
+  }
+
+  function formatDateTime(value: string | null | undefined) {
+    if (!value) return 'Sem registro'
+
+    return new Date(value).toLocaleString('pt-BR')
+  }
+
+  function getClientCrmStats(clientId: string) {
+    return (
+      crmByClient[clientId] || {
+        visits: 0,
+        totalSpent: 0,
+        averageTicket: 0,
+        lastVisit: null,
+        comandas: [],
+      }
+    )
+  }
+
+  function getComandaItemsDescription(comanda: ClientComandaHistory) {
+    if (comanda.items.length === 0) return 'Sem itens registrados'
+
+    return comanda.items
+      .map((item) => {
+        const quantity = Number(item.quantity || 0)
+
+        return quantity > 1
+          ? `${quantity}x ${item.description}`
+          : item.description
+      })
+      .join(' + ')
+  }
+
+
   function canManageLoyaltySettings() {
     const normalizedRole = userRole.toLowerCase()
 
@@ -457,7 +687,7 @@ export default function ClientsPage() {
         Cadastro, busca e acompanhamento de fidelidade dos clientes.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
           <p className="text-sm text-blue-300">
             Clientes ativos
@@ -476,6 +706,30 @@ export default function ClientsPage() {
           <strong className="mt-2 block text-3xl text-white">
             {inactiveClients}
           </strong>
+        </div>
+
+        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
+          <p className="text-sm text-green-300">
+            Total gasto
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {formatCurrency(totalSpent)}
+          </strong>
+        </div>
+
+        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
+          <p className="text-sm text-purple-300">
+            Ticket médio
+          </p>
+
+          <strong className="mt-2 block text-3xl text-white">
+            {formatCurrency(averageTicket)}
+          </strong>
+
+          <p className="mt-2 text-xs text-purple-100">
+            {clientsWithVisit} cliente(s) com visita
+          </p>
         </div>
 
         {loyaltySettings.enabled ? (
@@ -645,6 +899,7 @@ export default function ClientsPage() {
         {filteredClients.map((client) => {
           const isEditing = editingClientId === client.id
           const loyaltyStats = getLoyaltyStats(client.id)
+          const crmStats = getClientCrmStats(client.id)
           const progressPercent = getProgressPercent(loyaltyStats)
 
           return (
@@ -696,7 +951,7 @@ export default function ClientsPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr_1.2fr]">
                     <div>
                       <p className="font-bold">{client.name}</p>
 
@@ -720,6 +975,105 @@ export default function ClientsPage() {
                           {client.active ? 'Ativo' : 'Inativo'}
                         </span>
                       </p>
+                    </div>
+
+                    <div className="w-full rounded-2xl border border-blue-900 bg-blue-950/20 p-4 xl:max-w-lg">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-white">
+                            Histórico do cliente
+                          </p>
+
+                          <p className="mt-1 text-xs text-blue-200">
+                            Mini CRM baseado em comandas fechadas.
+                          </p>
+                        </div>
+
+                        <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-black">
+                          {crmStats.visits} visita(s)
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-center text-sm md:grid-cols-4">
+                        <div className="rounded-xl bg-black/30 p-3">
+                          <p className="text-xs text-zinc-500">
+                            Total gasto
+                          </p>
+
+                          <strong className="mt-1 block text-green-400">
+                            {formatCurrency(crmStats.totalSpent)}
+                          </strong>
+                        </div>
+
+                        <div className="rounded-xl bg-black/30 p-3">
+                          <p className="text-xs text-zinc-500">
+                            Ticket médio
+                          </p>
+
+                          <strong className="mt-1 block text-purple-300">
+                            {formatCurrency(crmStats.averageTicket)}
+                          </strong>
+                        </div>
+
+                        <div className="rounded-xl bg-black/30 p-3">
+                          <p className="text-xs text-zinc-500">
+                            Visitas
+                          </p>
+
+                          <strong className="mt-1 block text-white">
+                            {crmStats.visits}
+                          </strong>
+                        </div>
+
+                        <div className="rounded-xl bg-black/30 p-3">
+                          <p className="text-xs text-zinc-500">
+                            Última visita
+                          </p>
+
+                          <strong className="mt-1 block text-xs text-white">
+                            {crmStats.lastVisit
+                              ? new Date(crmStats.lastVisit).toLocaleDateString('pt-BR')
+                              : '-'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-blue-200">
+                          Últimos atendimentos / compras
+                        </p>
+
+                        <div className="mt-2 space-y-2">
+                          {crmStats.comandas.length === 0 && (
+                            <p className="rounded-lg bg-black/30 p-3 text-xs text-zinc-500">
+                              Nenhuma comanda fechada encontrada.
+                            </p>
+                          )}
+
+                          {crmStats.comandas.map((comanda) => (
+                            <div
+                              key={comanda.id}
+                              className="rounded-lg bg-black/30 p-3 text-sm"
+                            >
+                              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                  <strong className="text-white">
+                                    {formatDateTime(comanda.closed_at || comanda.created_at)}
+                                  </strong>
+
+                                  <p className="mt-1 text-xs text-zinc-400">
+                                    {getComandaItemsDescription(comanda)}
+                                  </p>
+                                </div>
+
+                                <strong className="text-green-400">
+                                  {formatCurrency(comanda.total)}
+                                </strong>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {loyaltySettings.enabled && (
