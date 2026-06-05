@@ -62,6 +62,11 @@ export default function MasterPage() {
   const [currentEmail, setCurrentEmail] = useState('')
   const [savingCompanyId, setSavingCompanyId] = useState('')
   const [search, setSearch] = useState('')
+  const [newCompanyName, setNewCompanyName] = useState('')
+  const [newOwnerEmail, setNewOwnerEmail] = useState('')
+  const [newCompanyPlanId, setNewCompanyPlanId] = useState('')
+  const [newCompanyTrialDays, setNewCompanyTrialDays] = useState('14')
+  const [creatingCompany, setCreatingCompany] = useState(false)
 
   useEffect(() => {
     loadMasterData()
@@ -212,6 +217,8 @@ export default function MasterPage() {
 
     const loadedCompanies = (companiesResult.data || []) as Company[]
     const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
+    console.log('SETTINGS', loadedSettings)
+console.log('ERRO SETTINGS', companySettingsResult.error)
     const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
     const loadedPlans = (plansResult.data || []) as SaasPlan[]
     const loadedProfiles = (profilesResult.data || []) as Array<{ company_id: string | null }>
@@ -288,6 +295,118 @@ export default function MasterPage() {
     setLoading(false)
   }
 
+
+
+  async function createCompanyFromMaster() {
+    const companyName = newCompanyName.trim()
+    const ownerEmail = newOwnerEmail.trim().toLowerCase()
+    const trialDays = Number(newCompanyTrialDays || 14)
+
+    if (!companyName) {
+      alert('Digite o nome da empresa.')
+      return
+    }
+
+    if (!ownerEmail) {
+      alert('Digite o email do proprietário.')
+      return
+    }
+
+    if (!newCompanyPlanId) {
+      alert('Selecione um plano.')
+      return
+    }
+
+    if (!Number.isFinite(trialDays) || trialDays < 0) {
+      alert('Digite uma quantidade válida de dias de trial.')
+      return
+    }
+
+    setCreatingCompany(true)
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setCreatingCompany(false)
+      alert('Usuário master não encontrado. Faça login novamente.')
+      return
+    }
+
+    const companySlug = companyName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .insert({
+        name: companyName,
+        slug: `${companySlug}-${Date.now()}`,
+        owner_id: user?.id,
+      })
+      .select('id')
+      .single()
+
+    if (companyError || !company?.id) {
+      setCreatingCompany(false)
+      alert(`Erro ao criar empresa: ${companyError?.message || 'empresa não criada'}`)
+      return
+    }
+
+    const { error: settingsError } = await supabase
+      .from('company_settings')
+      .insert({
+        company_id: company.id,
+        company_name: companyName,
+        opening_time: '08:00',
+        closing_time: '20:00',
+        interval_minutes: 30,
+      })
+
+    if (settingsError) {
+      setCreatingCompany(false)
+      alert(`Empresa criada, mas houve erro ao criar configurações: ${settingsError.message}`)
+      return
+    }
+
+    const now = new Date()
+    const trialEndDate = new Date(now)
+
+    trialEndDate.setDate(trialEndDate.getDate() + trialDays)
+
+    const { error: subscriptionError } = await supabase
+      .from('company_subscriptions')
+      .insert({
+        company_id: company.id,
+        plan_id: newCompanyPlanId,
+        status: trialDays > 0 ? 'trial' : 'active',
+        trial_ends_at: trialDays > 0 ? trialEndDate.toISOString() : null,
+        subscription_starts_at: now.toISOString(),
+        subscription_ends_at: trialDays > 0 ? trialEndDate.toISOString() : null,
+      })
+
+    if (subscriptionError) {
+      setCreatingCompany(false)
+      alert(`Empresa criada, mas houve erro ao criar assinatura: ${subscriptionError.message}`)
+      return
+    }
+
+    setNewCompanyName('')
+    setNewOwnerEmail('')
+    setNewCompanyPlanId('')
+    setNewCompanyTrialDays('14')
+    setCreatingCompany(false)
+
+    alert(
+      'Empresa criada com sucesso. O login do proprietário será criado no próximo passo com convite seguro.'
+    )
+
+    await loadMasterData()
+  }
 
   function getDateInputValue(value: string | null | undefined) {
     if (!value) return ''
@@ -449,6 +568,71 @@ export default function MasterPage() {
             </button>
           </div>
         </header>
+
+        <section className="mt-8 rounded-2xl border border-blue-900 bg-blue-950/20 p-6">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div>
+              <h2 className="text-2xl font-bold">Nova empresa</h2>
+
+              <p className="mt-1 text-sm text-blue-100">
+                Crie a empresa, as configurações iniciais e a assinatura. O usuário proprietário será criado por convite seguro no próximo passo.
+              </p>
+            </div>
+
+            <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">
+              SaaS
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_1fr_0.7fr_auto]">
+            <input
+              placeholder="Nome da empresa"
+              className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
+              value={newCompanyName}
+              onChange={(event) => setNewCompanyName(event.target.value)}
+            />
+
+            <input
+              type="email"
+              placeholder="Email do proprietário"
+              className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
+              value={newOwnerEmail}
+              onChange={(event) => setNewOwnerEmail(event.target.value)}
+            />
+
+            <select
+              value={newCompanyPlanId}
+              onChange={(event) => setNewCompanyPlanId(event.target.value)}
+              className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
+            >
+              <option value="">Selecione o plano</option>
+
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} — {formatCurrency(Number(plan.price || 0))}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              min={0}
+              placeholder="Trial"
+              className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
+              value={newCompanyTrialDays}
+              onChange={(event) => setNewCompanyTrialDays(event.target.value)}
+            />
+
+            <button
+              type="button"
+              disabled={creatingCompany}
+              onClick={createCompanyFromMaster}
+              className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+            >
+              {creatingCompany ? 'Criando...' : 'Criar empresa'}
+            </button>
+          </div>
+        </section>
 
         <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
