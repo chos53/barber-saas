@@ -36,11 +36,20 @@ type CompanySubscription = {
   saas_plans?: SaasPlan | null
 }
 
+type CompanyMetrics = {
+  users: number
+  clients: number
+  appointments: number
+  professionals: number
+  revenue: number
+}
+
 type CompanyRow = {
   id: string
   name: string
   created_at: string | null
   subscription: CompanySubscription | null
+  metrics: CompanyMetrics
 }
 
 const masterEmails = ['caheolsa@yahoo.com.br']
@@ -52,6 +61,7 @@ export default function MasterPage() {
   const [subscriptions, setSubscriptions] = useState<CompanySubscription[]>([])
   const [currentEmail, setCurrentEmail] = useState('')
   const [savingCompanyId, setSavingCompanyId] = useState('')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     loadMasterData()
@@ -79,6 +89,33 @@ export default function MasterPage() {
     }, 0)
   }, [activeSubscriptions])
 
+  const filteredCompanies = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+
+    if (!normalizedSearch) return companies
+
+    return companies.filter((company) => {
+      return (
+        company.name.toLowerCase().includes(normalizedSearch) ||
+        company.id.toLowerCase().includes(normalizedSearch) ||
+        String(company.subscription?.saas_plans?.name || '').toLowerCase().includes(normalizedSearch) ||
+        String(company.subscription?.status || '').toLowerCase().includes(normalizedSearch)
+      )
+    })
+  }, [companies, search])
+
+  const totalUsers = useMemo(() => {
+    return companies.reduce((sum, company) => sum + company.metrics.users, 0)
+  }, [companies])
+
+  const totalClients = useMemo(() => {
+    return companies.reduce((sum, company) => sum + company.metrics.clients, 0)
+  }, [companies])
+
+  const totalAppointments = useMemo(() => {
+    return companies.reduce((sum, company) => sum + company.metrics.appointments, 0)
+  }, [companies])
+
   async function loadMasterData() {
     setLoading(true)
 
@@ -100,6 +137,11 @@ export default function MasterPage() {
       companySettingsResult,
       subscriptionsResult,
       plansResult,
+      profilesResult,
+      clientsResult,
+      appointmentsResult,
+      professionalsResult,
+      financialResult,
     ] = await Promise.all([
       supabase
         .from('companies')
@@ -138,6 +180,26 @@ export default function MasterPage() {
         .from('saas_plans')
         .select('id, name, price, active, max_users, max_professionals, max_monthly_appointments')
         .order('price', { ascending: true }),
+
+      supabase
+        .from('profiles')
+        .select('company_id'),
+
+      supabase
+        .from('clients')
+        .select('company_id'),
+
+      supabase
+        .from('appointments')
+        .select('company_id'),
+
+      supabase
+        .from('professionals')
+        .select('company_id'),
+
+      supabase
+        .from('financial_transactions')
+        .select('company_id, type, amount, status'),
     ])
 
     if (companiesResult.error) {
@@ -152,6 +214,17 @@ export default function MasterPage() {
     const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
     const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
     const loadedPlans = (plansResult.data || []) as SaasPlan[]
+    const loadedProfiles = (profilesResult.data || []) as Array<{ company_id: string | null }>
+    const loadedClients = (clientsResult.data || []) as Array<{ company_id: string | null }>
+    const loadedAppointments = (appointmentsResult.data || []) as Array<{ company_id: string | null }>
+    const loadedProfessionals = (professionalsResult.data || []) as Array<{ company_id: string | null }>
+    const loadedFinancialTransactions = (financialResult.data || []) as Array<{
+      company_id: string | null
+      type: string | null
+      amount: number | null
+      status: string | null
+    }>
+
     const settingsByCompany = new Map<string, CompanySettings>()
     const subscriptionByCompany = new Map<string, CompanySubscription>()
 
@@ -163,6 +236,34 @@ export default function MasterPage() {
       subscriptionByCompany.set(subscription.company_id, subscription)
     })
 
+    function countByCompany(items: Array<{ company_id: string | null }>) {
+      const map = new Map<string, number>()
+
+      items.forEach((item) => {
+        if (!item.company_id) return
+        map.set(item.company_id, (map.get(item.company_id) || 0) + 1)
+      })
+
+      return map
+    }
+
+    const usersByCompany = countByCompany(loadedProfiles)
+    const clientsByCompany = countByCompany(loadedClients)
+    const appointmentsByCompany = countByCompany(loadedAppointments)
+    const professionalsByCompany = countByCompany(loadedProfessionals)
+    const revenueByCompany = new Map<string, number>()
+
+    loadedFinancialTransactions.forEach((transaction) => {
+      if (!transaction.company_id) return
+      if (transaction.type !== 'income') return
+      if (transaction.status === 'cancelled') return
+
+      revenueByCompany.set(
+        transaction.company_id,
+        (revenueByCompany.get(transaction.company_id) || 0) + Number(transaction.amount || 0)
+      )
+    })
+
     const rows: CompanyRow[] = loadedCompanies.map((company) => {
       return {
         id: company.id,
@@ -171,6 +272,13 @@ export default function MasterPage() {
           settingsByCompany.get(company.id)?.company_name ||
           `Empresa ${company.id.slice(0, 8)}`,
         subscription: subscriptionByCompany.get(company.id) || null,
+        metrics: {
+          users: usersByCompany.get(company.id) || 0,
+          clients: clientsByCompany.get(company.id) || 0,
+          appointments: appointmentsByCompany.get(company.id) || 0,
+          professionals: professionalsByCompany.get(company.id) || 0,
+          revenue: revenueByCompany.get(company.id) || 0,
+        },
       }
     })
 
@@ -238,6 +346,21 @@ export default function MasterPage() {
     }
 
     await loadMasterData()
+  }
+
+  async function updateCompanyStatus(company: CompanyRow, nextStatus: string) {
+    if (!company.subscription?.plan_id) {
+      alert('Esta empresa ainda não tem plano definido.')
+      return
+    }
+
+    await saveCompanySubscription(
+      company,
+      company.subscription.plan_id,
+      nextStatus,
+      getDateInputValue(company.subscription.trial_ends_at),
+      getDateInputValue(company.subscription.subscription_ends_at)
+    )
   }
 
   async function handleLogout() {
@@ -354,6 +477,23 @@ export default function MasterPage() {
           </div>
         </section>
 
+        <section className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+            <p className="text-sm text-zinc-400">Usuários cadastrados</p>
+            <strong className="mt-2 block text-3xl">{totalUsers}</strong>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+            <p className="text-sm text-zinc-400">Clientes cadastrados</p>
+            <strong className="mt-2 block text-3xl">{totalClients}</strong>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+            <p className="text-sm text-zinc-400">Agendamentos totais</p>
+            <strong className="mt-2 block text-3xl">{totalAppointments}</strong>
+          </div>
+        </section>
+
         <section className="mt-8 grid gap-6 xl:grid-cols-[1.5fr_0.8fr]">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
@@ -369,29 +509,49 @@ export default function MasterPage() {
               </span>
             </div>
 
+            <div className="mt-5">
+              <input
+                placeholder="Pesquisar empresa, plano, status ou ID..."
+                className="w-full rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+
             <div className="mt-4 rounded-xl border border-blue-900 bg-blue-950/20 p-4 text-sm text-blue-100">
               Altere plano, status, trial e vencimento diretamente na linha da empresa e clique em Salvar.
             </div>
 
             <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-500">
                     <th className="py-3 pr-4">Empresa</th>
+                    <th className="py-3 pr-4">Uso</th>
                     <th className="py-3 pr-4">Plano</th>
                     <th className="py-3 pr-4">Status</th>
                     <th className="py-3 pr-4">Trial até</th>
                     <th className="py-3 pr-4">Vencimento</th>
-                    <th className="py-3 pr-4">Criada em</th>
+                    <th className="py-3 pr-4">Ações</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {companies.map((company) => (
+                  {filteredCompanies.map((company) => (
                     <tr key={company.id} className="border-b border-zinc-800">
                       <td className="py-4 pr-4">
                         <strong className="block text-white">{company.name}</strong>
                         <span className="text-xs text-zinc-600">{company.id}</span>
+                      </td>
+
+                      <td className="py-4 pr-4 text-zinc-300">
+                        <div className="grid gap-1 text-xs text-zinc-400">
+                          <span>Usuários: <strong className="text-white">{company.metrics.users}</strong></span>
+                          <span>Clientes: <strong className="text-white">{company.metrics.clients}</strong></span>
+                          <span>Agendamentos: <strong className="text-white">{company.metrics.appointments}</strong></span>
+                          <span>Profissionais: <strong className="text-white">{company.metrics.professionals}</strong></span>
+                          <span>Receita: <strong className="text-green-300">{formatCurrency(company.metrics.revenue)}</strong></span>
+                        </div>
                       </td>
 
                       <td className="py-4 pr-4 text-zinc-300">
@@ -447,7 +607,9 @@ export default function MasterPage() {
 
                       <td className="py-4 pr-4 text-zinc-400">
                         <div className="space-y-2">
-                          <p>{formatDate(company.created_at)}</p>
+                          <p className="text-xs text-zinc-500">
+                            Criada em {formatDate(company.created_at)}
+                          </p>
 
                           <button
                             type="button"
@@ -466,9 +628,27 @@ export default function MasterPage() {
                                 endsInput?.value || ''
                               )
                             }}
-                            className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                            className="w-full rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
                           >
                             {savingCompanyId === company.id ? 'Salvando...' : 'Salvar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingCompanyId === company.id}
+                            onClick={() => updateCompanyStatus(company, 'active')}
+                            className="w-full rounded-lg bg-green-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-green-400 disabled:opacity-50"
+                          >
+                            Ativar
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingCompanyId === company.id}
+                            onClick={() => updateCompanyStatus(company, 'suspended')}
+                            className="w-full rounded-lg bg-yellow-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-yellow-400 disabled:opacity-50"
+                          >
+                            Suspender
                           </button>
                         </div>
                       </td>
@@ -477,7 +657,7 @@ export default function MasterPage() {
 
                   {companies.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-zinc-500">
+                      <td colSpan={7} className="py-8 text-center text-zinc-500">
                         Nenhuma empresa encontrada.
                       </td>
                     </tr>
