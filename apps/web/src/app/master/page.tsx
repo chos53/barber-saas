@@ -394,7 +394,26 @@ console.log('ERRO SETTINGS', companySettingsResult.error)
       alert(`Empresa criada, mas houve erro ao criar assinatura: ${subscriptionError.message}`)
       return
     }
-
+    const { error: ownerError } = await supabase.functions.invoke(
+      'create-company-owner',
+      {
+        body: {
+          companyId: company.id,
+          companyName,
+          ownerEmail,
+        },
+      }
+    )
+    
+    if (ownerError) {
+      setCreatingCompany(false)
+    
+      alert(
+        `Empresa criada, mas houve erro ao criar o proprietário: ${ownerError.message}`
+      )
+    
+      return
+    }
     setNewCompanyName('')
     setNewOwnerEmail('')
     setNewCompanyPlanId('')
