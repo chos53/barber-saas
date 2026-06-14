@@ -85,6 +85,9 @@ serve(async (req) => {
       await admin.auth.admin.generateLink({
         type: 'recovery',
         email,
+        options: {
+          redirectTo: 'http://localhost:3001/definir-senha',
+        },
       })
 
     if (resetError) {

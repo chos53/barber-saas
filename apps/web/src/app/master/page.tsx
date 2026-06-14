@@ -217,8 +217,6 @@ export default function MasterPage() {
 
     const loadedCompanies = (companiesResult.data || []) as Company[]
     const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
-    console.log('SETTINGS', loadedSettings)
-console.log('ERRO SETTINGS', companySettingsResult.error)
     const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
     const loadedPlans = (plansResult.data || []) as SaasPlan[]
     const loadedProfiles = (profilesResult.data || []) as Array<{ company_id: string | null }>
@@ -394,16 +392,14 @@ console.log('ERRO SETTINGS', companySettingsResult.error)
       alert(`Empresa criada, mas houve erro ao criar assinatura: ${subscriptionError.message}`)
       return
     }
-    const { error: ownerError } = await supabase.functions.invoke(
-      'create-company-owner',
-      {
+    const { data: ownerData, error: ownerError } =
+      await supabase.functions.invoke('create-company-owner', {
         body: {
           companyId: company.id,
           companyName,
           ownerEmail,
         },
-      }
-    )
+      })
     
     if (ownerError) {
       setCreatingCompany(false)
@@ -420,9 +416,17 @@ console.log('ERRO SETTINGS', companySettingsResult.error)
     setNewCompanyTrialDays('14')
     setCreatingCompany(false)
 
-    alert(
-      'Empresa criada com sucesso. O login do proprietário será criado no próximo passo com convite seguro.'
-    )
+    if (ownerData?.action_link) {
+      await navigator.clipboard.writeText(ownerData.action_link)
+
+      alert(
+        `Empresa criada com sucesso!\n\nLink de convite copiado para a área de transferência:\n\n${ownerData.action_link}`
+      )
+    } else {
+      alert(
+        'Empresa criada com sucesso, mas o link de convite não foi retornado.'
+      )
+    }
 
     await loadMasterData()
   }
