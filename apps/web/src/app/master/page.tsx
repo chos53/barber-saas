@@ -52,6 +52,15 @@ type CompanyRow = {
   metrics: CompanyMetrics
 }
 
+type AsaasInvoice = {
+  id: string
+  dueDate: string
+  value: number
+  status: string
+  invoiceUrl: string
+  billingType: string
+}
+
 const masterEmails = ['caheolsa@yahoo.com.br']
 
 export default function MasterPage() {
@@ -89,6 +98,11 @@ export default function MasterPage() {
   const [editPlanMaxProfessionals, setEditPlanMaxProfessionals] = useState('3')
   const [editPlanMaxAppointments, setEditPlanMaxAppointments] = useState('100')
   const [savingPlan, setSavingPlan] = useState(false)
+
+  // States para Modal de Consulta de Faturas do Asaas
+  const [viewingInvoicesCompany, setViewingInvoicesCompany] = useState<string | null>(null)
+  const [companyInvoices, setCompanyInvoices] = useState<AsaasInvoice[]>([])
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
 
   useEffect(() => {
     loadMasterData()
@@ -324,6 +338,29 @@ export default function MasterPage() {
     }
   }
 
+  async function openAsaasInvoicesModal(companyId: string) {
+    try {
+      setLoadingInvoices(true)
+      setViewingInvoicesCompany('Buscando informações...')
+      setCompanyInvoices([])
+
+      const response = await fetch(`/api/master/company-invoices?companyId=${companyId}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao consultar faturas backend.')
+      }
+
+      setViewingInvoicesCompany(data.companyName)
+      setCompanyInvoices(data.invoices)
+    } catch (err: any) {
+      alert(`Falha ao obter faturas do Asaas: ${err.message}`)
+      setViewingInvoicesCompany(null)
+    } finally {
+      setLoadingInvoices(false)
+    }
+  }
+
   async function createCompanyFromMaster() {
     const companyName = newCompanyName.trim()
     const ownerEmail = newOwnerEmail.trim().toLowerCase()
@@ -385,7 +422,6 @@ export default function MasterPage() {
           console.warn('Bloqueio de cópia automática pelo navegador.')
         }
         
-        // Caixa de texto nativa selecionada para garantir a cópia em qualquer navegador
         window.prompt(
           'Empresa criada com sucesso e integrada ao Asaas!\n\nSe o link não foi para a sua área de transferência automaticamente, copie-o manualmente abaixo (Ctrl+C):',
           data.action_link
@@ -463,7 +499,7 @@ export default function MasterPage() {
 
     setSavingPlan(true)
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('saas_plans')
       .update({
         name: editPlanName.trim(),
@@ -473,7 +509,6 @@ export default function MasterPage() {
         max_monthly_appointments: Number(editPlanMaxAppointments),
       })
       .eq('id', editingPlanId)
-      .select()
 
     setSavingPlan(false)
 
@@ -498,7 +533,7 @@ export default function MasterPage() {
     )
 
     setEditingPlanId(null)
-    alert('Plano updated com sucesso!')
+    alert('Plano atualizado com sucesso!')
     await loadMasterData()
   }
 
@@ -654,7 +689,7 @@ export default function MasterPage() {
       return
     }
   
-    alert('Aviso: O convite não pôde ser gerado. Certifique-se de que este e-mail não pertence a um administrador ou usuário já ativo no sistema.')
+    alert('Aviso: O convite não pôde ser gerado. Certifique-se de que este e-mail não pertence a um usuário já ativo.')
   }
 
   async function handleLogout() {
@@ -691,6 +726,15 @@ export default function MasterPage() {
     return 'bg-zinc-700 text-zinc-300'
   }
 
+  function translateAsaasStatus(status: string) {
+    if (status === 'PENDING') return 'Pendente ⏳'
+    if (status === 'RECEIVED') return 'Paga ✅'
+    if (status === 'CONFIRMED') return 'Confirmada 💳'
+    if (status === 'OVERDUE') return 'Vencida 🚨'
+    if (status === 'REFUNDED') return 'Estornada ↩️'
+    return status
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
@@ -702,7 +746,7 @@ export default function MasterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black p-8 text-white">
+    <main className="min-h-screen bg-black p-8 text-white relative">
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
@@ -754,7 +798,7 @@ export default function MasterPage() {
           </div>
         </section>
 
-        {/* Tabs de Navegação */}
+        {/* Tabs */}
         <div className="mt-8 flex gap-2 border-b border-zinc-800 pb-px">
           <button
             type="button"
@@ -936,6 +980,15 @@ export default function MasterPage() {
                         <td className="py-4 pr-4 text-zinc-400">
                           <div className="space-y-2">
                             <p className="text-xs text-zinc-500">Criada em {formatDate(company.created_at)}</p>
+                            
+                            <button
+                              type="button"
+                              onClick={() => openAsaasInvoicesModal(company.id)}
+                              className="w-full rounded-lg bg-blue-600 text-white border border-blue-500 px-3 py-2 text-xs font-bold transition hover:bg-blue-500"
+                            >
+                              Ver Faturas Asaas
+                            </button>
+
                             <button
                               type="button"
                               disabled={savingCompanyId === company.id}
@@ -955,40 +1008,37 @@ export default function MasterPage() {
                               }}
                               className="w-full rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
                             >
-                              {savingCompanyId === company.id ? 'Salvando...' : 'Salvar'}
+                              {savingCompanyId === company.id ? 'Salvando...' : 'Salvar Alterações'}
                             </button>
-                            <button
-                              type="button"
-                              disabled={savingCompanyId === company.id}
-                              onClick={() => updateCompanyStatus(company, 'active')}
-                              className="w-full rounded-lg bg-green-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-green-400 disabled:opacity-50"
-                            >
-                              Ativar
-                            </button>
+                            
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => updateCompanyStatus(company, 'active')}
+                                className="rounded-lg bg-green-500/20 text-green-400 border border-green-900/40 py-1.5 text-[11px] font-bold transition hover:bg-green-500 hover:text-black"
+                              >
+                                Ativar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateCompanyStatus(company, 'suspended')}
+                                className="rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-900/40 py-1.5 text-[11px] font-bold transition hover:bg-yellow-500 hover:text-black"
+                              >
+                                Suspender
+                              </button>
+                            </div>
+
                             <button
                               type="button"
                               onClick={() => resendInvite(company)}
-                              className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-cyan-400"
+                              className="w-full rounded-lg bg-zinc-800 text-zinc-300 px-3 py-1.5 text-xs font-bold transition hover:bg-zinc-700"
                             >
-                              Reenviar convite
-                            </button>
-                            <button
-                              type="button"
-                              disabled={savingCompanyId === company.id}
-                              onClick={() => updateCompanyStatus(company, 'suspended')}
-                              className="w-full rounded-lg bg-yellow-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-yellow-400 disabled:opacity-50"
-                            >
-                              Suspender
+                              Reenviar convite auth
                             </button>
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {filteredCompanies.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-zinc-500">Nenhuma empresa encontrada na pesquisa.</td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
@@ -1004,59 +1054,23 @@ export default function MasterPage() {
                 <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-4 h-fit">
                   <h3 className="mb-3 text-sm font-bold text-zinc-300">Criar Novo Plano</h3>
                   <div className="grid gap-3">
-                    <input
-                      type="text"
-                      placeholder="Nome do Plano"
-                      value={newPlanName}
-                      onChange={(e) => setNewPlanName(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="Preço Mensal (R$)"
-                      value={newPlanPrice}
-                      onChange={(e) => setNewPlanPrice(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
-                    />
+                    <input type="text" placeholder="Nome do Plano" value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
+                    <input type="number" min={0} placeholder="Preço Mensal (R$)" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="mb-1 block text-xs text-zinc-400">Usuários</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={newPlanMaxUsers}
-                          onChange={(e) => setNewPlanMaxUsers(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
-                        />
+                        <input type="number" min={1} value={newPlanMaxUsers} onChange={(e) => setNewPlanMaxUsers(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-zinc-400">Profissionais</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={newPlanMaxProfessionals}
-                          onChange={(e) => setNewPlanMaxProfessionals(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
-                        />
+                        <input type="number" min={1} value={newPlanMaxProfessionals} onChange={(e) => setNewPlanMaxProfessionals(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
                       </div>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs text-zinc-400">Agendamentos/Mês (0 = Ilimitado)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={newPlanMaxAppointments}
-                        onChange={(e) => setNewPlanMaxAppointments(e.target.value)}
-                        className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
-                      />
+                      <input type="number" min={0} value={newPlanMaxAppointments} onChange={(e) => setNewPlanMaxAppointments(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
                     </div>
-                    <button
-                      type="button"
-                      disabled={creatingPlan}
-                      onClick={createPlan}
-                      className="mt-1 w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-                    >
+                    <button type="button" disabled={creatingPlan} onClick={createPlan} className="mt-1 w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50">
                       {creatingPlan ? 'Criando...' : 'Criar Plano'}
                     </button>
                   </div>
@@ -1070,19 +1084,10 @@ export default function MasterPage() {
                           <input type="text" value={editPlanName} onChange={(e) => setEditPlanName(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
                           <input type="number" min={0} value={editPlanPrice} onChange={(e) => setEditPlanPrice(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
                           <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-zinc-500 block">Usuários</label>
-                              <input type="number" min={1} value={editPlanMaxUsers} onChange={(e) => setEditPlanMaxUsers(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-zinc-500 block">Profissionais</label>
-                              <input type="number" min={1} value={editPlanMaxProfessionals} onChange={(e) => setEditPlanMaxProfessionals(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
-                            </div>
+                            <div><label className="text-[10px] text-zinc-500 block">Usuários</label><input type="number" min={1} value={editPlanMaxUsers} onChange={(e) => setEditPlanMaxUsers(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" /></div>
+                            <div><label className="text-[10px] text-zinc-500 block">Profissionais</label><input type="number" min={1} value={editPlanMaxProfessionals} onChange={(e) => setEditPlanMaxProfessionals(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" /></div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-zinc-500 block">Agendamentos/Mês</label>
-                            <input type="number" min={0} value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
-                          </div>
+                          <div><label className="text-[10px] text-zinc-500 block">Agendamentos/Mês</label><input type="number" min={0} value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" /></div>
                           <div className="flex gap-2 pt-2">
                             <button type="button" disabled={savingPlan} onClick={savePlanEdits} className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white transition hover:bg-green-500">{savingPlan ? 'Salvando...' : 'Salvar'}</button>
                             <button type="button" onClick={() => setEditingPlanId(null)} className="flex-1 rounded bg-zinc-700 px-2 py-1 text-xs font-bold text-zinc-300">Cancelar</button>
@@ -1160,6 +1165,67 @@ export default function MasterPage() {
           </div>
         )}
       </div>
+
+      {/* OVERLAY MODAL: VISUALIZAÇÃO DE FATURAS REAIS DO ASAAS */}
+      {viewingInvoicesCompany && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl animate-fadeIn">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
+              <div>
+                <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Gateway de Faturamento</span>
+                <h3 className="text-xl font-bold text-white mt-0.5">Faturas Asaas — {viewingInvoicesCompany}</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setViewingInvoicesCompany(null)}
+                className="text-zinc-400 hover:text-white font-bold bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-xl text-sm transition"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-5 max-h-[380px] overflow-y-auto space-y-3 pr-1">
+              {loadingInvoices ? (
+                <p className="text-sm text-zinc-500 text-center py-8">Consultando api do Asaas em tempo real...</p>
+              ) : companyInvoices.length === 0 ? (
+                <p className="text-sm text-zinc-500 text-center py-8">Nenhuma fatura gerada para este cliente no Asaas.</p>
+              ) : (
+                companyInvoices.map((invoice) => (
+                  <div key={invoice.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-zinc-800 bg-black/40 p-4 rounded-xl">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-sm font-bold text-white">{formatCurrency(invoice.value)}</span>
+                        <span className="text-xs bg-zinc-800 px-2 py-0.5 rounded text-zinc-400">{invoice.billingType === 'UNDEFINED' ? 'A escolher' : invoice.billingType}</span>
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-1">Vencimento: <strong className="text-zinc-300">{formatDate(invoice.dueDate)}</strong></p>
+                      <p className="text-[11px] text-zinc-600 mt-0.5">Ref ID: {invoice.id}</p>
+                    </div>
+
+                    <div className="flex items-center gap-3 justify-between sm:justify-end">
+                      <span className="text-xs font-bold text-zinc-300 bg-zinc-800 px-2.5 py-1 rounded-full">
+                        {translateAsaasStatus(invoice.status)}
+                      </span>
+                      
+                      <a 
+                        href={invoice.invoiceUrl} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-black transition hover:bg-zinc-200"
+                      >
+                        Link de Checkout ➡️
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 border-t border-zinc-800 pt-4 flex justify-end">
+              <p className="text-[11px] text-zinc-600 text-left w-full">Ambiente Sandbox Asaas conectado.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

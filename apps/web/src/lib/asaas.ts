@@ -66,3 +66,22 @@ export async function createAsaasSubscription(data: AsaasSubscriptionInput) {
 
   return response.json() // Retorna objeto com id 'sub_xxxxxx'
 }
+/**
+ * Lista todas as cobranças (payments) de um determinado cliente no Asaas
+ */
+export async function getAsaasCustomerPayments(customerId: string) {
+  if (!ASAAS_API_KEY) throw new Error('ASAAS_API_KEY não configurada no .env')
+
+  const response = await fetch(`${ASAAS_API_URL}/payments?customer=${customerId}`, {
+    method: 'GET',
+    headers,
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    console.error('Erro ao buscar cobranças no Asaas:', error)
+    throw new Error(error.errors?.[0]?.description || 'Erro ao buscar cobranças no Asaas')
+  }
+
+  return response.json() // Retorna a lista de faturas do cliente
+}
