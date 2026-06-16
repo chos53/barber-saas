@@ -143,7 +143,6 @@ export default function MasterPage() {
     return companies.reduce((sum, company) => sum + company.metrics.appointments, 0)
   }, [companies])
 
-  // Distribuição avançada de empresas por plano
   const planDistribution = useMemo(() => {
     const distribution: { [key: string]: number } = {}
     companies.forEach((c) => {
@@ -156,175 +155,173 @@ export default function MasterPage() {
   }, [companies])
 
   async function loadMasterData() {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    const userEmail = user?.email?.toLowerCase() || ''
+      const userEmail = user?.email?.toLowerCase() || ''
+      setCurrentEmail(userEmail)
 
-    setCurrentEmail(userEmail)
+      if (!user || !masterEmails.includes(userEmail)) {
+        window.location.href = '/dashboard'
+        return
+      }
 
-    if (!user || !masterEmails.includes(userEmail)) {
-      window.location.href = '/dashboard'
-      return
-    }
+      const [
+        companiesResult,
+        companySettingsResult,
+        subscriptionsResult,
+        plansResult,
+        profilesResult,
+        clientsResult,
+        appointmentsResult,
+        professionalsResult,
+        financialResult,
+      ] = await Promise.all([
+        supabase
+          .from('companies')
+          .select('id, created_at')
+          .order('created_at', { ascending: false }),
 
-    const [
-      companiesResult,
-      companySettingsResult,
-      subscriptionsResult,
-      plansResult,
-      profilesResult,
-      clientsResult,
-      appointmentsResult,
-      professionalsResult,
-      financialResult,
-    ] = await Promise.all([
-      supabase
-        .from('companies')
-        .select('id, created_at')
-        .order('created_at', { ascending: false }),
+        supabase
+          .from('company_settings')
+          .select('company_id, company_name'),
 
-      supabase
-        .from('company_settings')
-        .select('company_id, company_name'),
-
-      supabase
-        .from('company_subscriptions')
-        .select(`
-          id,
-          company_id,
-          plan_id,
-          status,
-          trial_ends_at,
-          subscription_starts_at,
-          subscription_ends_at,
-          blocked_at,
-          created_at,
-          saas_plans (
+        supabase
+          .from('company_subscriptions')
+          .select(`
             id,
-            name,
-            price,
-            active,
-            max_users,
-            max_professionals,
-            max_monthly_appointments
-          )
-        `)
-        .order('created_at', { ascending: false }),
+            company_id,
+            plan_id,
+            status,
+            trial_ends_at,
+            subscription_starts_at,
+            subscription_ends_at,
+            blocked_at,
+            created_at,
+            saas_plans (
+              id,
+              name,
+              price,
+              active,
+              max_users,
+              max_professionals,
+              max_monthly_appointments
+            )
+          `)
+          .order('created_at', { ascending: false }),
 
-      supabase
-        .from('saas_plans')
-        .select('id, name, price, active, max_users, max_professionals, max_monthly_appointments')
-        .order('price', { ascending: true }),
+        supabase
+          .from('saas_plans')
+          .select('id, name, price, active, max_users, max_professionals, max_monthly_appointments')
+          .order('price', { ascending: true }),
 
-      supabase
-        .from('profiles')
-        .select('company_id'),
+        supabase
+          .from('profiles')
+          .select('company_id'),
 
-      supabase
-        .from('clients')
-        .select('company_id'),
+        supabase
+          .from('clients')
+          .select('company_id'),
 
-      supabase
-        .from('appointments')
-        .select('company_id'),
+        supabase
+          .from('appointments')
+          .select('company_id'),
 
-      supabase
-        .from('professionals')
-        .select('company_id'),
+        supabase
+          .from('professionals')
+          .select('company_id'),
 
-      supabase
-        .from('financial_transactions')
-        .select('company_id, type, amount, status'),
-    ])
+        supabase
+          .from('financial_transactions')
+          .select('company_id, type, amount, status'),
+      ])
 
-    if (companiesResult.error) {
-      alert(`Erro ao carregar empresas: ${companiesResult.error.message}`)
-    }
+      if (companiesResult.error) throw companiesResult.error
+      if (subscriptionsResult.error) throw subscriptionsResult.error
 
-    if (subscriptionsResult.error) {
-      alert(`Erro ao carregar assinaturas: ${subscriptionsResult.error.message}`)
-    }
+      const loadedCompanies = (companiesResult.data || []) as Company[]
+      const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
+      const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
+      const loadedPlans = (plansResult.data || []) as SaasPlan[]
+      const loadedProfiles = (profilesResult.data || []) as Array<{ company_id: string | null }>
+      const loadedClients = (clientsResult.data || []) as Array<{ company_id: string | null }>
+      const loadedAppointments = (appointmentsResult.data || []) as Array<{ company_id: string | null }>
+      const loadedProfessionals = (professionalsResult.data || []) as Array<{ company_id: string | null }>
+      const loadedFinancialTransactions = (financialResult.data || []) as Array<{
+        company_id: string | null
+        type: string | null
+        amount: number | null
+        status: string | null
+      }>
 
-    const loadedCompanies = (companiesResult.data || []) as Company[]
-    const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
-    const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
-    const loadedPlans = (plansResult.data || []) as SaasPlan[]
-    const loadedProfiles = (profilesResult.data || []) as Array<{ company_id: string | null }>
-    const loadedClients = (clientsResult.data || []) as Array<{ company_id: string | null }>
-    const loadedAppointments = (appointmentsResult.data || []) as Array<{ company_id: string | null }>
-    const loadedProfessionals = (professionalsResult.data || []) as Array<{ company_id: string | null }>
-    const loadedFinancialTransactions = (financialResult.data || []) as Array<{
-      company_id: string | null
-      type: string | null
-      amount: number | null
-      status: string | null
-    }>
+      const settingsByCompany = new Map<string, CompanySettings>()
+      const subscriptionByCompany = new Map<string, CompanySubscription>()
 
-    const settingsByCompany = new Map<string, CompanySettings>()
-    const subscriptionByCompany = new Map<string, CompanySubscription>()
-
-    loadedSettings.forEach((setting) => {
-      settingsByCompany.set(setting.company_id, setting)
-    })
-
-    loadedSubscriptions.forEach((subscription) => {
-      subscriptionByCompany.set(subscription.company_id, subscription)
-    })
-
-    function countByCompany(items: Array<{ company_id: string | null }>) {
-      const map = new Map<string, number>()
-
-      items.forEach((item) => {
-        if (!item.company_id) return
-        map.set(item.company_id, (map.get(item.company_id) || 0) + 1)
+      loadedSettings.forEach((setting) => {
+        settingsByCompany.set(setting.company_id, setting)
       })
 
-      return map
-    }
+      loadedSubscriptions.forEach((subscription) => {
+        subscriptionByCompany.set(subscription.company_id, subscription)
+      })
 
-    const usersByCompany = countByCompany(loadedProfiles)
-    const clientsByCompany = countByCompany(loadedClients)
-    const appointmentsByCompany = countByCompany(loadedAppointments)
-    const professionalsByCompany = countByCompany(loadedProfessionals)
-    const revenueByCompany = new Map<string, number>()
-
-    loadedFinancialTransactions.forEach((transaction) => {
-      if (!transaction.company_id) return
-      if (transaction.type !== 'income') return
-      if (transaction.status === 'cancelled') return
-
-      revenueByCompany.set(
-        transaction.company_id,
-        (revenueByCompany.get(transaction.company_id) || 0) + Number(transaction.amount || 0)
-      )
-    })
-
-    const rows: CompanyRow[] = loadedCompanies.map((company) => {
-      return {
-        id: company.id,
-        created_at: company.created_at,
-        name:
-          settingsByCompany.get(company.id)?.company_name ||
-          `Empresa ${company.id.slice(0, 8)}`,
-        subscription: subscriptionByCompany.get(company.id) || null,
-        metrics: {
-          users: usersByCompany.get(company.id) || 0,
-          clients: clientsByCompany.get(company.id) || 0,
-          appointments: appointmentsByCompany.get(company.id) || 0,
-          professionals: professionalsByCompany.get(company.id) || 0,
-          revenue: revenueByCompany.get(company.id) || 0,
-        },
+      function countByCompany(items: Array<{ company_id: string | null }>) {
+        const map = new Map<string, number>()
+        items.forEach((item) => {
+          if (!item.company_id) return
+          map.set(item.company_id, (map.get(item.company_id) || 0) + 1)
+        })
+        return map
       }
-    })
 
-    setCompanies(rows)
-    setSubscriptions(loadedSubscriptions)
-    setPlans(loadedPlans)
-    setLoading(false)
+      const usersByCompany = countByCompany(loadedProfiles)
+      const clientsByCompany = countByCompany(loadedClients)
+      const appointmentsByCompany = countByCompany(loadedAppointments)
+      const professionalsByCompany = countByCompany(loadedProfessionals)
+      const revenueByCompany = new Map<string, number>()
+
+      loadedFinancialTransactions.forEach((transaction) => {
+        if (!transaction.company_id) return
+        if (transaction.type !== 'income') return
+        if (transaction.status === 'cancelled') return
+
+        revenueByCompany.set(
+          transaction.company_id,
+          (revenueByCompany.get(transaction.company_id) || 0) + Number(transaction.amount || 0)
+        )
+      })
+
+      const rows: CompanyRow[] = loadedCompanies.map((company) => {
+        return {
+          id: company.id,
+          created_at: company.created_at,
+          name:
+            settingsByCompany.get(company.id)?.company_name ||
+            `Empresa ${company.id.slice(0, 8)}`,
+          subscription: subscriptionByCompany.get(company.id) || null,
+          metrics: {
+            users: usersByCompany.get(company.id) || 0,
+            clients: clientsByCompany.get(company.id) || 0,
+            appointments: appointmentsByCompany.get(company.id) || 0,
+            professionals: professionalsByCompany.get(company.id) || 0,
+            revenue: revenueByCompany.get(company.id) || 0,
+          },
+        }
+      })
+
+      setCompanies(rows)
+      setSubscriptions(loadedSubscriptions)
+      setPlans(loadedPlans)
+    } catch (err: any) {
+      console.error('Erro ao carregar dados do painel master:', err)
+      alert(`Erro no carregamento: ${err.message || err}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function createCompanyFromMaster() {
@@ -336,17 +333,14 @@ export default function MasterPage() {
       alert('Digite o nome da empresa.')
       return
     }
-
     if (!ownerEmail) {
       alert('Digite o email do proprietário.')
       return
     }
-
     if (!newCompanyPlanId) {
       alert('Selecione um plano.')
       return
     }
-
     if (!Number.isFinite(trialDays) || trialDays < 0) {
       alert('Digite uma quantidade válida de dias de trial.')
       return
@@ -354,115 +348,58 @@ export default function MasterPage() {
 
     setCreatingCompany(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('Sessão master não encontrada. Faça login novamente.')
+        return
+      }
 
-    if (!user) {
-      setCreatingCompany(false)
-      alert('Usuário master não encontrado. Faça login novamente.')
-      return
-    }
-
-    const companySlug = companyName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '')
-
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
-      .insert({
-        name: companyName,
-        slug: `${companySlug}-${Date.now()}`,
-        owner_id: user?.id,
-      })
-      .select('id')
-      .single()
-
-    if (companyError || !company?.id) {
-      setCreatingCompany(false)
-      alert(`Erro ao criar empresa: ${companyError?.message || 'empresa não criada'}`)
-      return
-    }
-
-    const { error: settingsError } = await supabase
-      .from('company_settings')
-      .insert({
-        company_id: company.id,
-        company_name: companyName,
-        opening_time: '08:00',
-        closing_time: '20:00',
-        interval_minutes: 30,
-      })
-
-    if (settingsError) {
-      setCreatingCompany(false)
-      alert(`Empresa criada, mas houve erro ao criar configurações: ${settingsError.message}`)
-      return
-    }
-
-    const now = new Date()
-    const trialEndDate = new Date(now)
-
-    trialEndDate.setDate(trialEndDate.getDate() + trialDays)
-
-    const { error: subscriptionError } = await supabase
-      .from('company_subscriptions')
-      .insert({
-        company_id: company.id,
-        plan_id: newCompanyPlanId,
-        status: trialDays > 0 ? 'trial' : 'active',
-        trial_ends_at: trialDays > 0 ? trialEndDate.toISOString() : null,
-        subscription_starts_at: now.toISOString(),
-        subscription_ends_at: trialDays > 0 ? trialEndDate.toISOString() : null,
-      })
-
-    if (subscriptionError) {
-      setCreatingCompany(false)
-      alert(`Empresa criada, mas houve erro ao criar assinatura: ${subscriptionError.message}`)
-      return
-    }
-
-    const { data: ownerData, error: ownerError } =
-      await supabase.functions.invoke('create-company-owner', {
-        body: {
-          companyId: company.id,
+      const response = await fetch('/api/master/create-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           companyName,
           ownerEmail,
-        },
+          planId: newCompanyPlanId,
+          trialDays,
+          masterUserId: user.id,
+        }),
       })
-    
-    if (ownerError) {
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro desconhecido ao processar criação.')
+      }
+
+      setNewCompanyName('')
+      setNewOwnerEmail('')
+      setNewCompanyPlanId('')
+      setNewCompanyTrialDays('14')
+
+      if (data.action_link) {
+        try {
+          await navigator.clipboard.writeText(data.action_link)
+        } catch (clipErr) {
+          console.warn('Bloqueio de cópia automática pelo navegador.')
+        }
+        
+        // Caixa de texto nativa selecionada para garantir a cópia em qualquer navegador
+        window.prompt(
+          'Empresa criada com sucesso e integrada ao Asaas!\n\nSe o link não foi para a sua área de transferência automaticamente, copie-o manualmente abaixo (Ctrl+C):',
+          data.action_link
+        )
+      } else {
+        alert('Empresa criada com sucesso e integrada ao Asaas, mas o link de convite não pôde ser gerado (e-mail possivelmente já cadastrado no Auth).')
+      }
+
+      await loadMasterData()
+    } catch (err: any) {
+      alert(`Falha na criação da empresa: ${err.message}`)
+    } finally {
       setCreatingCompany(false)
-    
-      alert(
-        `Empresa criada, mas houve erro ao criar o proprietário: ${ownerError.message}`
-      )
-    
-      return
     }
-
-    setNewCompanyName('')
-    setNewOwnerEmail('')
-    setNewCompanyPlanId('')
-    setNewCompanyTrialDays('14')
-    setCreatingCompany(false)
-
-    if (ownerData?.action_link) {
-      await navigator.clipboard.writeText(ownerData.action_link)
-
-      alert(
-        `Empresa criada com sucesso!\n\nLink de convite copiado para a área de transferência:\n\n${ownerData.action_link}`
-      )
-    } else {
-      alert(
-        'Empresa criada com sucesso, mas o link de convite não foi retornado.'
-      )
-    }
-
-    await loadMasterData()
   }
 
   async function createPlan() {
@@ -470,7 +407,6 @@ export default function MasterPage() {
       alert('Digite o nome do plano.')
       return
     }
-    
     if (Number(newPlanPrice) < 0 || newPlanPrice === '') {
       alert('Digite um valor válido para o preço.')
       return
@@ -520,7 +456,6 @@ export default function MasterPage() {
       alert('Digite o nome do plano.')
       return
     }
-
     if (Number(editPlanPrice) < 0 || editPlanPrice === '') {
       alert('Digite um preço válido.')
       return
@@ -547,11 +482,6 @@ export default function MasterPage() {
       return
     }
 
-    if (!data || data.length === 0) {
-      alert('Aviso: O banco de dados não aplicou a alteração. Verifique as configurações de RLS.')
-      return
-    }
-
     setPlans((prevPlans) =>
       prevPlans.map((p) =>
         p.id === editingPlanId
@@ -568,26 +498,20 @@ export default function MasterPage() {
     )
 
     setEditingPlanId(null)
-    alert('Plano atualizado com sucesso!')
+    alert('Plano updated com sucesso!')
     await loadMasterData()
   }
 
   async function togglePlanStatus(plan: SaasPlan) {
     const nextActiveState = !plan.active
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('saas_plans')
       .update({ active: nextActiveState })
       .eq('id', plan.id)
-      .select()
 
     if (error) {
       alert(`Erro ao alternar status do plano: ${error.message}`)
-      return
-    }
-
-    if (!data || data.length === 0) {
-      alert('Aviso: O banco de dados não aplicou a alteração de status. Verifique o RLS.')
       return
     }
 
@@ -607,19 +531,13 @@ export default function MasterPage() {
       return
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('saas_plans')
       .delete()
       .eq('id', planId)
-      .select()
 
     if (error) {
       alert(`Erro ao excluir plano: ${error.message}`)
-      return
-    }
-
-    if (!data || data.length === 0) {
-      alert('Aviso: O banco de dados não aplicou a exclusão. Verifique o RLS.')
       return
     }
 
@@ -629,7 +547,6 @@ export default function MasterPage() {
 
   function getDateInputValue(value: string | null | undefined) {
     if (!value) return ''
-
     return value.split('T')[0]
   }
 
@@ -644,7 +561,6 @@ export default function MasterPage() {
       alert('Selecione um plano.')
       return
     }
-
     if (!nextStatus) {
       alert('Selecione um status.')
       return
@@ -722,21 +638,23 @@ export default function MasterPage() {
     )
   
     if (error) {
-      alert(`Erro ao gerar convite: ${error.message}`)
+      alert(`Erro ao gerar convite: ${error.message || 'E-mail possivelmente já existente no sistema Auth.'}`)
       return
     }
   
     if (data?.action_link) {
-      await navigator.clipboard.writeText(data.action_link)
-  
-      alert(
-        `Novo convite gerado e copiado:\n\n${data.action_link}`
+      try {
+        await navigator.clipboard.writeText(data.action_link)
+      } catch (err) {}
+
+      window.prompt(
+        'Novo convite gerado!\n\nSe não copiou automaticamente, copie o link abaixo manualmente (Ctrl+C):',
+        data.action_link
       )
-  
       return
     }
   
-    alert('O convite foi gerado, mas nenhum link foi retornado.')
+    alert('Aviso: O convite não pôde ser gerado. Certifique-se de que este e-mail não pertence a um administrador ou usuário já ativo no sistema.')
   }
 
   async function handleLogout() {
@@ -753,8 +671,8 @@ export default function MasterPage() {
 
   function formatDate(value: string | null) {
     if (!value) return '-'
-
-    return new Date(value).toLocaleDateString('pt-BR')
+    const date = new Date(value)
+    return new Date(date.getTime() + date.getTimezoneOffset() * 60000).toLocaleDateString('pt-BR')
   }
 
   function getStatusLabel(status: string | null | undefined) {
@@ -762,7 +680,6 @@ export default function MasterPage() {
     if (status === 'trial') return 'Trial'
     if (status === 'suspended') return 'Suspensa'
     if (status === 'cancelled') return 'Cancelada'
-
     return 'Sem assinatura'
   }
 
@@ -771,7 +688,6 @@ export default function MasterPage() {
     if (status === 'trial') return 'bg-blue-500 text-white'
     if (status === 'suspended') return 'bg-yellow-500 text-black'
     if (status === 'cancelled') return 'bg-red-500 text-white'
-
     return 'bg-zinc-700 text-zinc-300'
   }
 
@@ -779,7 +695,7 @@ export default function MasterPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-8 py-6">
-          <p className="text-zinc-400">Carregando Dashboard Master...</p>
+          <p className="text-zinc-400">Carregando Dashboard Master Avançado...</p>
         </div>
       </main>
     )
@@ -790,21 +706,10 @@ export default function MasterPage() {
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-zinc-500">
-              Barber SaaS
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold">
-              Dashboard Master
-            </h1>
-
-            <p className="mt-2 text-zinc-400">
-              Gestão central das empresas, planos e assinaturas do SaaS.
-            </p>
-
-            <p className="mt-1 text-xs text-zinc-600">
-              Acesso master: {currentEmail}
-            </p>
+            <p className="text-sm uppercase tracking-[0.25em] text-zinc-500">Barber SaaS</p>
+            <h1 className="mt-2 text-4xl font-bold">Dashboard Master</h1>
+            <p className="mt-2 text-zinc-400">Gestão centralizada e automação de faturamento do ecossistema.</p>
+            <p className="mt-1 text-xs text-zinc-600">Acesso mestre: {currentEmail}</p>
           </div>
 
           <div className="flex gap-2">
@@ -815,7 +720,6 @@ export default function MasterPage() {
             >
               Atualizar
             </button>
-
             <button
               type="button"
               onClick={handleLogout}
@@ -826,67 +730,55 @@ export default function MasterPage() {
           </div>
         </header>
 
-        {/* KPIs Globais de Saúde do SaaS (Sempre Visíveis no Topo) */}
+        {/* KPIs Globais */}
         <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
             <p className="text-sm text-blue-300">Empresas</p>
             <strong className="mt-2 block text-4xl">{companies.length}</strong>
           </div>
-
           <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
             <p className="text-sm text-green-300">Ativas</p>
             <strong className="mt-2 block text-4xl">{activeSubscriptions.length}</strong>
           </div>
-
           <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-5">
             <p className="text-sm text-cyan-300">Trial</p>
             <strong className="mt-2 block text-4xl">{trialSubscriptions.length}</strong>
           </div>
-
           <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
             <p className="text-sm text-yellow-300">Suspensas</p>
             <strong className="mt-2 block text-4xl">{suspendedSubscriptions.length}</strong>
           </div>
-
           <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
-            <p className="text-sm text-purple-300">MRR estimado</p>
+            <p className="text-sm text-purple-300">MRR Estimado</p>
             <strong className="mt-2 block text-3xl">{formatCurrency(estimatedMrr)}</strong>
           </div>
         </section>
 
-        {/* NAVEGAÇÃO POR ABAS (ORGANIZAÇÃO CENTRAL) */}
+        {/* Tabs de Navegação */}
         <div className="mt-8 flex gap-2 border-b border-zinc-800 pb-px">
           <button
             type="button"
             onClick={() => setActiveTab('companies')}
             className={`px-5 py-3 text-sm font-bold border-b-2 transition outline-none ${
-              activeTab === 'companies'
-                ? 'border-white text-white'
-                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              activeTab === 'companies' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
             Empresas e Assinaturas
           </button>
-          
           <button
             type="button"
             onClick={() => setActiveTab('plans')}
             className={`px-5 py-3 text-sm font-bold border-b-2 transition outline-none ${
-              activeTab === 'plans'
-                ? 'border-white text-white'
-                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              activeTab === 'plans' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
             Configurar Planos SaaS
           </button>
-
           <button
             type="button"
             onClick={() => setActiveTab('metrics')}
             className={`px-5 py-3 text-sm font-bold border-b-2 transition outline-none ${
-              activeTab === 'metrics'
-                ? 'border-white text-white'
-                : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              activeTab === 'metrics' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
             Métricas Avançadas
@@ -895,17 +787,16 @@ export default function MasterPage() {
 
         {/* ABA 1: EMPRESAS E ASSINATURAS */}
         {activeTab === 'companies' && (
-          <div className="mt-6 space-y-6 animate-fadeIn">
-            {/* Bloco Nova Empresa */}
+          <div className="mt-6 space-y-6">
             <section className="rounded-2xl border border-blue-900 bg-blue-950/20 p-6">
               <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
                 <div>
                   <h2 className="text-2xl font-bold">Nova empresa</h2>
                   <p className="mt-1 text-sm text-blue-100">
-                    Crie a empresa, as configurações iniciais e a assinatura. O link de convite seguro será copiado automaticamente.
+                    Provisiona a empresa no banco de dados local e cria automaticamente os contratos de assinatura recorrente no Asaas Gateway.
                   </p>
                 </div>
-                <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">SaaS</span>
+                <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">Asaas Active</span>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_1fr_0.7fr_auto]">
@@ -937,7 +828,7 @@ export default function MasterPage() {
                 <input
                   type="number"
                   min={0}
-                  placeholder="Trial"
+                  placeholder="Dias de Trial"
                   className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
                   value={newCompanyTrialDays}
                   onChange={(event) => setNewCompanyTrialDays(event.target.value)}
@@ -948,18 +839,14 @@ export default function MasterPage() {
                   onClick={createCompanyFromMaster}
                   className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
                 >
-                  {creatingCompany ? 'Criando...' : 'Criar empresa'}
+                  {creatingCompany ? 'Processando...' : 'Criar empresa'}
                 </button>
               </div>
             </section>
 
-            {/* Tabela de Empresas */}
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
               <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                  <h2 className="text-2xl font-bold">Empresas e assinaturas</h2>
-                  <p className="mt-1 text-sm text-zinc-500">Visão geral e ações rápidas nas licenças ativas.</p>
-                </div>
+                <h2 className="text-2xl font-bold">Empresas Cadastradas</h2>
                 <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
                   {cancelledSubscriptions.length} cancelada(s)
                 </span>
@@ -967,7 +854,7 @@ export default function MasterPage() {
 
               <div className="mt-5">
                 <input
-                  placeholder="Pesquisar empresa, plano, status ou ID..."
+                  placeholder="Pesquisar por empresa, plano, status ou identificador ID..."
                   className="w-full rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
@@ -979,15 +866,14 @@ export default function MasterPage() {
                   <thead>
                     <tr className="border-b border-zinc-800 text-zinc-500">
                       <th className="py-3 pr-4">Empresa</th>
-                      <th className="py-3 pr-4">Uso</th>
-                      <th className="py-3 pr-4">Plano</th>
-                      <th className="py-3 pr-4">Status</th>
-                      <th className="py-3 pr-4">Trial até</th>
-                      <th className="py-3 pr-4">Vencimento</th>
-                      <th className="py-3 pr-4">Ações</th>
+                      <th className="py-3 pr-4">Métricas de Uso</th>
+                      <th className="py-3 pr-4">Plano Atual</th>
+                      <th className="py-3 pr-4">Status Licença</th>
+                      <th className="py-3 pr-4">Trial Válido Até</th>
+                      <th className="py-3 pr-4">Data Vencimento</th>
+                      <th className="py-3 pr-4">Ações Base</th>
                     </tr>
                   </thead>
-
                   <tbody>
                     {filteredCompanies.map((company) => (
                       <tr key={company.id} className="border-b border-zinc-800">
@@ -1098,9 +984,9 @@ export default function MasterPage() {
                         </td>
                       </tr>
                     ))}
-                    {companies.length === 0 && (
+                    {filteredCompanies.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-zinc-500">Nenhuma empresa encontrada.</td>
+                        <td colSpan={7} className="py-8 text-center text-zinc-500">Nenhuma empresa encontrada na pesquisa.</td>
                       </tr>
                     )}
                   </tbody>
@@ -1110,12 +996,11 @@ export default function MasterPage() {
           </div>
         )}
 
-        {/* ABA 2: CONFIGURAR PLANOS SAAS */}
+        {/* ABA 2: CONFIGURAÇÃO DE PLANOS */}
         {activeTab === 'plans' && (
-          <div className="mt-6 animate-fadeIn">
+          <div className="mt-6">
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
               <div className="grid gap-6 lg:grid-cols-[350px_1fr]">
-                {/* Formulário Criar Novo Plano */}
                 <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-4 h-fit">
                   <h3 className="mb-3 text-sm font-bold text-zinc-300">Criar Novo Plano</h3>
                   <div className="grid gap-3">
@@ -1177,76 +1062,30 @@ export default function MasterPage() {
                   </div>
                 </div>
 
-                {/* Grid de Cards de Planos */}
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 content-start">
                   {plans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className="rounded-xl border border-zinc-800 bg-black/30 p-4 h-fit flex flex-col justify-between min-h-[240px]"
-                    >
+                    <div key={plan.id} className="rounded-xl border border-zinc-800 bg-black/30 p-4 h-fit flex flex-col justify-between min-h-[240px]">
                       {editingPlanId === plan.id ? (
                         <div className="space-y-2 w-full">
-                          <input
-                            type="text"
-                            value={editPlanName}
-                            onChange={(e) => setEditPlanName(e.target.value)}
-                            className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
-                          />
-                          <input
-                            type="number"
-                            min={0}
-                            value={editPlanPrice}
-                            onChange={(e) => setEditPlanPrice(e.target.value)}
-                            className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
-                          />
+                          <input type="text" value={editPlanName} onChange={(e) => setEditPlanName(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
+                          <input type="number" min={0} value={editPlanPrice} onChange={(e) => setEditPlanPrice(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="text-[10px] text-zinc-500 block">Usuários</label>
-                              <input
-                                type="number"
-                                min={1}
-                                value={editPlanMaxUsers}
-                                onChange={(e) => setEditPlanMaxUsers(e.target.value)}
-                                className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
-                              />
+                              <input type="number" min={1} value={editPlanMaxUsers} onChange={(e) => setEditPlanMaxUsers(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
                             </div>
                             <div>
                               <label className="text-[10px] text-zinc-500 block">Profissionais</label>
-                              <input
-                                type="number"
-                                min={1}
-                                value={editPlanMaxProfessionals}
-                                onChange={(e) => setEditPlanMaxProfessionals(e.target.value)}
-                                className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
-                              />
+                              <input type="number" min={1} value={editPlanMaxProfessionals} onChange={(e) => setEditPlanMaxProfessionals(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
                             </div>
                           </div>
                           <div>
                             <label className="text-[10px] text-zinc-500 block">Agendamentos/Mês</label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={editPlanMaxAppointments}
-                              onChange={(e) => setEditPlanMaxAppointments(e.target.value)}
-                              className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
-                            />
+                            <input type="number" min={0} value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
                           </div>
                           <div className="flex gap-2 pt-2">
-                            <button
-                              type="button"
-                              disabled={savingPlan}
-                              onClick={savePlanEdits}
-                              className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white transition hover:bg-green-500"
-                            >
-                              {savingPlan ? 'Salvando...' : 'Salvar'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingPlanId(null)}
-                              className="flex-1 rounded bg-zinc-700 px-2 py-1 text-xs font-bold text-zinc-300"
-                            >
-                              Cancelar
-                            </button>
+                            <button type="button" disabled={savingPlan} onClick={savePlanEdits} className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white transition hover:bg-green-500">{savingPlan ? 'Salvando...' : 'Salvar'}</button>
+                            <button type="button" onClick={() => setEditingPlanId(null)} className="flex-1 rounded bg-zinc-700 px-2 py-1 text-xs font-bold text-zinc-300">Cancelar</button>
                           </div>
                         </div>
                       ) : (
@@ -1254,39 +1093,18 @@ export default function MasterPage() {
                           <div>
                             <div className="flex items-center justify-between gap-3">
                               <strong>{plan.name}</strong>
-                              <span className={`rounded-full px-2 py-1 text-xs font-bold ${plan.active ? 'bg-green-500 text-black' : 'bg-zinc-700 text-zinc-300'}`}>
-                                {plan.active ? 'Ativo' : 'Inativo'}
-                              </span>
+                              <span className={`rounded-full px-2 py-1 text-xs font-bold ${plan.active ? 'bg-green-500 text-black' : 'bg-zinc-700 text-zinc-300'}`}>{plan.active ? 'Ativo' : 'Inativo'}</span>
                             </div>
                             <p className="mt-2 text-2xl font-bold text-green-400">{formatCurrency(Number(plan.price || 0))}</p>
                             <p className="mt-2 text-sm text-zinc-500">Usuários: {plan.max_users} · Profissionais: {plan.max_professionals}</p>
                             <p className="mt-1 text-sm text-zinc-500">Agendamentos/mês: {plan.max_monthly_appointments === 0 ? 'Ilimitado' : plan.max_monthly_appointments}</p>
                           </div>
-
                           <div className="mt-4 space-y-2">
                             <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => startEditingPlan(plan)}
-                                className="flex-1 rounded-lg bg-zinc-800 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-700"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => togglePlanStatus(plan)}
-                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${plan.active ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700' : 'bg-green-600 text-white hover:bg-green-500'}`}
-                              >
-                                {plan.active ? 'Inativar' : 'Ativar'}
-                              </button>
+                              <button type="button" onClick={() => startEditingPlan(plan)} className="flex-1 rounded-lg bg-zinc-800 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-700">Editar</button>
+                              <button type="button" onClick={() => togglePlanStatus(plan)} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${plan.active ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700' : 'bg-green-600 text-white hover:bg-green-500'}`}>{plan.active ? 'Inativar' : 'Ativar'}</button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => deletePlan(plan.id)}
-                              className="w-full rounded-lg bg-red-950/40 text-red-400 border border-red-900/40 py-1 text-xs font-bold transition hover:bg-red-900 hover:text-white"
-                            >
-                              Excluir Plano
-                            </button>
+                            <button type="button" onClick={() => deletePlan(plan.id)} className="w-full rounded-lg bg-red-950/40 text-red-400 border border-red-900/40 py-1 text-xs font-bold transition hover:bg-red-900 hover:text-white">Excluir Plano</button>
                           </div>
                         </>
                       )}
@@ -1300,15 +1118,14 @@ export default function MasterPage() {
 
         {/* ABA 3: MÉTRICAS AVANÇADAS */}
         {activeTab === 'metrics' && (
-          <div className="mt-6 space-y-6 animate-fadeIn">
-            {/* Contadores Secundários Globais */}
+          <div className="mt-6 space-y-6">
             <section className="grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Usuários totais na plataforma</p>
+                <p className="text-sm text-zinc-400">Usuários totais integrados</p>
                 <strong className="mt-2 block text-3xl">{totalUsers}</strong>
               </div>
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Clientes finais cadastrados</p>
+                <p className="text-sm text-zinc-400">Clientes finais indexados</p>
                 <strong className="mt-2 block text-3xl">{totalClients}</strong>
               </div>
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
@@ -1317,16 +1134,12 @@ export default function MasterPage() {
               </div>
             </section>
 
-            {/* Painel Avançado: Distribuição por Planos */}
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
               <h2 className="text-xl font-bold mb-2">Distribuição de Empresas por Plano</h2>
-              <p className="text-sm text-zinc-500 mb-6">Mapeamento dinâmico da fatia de clientes em cada plano cadastrado no SaaS.</p>
-              
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-5">
                 {plans.map((plan) => {
-                  const count = planDistribution[plan.id] || 0;
-                  const percentage = companies.length > 0 ? ((count / companies.length) * 100).toFixed(1) : '0.0';
-                  
+                  const count = planDistribution[plan.id] || 0
+                  const percentage = companies.length > 0 ? ((count / companies.length) * 100).toFixed(1) : '0.0'
                   return (
                     <div key={plan.id} className="rounded-xl border border-zinc-800 bg-black/40 p-4 flex flex-col justify-between">
                       <div>
@@ -1340,7 +1153,7 @@ export default function MasterPage() {
                         <span className="text-xs text-zinc-400 mt-1 block text-right">{percentage}% do SaaS</span>
                       </div>
                     </div>
-                  );
+                  )
                 })}
               </div>
             </section>
