@@ -62,11 +62,30 @@ export default function MasterPage() {
   const [currentEmail, setCurrentEmail] = useState('')
   const [savingCompanyId, setSavingCompanyId] = useState('')
   const [search, setSearch] = useState('')
+  
+  // States para Nova Empresa
   const [newCompanyName, setNewCompanyName] = useState('')
   const [newOwnerEmail, setNewOwnerEmail] = useState('')
   const [newCompanyPlanId, setNewCompanyPlanId] = useState('')
   const [newCompanyTrialDays, setNewCompanyTrialDays] = useState('14')
   const [creatingCompany, setCreatingCompany] = useState(false)
+
+  // States para Novo Plano
+  const [newPlanName, setNewPlanName] = useState('')
+  const [newPlanPrice, setNewPlanPrice] = useState('')
+  const [newPlanMaxUsers, setNewPlanMaxUsers] = useState('1')
+  const [newPlanMaxProfessionals, setNewPlanMaxProfessionals] = useState('3')
+  const [newPlanMaxAppointments, setNewPlanMaxAppointments] = useState('100')
+  const [creatingPlan, setCreatingPlan] = useState(false)
+
+  // States para Edição de Plano Existente
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const [editPlanName, setEditPlanName] = useState('')
+  const [editPlanPrice, setEditPlanPrice] = useState('')
+  const [editPlanMaxUsers, setEditPlanMaxUsers] = useState('1')
+  const [editPlanMaxProfessionals, setEditPlanMaxProfessionals] = useState('3')
+  const [editPlanMaxAppointments, setEditPlanMaxAppointments] = useState('100')
+  const [savingPlan, setSavingPlan] = useState(false)
 
   useEffect(() => {
     loadMasterData()
@@ -390,6 +409,7 @@ export default function MasterPage() {
       alert(`Empresa criada, mas houve erro ao criar assinatura: ${subscriptionError.message}`)
       return
     }
+
     const { data: ownerData, error: ownerError } =
       await supabase.functions.invoke('create-company-owner', {
         body: {
@@ -408,6 +428,7 @@ export default function MasterPage() {
     
       return
     }
+
     setNewCompanyName('')
     setNewOwnerEmail('')
     setNewCompanyPlanId('')
@@ -426,6 +447,116 @@ export default function MasterPage() {
       )
     }
 
+    await loadMasterData()
+  }
+
+  async function createPlan() {
+    if (!newPlanName.trim()) {
+      alert('Digite o nome do plano.')
+      return
+    }
+    
+    if (Number(newPlanPrice) < 0 || newPlanPrice === '') {
+      alert('Digite um valor válido para o preço.')
+      return
+    }
+
+    setCreatingPlan(true)
+
+    const { error } = await supabase.from('saas_plans').insert({
+      name: newPlanName.trim(),
+      price: Number(newPlanPrice),
+      max_users: Number(newPlanMaxUsers),
+      max_professionals: Number(newPlanMaxProfessionals),
+      max_monthly_appointments: Number(newPlanMaxAppointments),
+      active: true,
+    })
+
+    if (error) {
+      alert(`Erro ao criar plano: ${error.message}`)
+      setCreatingPlan(false)
+      return
+    }
+
+    setNewPlanName('')
+    setNewPlanPrice('')
+    setNewPlanMaxUsers('1')
+    setNewPlanMaxProfessionals('3')
+    setNewPlanMaxAppointments('100')
+    setCreatingPlan(false)
+
+    alert('Plano criado com sucesso!')
+    await loadMasterData()
+  }
+
+  function startEditingPlan(plan: SaasPlan) {
+    setEditingPlanId(plan.id)
+    setEditPlanName(plan.name)
+    setEditPlanPrice(String(plan.price))
+    setEditPlanMaxUsers(String(plan.max_users))
+    setEditPlanMaxProfessionals(String(plan.max_professionals))
+    setEditPlanMaxAppointments(String(plan.max_monthly_appointments))
+  }
+
+  async function savePlanEdits() {
+    if (!editingPlanId) return
+
+    if (!editPlanName.trim()) {
+      alert('Digite o nome do plano.')
+      return
+    }
+
+    if (Number(editPlanPrice) < 0 || editPlanPrice === '') {
+      alert('Digite um preço válido.')
+      return
+    }
+
+    setSavingPlan(true)
+
+    // Adicionado .select() para garantir a resposta real do RLS do Supabase
+    const { data, error } = await supabase
+      .from('saas_plans')
+      .update({
+        name: editPlanName.trim(),
+        price: Number(editPlanPrice),
+        max_users: Number(editPlanMaxUsers),
+        max_professionals: Number(editPlanMaxProfessionals),
+        max_monthly_appointments: Number(editPlanMaxAppointments),
+      })
+      .eq('id', editingPlanId)
+      .select()
+
+    setSavingPlan(false)
+
+    if (error) {
+      alert(`Erro ao atualizar plano: ${error.message}`)
+      return
+    }
+
+    // Se o retorno for vazio, significa que o RLS barrou o comando UPDATE silenciosamente
+    if (!data || data.length === 0) {
+      alert('Aviso: O banco de dados não aplicou a alteração. Isso acontece porque o RLS está ativo na tabela "saas_plans", mas não há uma política de permissão para a operação de UPDATE liberada para o seu usuário master.')
+      return
+    }
+
+    // Atualização otimista do estado local para renderização em tempo real
+    setPlans((prevPlans) =>
+      prevPlans.map((p) =>
+        p.id === editingPlanId
+          ? {
+              ...p,
+              name: editPlanName.trim(),
+              price: Number(editPlanPrice),
+              max_users: Number(editPlanMaxUsers),
+              max_professionals: Number(editPlanMaxProfessionals),
+              max_monthly_appointments: Number(editPlanMaxAppointments),
+            }
+          : p
+      )
+    )
+
+    setEditingPlanId(null)
+    alert('Plano atualizado com sucesso!')
     await loadMasterData()
   }
 
@@ -737,228 +868,376 @@ export default function MasterPage() {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-6 xl:grid-cols-[1.5fr_0.8fr]">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-2xl font-bold">Empresas e assinaturas</h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Primeira visão geral das empresas cadastradas no SaaS.
-                </p>
+        {/* SEÇÃO DE PLANOS (Horizontal com Edição Inline Corrigida) */}
+        <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <h2 className="text-2xl font-bold mb-5">Planos</h2>
+
+          <div className="grid gap-6 lg:grid-cols-[350px_1fr]">
+            {/* Formulário de Criação de Planos na Esquerda */}
+            <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-4 h-fit">
+              <h3 className="mb-3 text-sm font-bold text-zinc-300">Criar Novo Plano</h3>
+              <div className="grid gap-3">
+                <input
+                  type="text"
+                  placeholder="Nome do Plano"
+                  value={newPlanName}
+                  onChange={(e) => setNewPlanName(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="Preço Mensal (R$)"
+                  value={newPlanPrice}
+                  onChange={(e) => setNewPlanPrice(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-400">Usuários</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={newPlanMaxUsers}
+                      onChange={(e) => setNewPlanMaxUsers(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-400">Profissionais</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={newPlanMaxProfessionals}
+                      onChange={(e) => setNewPlanMaxProfessionals(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-zinc-400">Agendamentos/Mês (0 = Ilimitado)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPlanMaxAppointments}
+                    onChange={(e) => setNewPlanMaxAppointments(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={creatingPlan}
+                  onClick={createPlan}
+                  className="mt-1 w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                >
+                  {creatingPlan ? 'Criando...' : 'Criar Plano'}
+                </button>
               </div>
-
-              <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
-                {cancelledSubscriptions.length} cancelada(s)
-              </span>
             </div>
 
-            <div className="mt-5">
-              <input
-                placeholder="Pesquisar empresa, plano, status ou ID..."
-                className="w-full rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-
-            <div className="mt-4 rounded-xl border border-blue-900 bg-blue-950/20 p-4 text-sm text-blue-100">
-              Altere plano, status, trial e vencimento diretamente na linha da empresa e clique em Salvar.
-            </div>
-
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-800 text-zinc-500">
-                    <th className="py-3 pr-4">Empresa</th>
-                    <th className="py-3 pr-4">Uso</th>
-                    <th className="py-3 pr-4">Plano</th>
-                    <th className="py-3 pr-4">Status</th>
-                    <th className="py-3 pr-4">Trial até</th>
-                    <th className="py-3 pr-4">Vencimento</th>
-                    <th className="py-3 pr-4">Ações</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredCompanies.map((company) => (
-                    <tr key={company.id} className="border-b border-zinc-800">
-                      <td className="py-4 pr-4">
-                        <strong className="block text-white">{company.name}</strong>
-                        <span className="text-xs text-zinc-600">{company.id}</span>
-                      </td>
-
-                      <td className="py-4 pr-4 text-zinc-300">
-                        <div className="grid gap-1 text-xs text-zinc-400">
-                          <span>Usuários: <strong className="text-white">{company.metrics.users}</strong></span>
-                          <span>Clientes: <strong className="text-white">{company.metrics.clients}</strong></span>
-                          <span>Agendamentos: <strong className="text-white">{company.metrics.appointments}</strong></span>
-                          <span>Profissionais: <strong className="text-white">{company.metrics.professionals}</strong></span>
-                          <span>Receita: <strong className="text-green-300">{formatCurrency(company.metrics.revenue)}</strong></span>
-                        </div>
-                      </td>
-
-                      <td className="py-4 pr-4 text-zinc-300">
-                        <select
-                          defaultValue={company.subscription?.plan_id || ''}
-                          id={`plan-${company.id}`}
-                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                        >
-                          <option value="">Selecione</option>
-
-                          {plans.map((plan) => (
-                            <option key={plan.id} value={plan.id}>
-                              {plan.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      <td className="py-4 pr-4">
-                        <select
-                          defaultValue={company.subscription?.status || 'trial'}
-                          id={`status-${company.id}`}
-                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                        >
-                          <option value="trial">Trial</option>
-                          <option value="active">Ativa</option>
-                          <option value="suspended">Suspensa</option>
-                          <option value="cancelled">Cancelada</option>
-                        </select>
-
-                        <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getStatusClass(company.subscription?.status)}`}>
-                          {getStatusLabel(company.subscription?.status)}
-                        </span>
-                      </td>
-
-                      <td className="py-4 pr-4 text-zinc-400">
-                        <input
-                          type="date"
-                          defaultValue={getDateInputValue(company.subscription?.trial_ends_at)}
-                          id={`trial-${company.id}`}
-                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                        />
-                      </td>
-
-                      <td className="py-4 pr-4 text-zinc-400">
-                        <input
-                          type="date"
-                          defaultValue={getDateInputValue(company.subscription?.subscription_ends_at)}
-                          id={`ends-${company.id}`}
-                          className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                        />
-                      </td>
-
-                      <td className="py-4 pr-4 text-zinc-400">
-                        <div className="space-y-2">
-                          <p className="text-xs text-zinc-500">
-                            Criada em {formatDate(company.created_at)}
-                          </p>
-
-                          <button
-                            type="button"
-                            disabled={savingCompanyId === company.id}
-                            onClick={() => {
-                              const planInput = document.getElementById(`plan-${company.id}`) as HTMLSelectElement | null
-                              const statusInput = document.getElementById(`status-${company.id}`) as HTMLSelectElement | null
-                              const trialInput = document.getElementById(`trial-${company.id}`) as HTMLInputElement | null
-                              const endsInput = document.getElementById(`ends-${company.id}`) as HTMLInputElement | null
-
-                              saveCompanySubscription(
-                                company,
-                                planInput?.value || '',
-                                statusInput?.value || 'trial',
-                                trialInput?.value || '',
-                                endsInput?.value || ''
-                              )
-                            }}
-                            className="w-full rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-                          >
-                            {savingCompanyId === company.id ? 'Salvando...' : 'Salvar'}
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={savingCompanyId === company.id}
-                            onClick={() => updateCompanyStatus(company, 'active')}
-                            className="w-full rounded-lg bg-green-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-green-400 disabled:opacity-50"
-                          >
-                            Ativar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => resendInvite(company)}
-                            className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-cyan-400"
-                          >
-                            Reenviar convite
-                          </button>
-                          <button
-                            type="button"
-                            disabled={savingCompanyId === company.id}
-                            onClick={() => updateCompanyStatus(company, 'suspended')}
-                            className="w-full rounded-lg bg-yellow-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-yellow-400 disabled:opacity-50"
-                          >
-                            Suspender
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {companies.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-zinc-500">
-                        Nenhuma empresa encontrada.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="text-2xl font-bold">Planos</h2>
-
-            <div className="mt-5 space-y-3">
+            {/* Listagem de Planos em Grid na Direita */}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 content-start">
               {plans.map((plan) => (
                 <div
                   key={plan.id}
-                  className="rounded-xl border border-zinc-800 bg-black/30 p-4"
+                  className="rounded-xl border border-zinc-800 bg-black/30 p-4 h-fit flex flex-col justify-between min-h-[220px]"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <strong>{plan.name}</strong>
+                  {editingPlanId === plan.id ? (
+                    /* Formulário de Edição Inline ativo para este Card */
+                    <div className="space-y-2 w-full">
+                      <input
+                        type="text"
+                        value={editPlanName}
+                        onChange={(e) => setEditPlanName(e.target.value)}
+                        className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
+                        placeholder="Nome"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        value={editPlanPrice}
+                        onChange={(e) => setEditPlanPrice(e.target.value)}
+                        className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
+                        placeholder="Preço (R$)"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-zinc-500 block">Usuários</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={editPlanMaxUsers}
+                            onChange={(e) => setEditPlanMaxUsers(e.target.value)}
+                            className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-zinc-500 block">Profissionais</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={editPlanMaxProfessionals}
+                            onChange={(e) => setEditPlanMaxProfessionals(e.target.value)}
+                            className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-500 block">Agendamentos/Mês</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editPlanMaxAppointments}
+                          onChange={(e) => setEditPlanMaxAppointments(e.target.value)}
+                          className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          disabled={savingPlan}
+                          onClick={savePlanEdits}
+                          className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white transition hover:bg-green-500 disabled:opacity-50"
+                        >
+                          {savingPlan ? 'Salvando...' : 'Salvar'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingPlan}
+                          onClick={() => setEditingPlanId(null)}
+                          className="flex-1 rounded bg-zinc-700 px-2 py-1 text-xs font-bold text-zinc-300 transition hover:bg-zinc-600"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Visualização Padrão do Card do Plano */
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <strong>{plan.name}</strong>
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-bold ${
+                              plan.active
+                                ? 'bg-green-500 text-black'
+                                : 'bg-zinc-700 text-zinc-300'
+                            }`}
+                          >
+                            {plan.active ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </div>
 
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs font-bold ${
-                        plan.active
-                          ? 'bg-green-500 text-black'
-                          : 'bg-zinc-700 text-zinc-300'
-                      }`}
-                    >
-                      {plan.active ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </div>
+                        <p className="mt-2 text-2xl font-bold text-green-400">
+                          {formatCurrency(Number(plan.price || 0))}
+                        </p>
 
-                  <p className="mt-2 text-2xl font-bold text-green-400">
-                    {formatCurrency(Number(plan.price || 0))}
-                  </p>
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Usuários: {plan.max_users} · Profissionais: {plan.max_professionals}
+                        </p>
 
-                  <p className="mt-2 text-sm text-zinc-500">
-                    Usuários: {plan.max_users} · Profissionais: {plan.max_professionals}
-                  </p>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          Agendamentos/mês: {plan.max_monthly_appointments === 0 ? 'Ilimitado' : plan.max_monthly_appointments}
+                        </p>
+                      </div>
 
-                  <p className="mt-1 text-sm text-zinc-500">
-                    Agendamentos/mês: {plan.max_monthly_appointments}
-                  </p>
+                      <button
+                        type="button"
+                        onClick={() => startEditingPlan(plan)}
+                        className="mt-4 w-full rounded-lg bg-zinc-800 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-700"
+                      >
+                        Editar plano
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
 
               {plans.length === 0 && (
-                <p className="rounded-xl bg-black/30 p-4 text-sm text-zinc-500">
+                <div className="col-span-full rounded-xl bg-black/30 p-4 text-sm text-zinc-500">
                   Nenhum plano cadastrado.
-                </p>
+                </div>
               )}
             </div>
+          </div>
+        </section>
+
+        {/* SEÇÃO DE EMPRESAS E ASSINATURAS */}
+        <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Empresas e assinaturas</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Primeira visão geral das empresas cadastradas no SaaS.
+              </p>
+            </div>
+
+            <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
+              {cancelledSubscriptions.length} cancelada(s)
+            </span>
+          </div>
+
+          <div className="mt-5">
+            <input
+              placeholder="Pesquisar empresa, plano, status ou ID..."
+              className="w-full rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <div className="mt-4 rounded-xl border border-blue-900 bg-blue-950/20 p-4 text-sm text-blue-100">
+            Altere plano, status, trial e vencimento diretamente na linha da empresa e clique em Salvar.
+          </div>
+
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-500">
+                  <th className="py-3 pr-4">Empresa</th>
+                  <th className="py-3 pr-4">Uso</th>
+                  <th className="py-3 pr-4">Plano</th>
+                  <th className="py-3 pr-4">Status</th>
+                  <th className="py-3 pr-4">Trial até</th>
+                  <th className="py-3 pr-4">Vencimento</th>
+                  <th className="py-3 pr-4">Ações</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredCompanies.map((company) => (
+                  <tr key={company.id} className="border-b border-zinc-800">
+                    <td className="py-4 pr-4">
+                      <strong className="block text-white">{company.name}</strong>
+                      <span className="text-xs text-zinc-600">{company.id}</span>
+                    </td>
+
+                    <td className="py-4 pr-4 text-zinc-300">
+                      <div className="grid gap-1 text-xs text-zinc-400">
+                        <span>Usuários: <strong className="text-white">{company.metrics.users}</strong></span>
+                        <span>Clientes: <strong className="text-white">{company.metrics.clients}</strong></span>
+                        <span>Agendamentos: <strong className="text-white">{company.metrics.appointments}</strong></span>
+                        <span>Profissionais: <strong className="text-white">{company.metrics.professionals}</strong></span>
+                        <span>Receita: <strong className="text-green-300">{formatCurrency(company.metrics.revenue)}</strong></span>
+                      </div>
+                    </td>
+
+                    <td className="py-4 pr-4 text-zinc-300">
+                      <select
+                        defaultValue={company.subscription?.plan_id || ''}
+                        id={`plan-${company.id}`}
+                        className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                      >
+                        <option value="">Selecione</option>
+
+                        {plans.map((plan) => (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td className="py-4 pr-4">
+                      <select
+                        defaultValue={company.subscription?.status || 'trial'}
+                        id={`status-${company.id}`}
+                        className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                      >
+                        <option value="trial">Trial</option>
+                        <option value="active">Ativa</option>
+                        <option value="suspended">Suspensa</option>
+                        <option value="cancelled">Cancelada</option>
+                      </select>
+
+                      <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getStatusClass(company.subscription?.status)}`}>
+                        {getStatusLabel(company.subscription?.status)}
+                      </span>
+                    </td>
+
+                    <td className="py-4 pr-4 text-zinc-400">
+                      <input
+                        type="date"
+                        defaultValue={getDateInputValue(company.subscription?.trial_ends_at)}
+                        id={`trial-${company.id}`}
+                        className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                      />
+                    </td>
+
+                    <td className="py-4 pr-4 text-zinc-400">
+                      <input
+                        type="date"
+                        defaultValue={getDateInputValue(company.subscription?.subscription_ends_at)}
+                        id={`ends-${company.id}`}
+                        className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
+                      />
+                    </td>
+
+                    <td className="py-4 pr-4 text-zinc-400">
+                      <div className="space-y-2">
+                        <p className="text-xs text-zinc-500">
+                          Criada em {formatDate(company.created_at)}
+                        </p>
+
+                        <button
+                          type="button"
+                          disabled={savingCompanyId === company.id}
+                          onClick={() => {
+                            const planInput = document.getElementById(`plan-${company.id}`) as HTMLSelectElement | null
+                            const statusInput = document.getElementById(`status-${company.id}`) as HTMLSelectElement | null
+                            const trialInput = document.getElementById(`trial-${company.id}`) as HTMLInputElement | null
+                            const endsInput = document.getElementById(`ends-${company.id}`) as HTMLInputElement | null
+
+                            saveCompanySubscription(
+                              company,
+                              planInput?.value || '',
+                              statusInput?.value || 'trial',
+                              trialInput?.value || '',
+                              endsInput?.value || ''
+                            )
+                          }}
+                          className="w-full rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                        >
+                          {savingCompanyId === company.id ? 'Salvando...' : 'Salvar'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={savingCompanyId === company.id}
+                          onClick={() => updateCompanyStatus(company, 'active')}
+                          className="w-full rounded-lg bg-green-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-green-400 disabled:opacity-50"
+                        >
+                          Ativar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => resendInvite(company)}
+                          className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-cyan-400"
+                        >
+                          Reenviar convite
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingCompanyId === company.id}
+                          onClick={() => updateCompanyStatus(company, 'suspended')}
+                          className="w-full rounded-lg bg-yellow-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-yellow-400 disabled:opacity-50"
+                        >
+                          Suspender
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {companies.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-zinc-500">
+                      Nenhuma empresa encontrada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
