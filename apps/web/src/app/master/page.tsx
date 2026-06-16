@@ -293,8 +293,6 @@ export default function MasterPage() {
     setLoading(false)
   }
 
-
-
   async function createCompanyFromMaster() {
     const companyName = newCompanyName.trim()
     const ownerEmail = newOwnerEmail.trim().toLowerCase()
@@ -503,6 +501,44 @@ export default function MasterPage() {
       getDateInputValue(company.subscription.trial_ends_at),
       getDateInputValue(company.subscription.subscription_ends_at)
     )
+  }
+
+  async function resendInvite(company: CompanyRow) {
+    const ownerEmail = prompt(
+      `Digite o email do proprietário da empresa "${company.name}":`
+    )
+
+    if (!ownerEmail?.trim()) {
+      return
+    }
+  
+    const { data, error } = await supabase.functions.invoke(
+      'create-company-owner',
+      {
+        body: {
+          companyId: company.id,
+          companyName: company.name,
+          ownerEmail: ownerEmail.trim().toLowerCase(),
+        },
+      }
+    )
+  
+    if (error) {
+      alert(`Erro ao gerar convite: ${error.message}`)
+      return
+    }
+  
+    if (data?.action_link) {
+      await navigator.clipboard.writeText(data.action_link)
+  
+      alert(
+        `Novo convite gerado e copiado:\n\n${data.action_link}`
+      )
+  
+      return
+    }
+  
+    alert('O convite foi gerado, mas nenhum link foi retornado.')
   }
 
   async function handleLogout() {
@@ -848,7 +884,13 @@ export default function MasterPage() {
                           >
                             Ativar
                           </button>
-
+                          <button
+                            type="button"
+                            onClick={() => resendInvite(company)}
+                            className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-black transition hover:bg-cyan-400"
+                          >
+                            Reenviar convite
+                          </button>
                           <button
                             type="button"
                             disabled={savingCompanyId === company.id}
