@@ -553,7 +553,7 @@ export default function MasterPage() {
     )
 
     setEditingPlanId(null)
-    alert('Plano atualizado com sucesso!')
+    alert('Plano updated com sucesso!')
     await loadMasterData()
   }
 
@@ -572,14 +572,46 @@ export default function MasterPage() {
     }
 
     if (!data || data.length === 0) {
-      alert('Aviso: O banco de dados não aplicou a alteração de status. Verifique o RLS para a operação de UPDATE.')
+      alert('Aviso: O banco de dados não aplicou a alteração de status. Verifique o RLS.')
+      return
+    }
+
+    setPlans((prevPlans) =>
+      prevPlans.map((p) => (p.id === plan.id ? { ...p, active: nextActiveState } : p))
+    )
+  }
+
+  async function deletePlan(planId: string) {
+    // Trava de segurança: verifica se alguma empresa está usando o plano
+    const isPlanInUse = subscriptions.some((sub) => sub.plan_id === planId)
+    if (isPlanInUse) {
+      alert('Não é possível excluir este plano porque existem empresas vinculadas a ele. Se deseja desativá-lo para novos cadastros, utilize a função "Inativar".')
+      return
+    }
+
+    if (!confirm('Tem certeza absoluta que deseja excluir este plano? Esta ação não pode ser desfeita.')) {
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('saas_plans')
+      .delete()
+      .eq('id', planId)
+      .select()
+
+    if (error) {
+      alert(`Erro ao excluir plano: ${error.message}`)
+      return
+    }
+
+    if (!data || data.length === 0) {
+      alert('Aviso: O banco de dados não aplicou a exclusão. Verifique as configurações de RLS para a operação de DELETE.')
       return
     }
 
     // Atualização otimista do estado local
-    setPlans((prevPlans) =>
-      prevPlans.map((p) => (p.id === plan.id ? { ...p, active: nextActiveState } : p))
-    )
+    setPlans((prevPlans) => prevPlans.filter((p) => p.id !== planId))
+    alert('Plano excluído com sucesso!')
   }
 
   function getDateInputValue(value: string | null | undefined) {
@@ -890,7 +922,7 @@ export default function MasterPage() {
           </div>
         </section>
 
-        {/* SEÇÃO DE PLANOS (Horizontal com Ativar/Inativar) */}
+        {/* SEÇÃO DE PLANOS (Horizontal com Excluir Plano) */}
         <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
           <h2 className="text-2xl font-bold mb-5">Planos</h2>
 
@@ -962,10 +994,10 @@ export default function MasterPage() {
               {plans.map((plan) => (
                 <div
                   key={plan.id}
-                  className="rounded-xl border border-zinc-800 bg-black/30 p-4 h-fit flex flex-col justify-between min-h-[220px]"
+                  className="rounded-xl border border-zinc-800 bg-black/30 p-4 h-fit flex flex-col justify-between min-h-[240px]"
                 >
                   {editingPlanId === plan.id ? (
-                    /* Formulário de Edição Inline ativo para este Card */
+                    /* Formulário de Edição Inline ativo */
                     <div className="space-y-2 w-full">
                       <input
                         type="text"
@@ -1034,7 +1066,7 @@ export default function MasterPage() {
                       </div>
                     </div>
                   ) : (
-                    /* Visualização Padrão do Card do Plano com Ações Modificadas */
+                    /* Visualização Padrão do Card do Plano */
                     <>
                       <div>
                         <div className="flex items-center justify-between gap-3">
@@ -1063,25 +1095,35 @@ export default function MasterPage() {
                         </p>
                       </div>
 
-                      {/* Grupo de botões: Editar e Alternar Status */}
-                      <div className="mt-4 flex gap-2">
+                      {/* Grupo de botões atualizado com a opção de Excluir */}
+                      <div className="mt-4 space-y-2">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditingPlan(plan)}
+                            className="flex-1 rounded-lg bg-zinc-800 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-700"
+                          >
+                            Editar plano
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => togglePlanStatus(plan)}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                              plan.active
+                                ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700'
+                                : 'bg-green-600 text-white hover:bg-green-500'
+                            }`}
+                          >
+                            {plan.active ? 'Inativar' : 'Ativar'}
+                          </button>
+                        </div>
+                        
                         <button
                           type="button"
-                          onClick={() => startEditingPlan(plan)}
-                          className="flex-1 rounded-lg bg-zinc-800 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-700"
+                          onClick={() => deletePlan(plan.id)}
+                          className="w-full rounded-lg bg-red-950/40 text-red-400 border border-red-900/40 py-1 text-xs font-bold transition hover:bg-red-900 hover:text-white"
                         >
-                          Editar plano
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => togglePlanStatus(plan)}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                            plan.active
-                              ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700'
-                              : 'bg-green-600 text-white hover:bg-green-500'
-                          }`}
-                        >
-                          {plan.active ? 'Inativar' : 'Ativar'}
+                          Excluir Plano
                         </button>
                       </div>
                     </>
