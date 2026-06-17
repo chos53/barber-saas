@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
+    "clsx": "^2.1.1",
     "es-toolkit": "^1.47.1",
     "immer": "^11.1.8",
     "next": "16.2.6",
