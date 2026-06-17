@@ -257,12 +257,13 @@ export default function MasterPage() {
       if (companiesResult.error) throw companiesResult.error
       if (subscriptionsResult.error) throw subscriptionsResult.error
 
-      const loadedCompanies = (companiesResult.data || []) as Company[]
-      const loadedSettings = (companySettingsResult.data || []) as CompanySettings[]
-      const loadedSubscriptions = (subscriptionsResult.data || []) as CompanySubscription[]
-      const loadedPlans = (plansResult.data || []) as SaasPlan[]
-      const loadedProfiles = (profilesResult.data || []) as Array<{ company_id: string | null }>
-      const loadedClients = (clientsResult.data || []) as Array<{ company_id: string | null }>
+      const loadedCompanies = (companiesResult.data || []) as unknown as Company[]
+      const loadedSettings = (companySettingsResult.data || []) as unknown as CompanySettings[]
+      const loadedSubscriptions = (subscriptionsResult.data || []) as unknown as CompanySubscription[]
+      const loadedPlans = (plansResult.data || []) as unknown as SaasPlan[]
+      const loadedProfiles = (profilesResult.data || []) as unknown as Array<{ company_id: string | null }>
+      const loadedClients = (clientsResult.data || []) as unknown as Array<{ company_id: string | null }>
+ 
       const loadedAppointments = (appointmentsResult.data || []) as Array<{ company_id: string | null }>
       const loadedProfessionals = (professionalsResult.data || []) as Array<{ company_id: string | null }>
       const loadedFinancialTransactions = (financialResult.data || []) as Array<{

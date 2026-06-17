@@ -822,7 +822,7 @@ export default function AgendaPage() {
       setVisualProfessionalId(professionalsData[0].id)
     }
 
-    setAppointments((appointmentsData || []) as Appointment[])
+    setAppointments((appointmentsData || []) as unknown as Appointment[])
   }
 
   async function startReschedule(appointment: Appointment) {
@@ -873,7 +873,7 @@ export default function AgendaPage() {
       return
     }
 
-    const sequence = ((data || []) as Appointment[]).filter(
+    const sequence = ((data || []) as unknown as Appointment[]).filter(
       (item) => item.professional_id === appointment.professional_id
     )
 

@@ -47,9 +47,11 @@ export async function POST(req: Request) {
       .select('id')
       .single()
 
-    if (companyError || !company?.id) {
-      return NextResponse.json({ error: `Erro ao criar empresa: ${companyError.message}` }, { status: 500 })
-    }
+      if (companyError || !company?.id) {
+        return NextResponse.json({ 
+          error: `Erro ao criar empresa: ${companyError?.message || 'ID da empresa não foi retornado.'}` 
+        }, { status: 500 })
+      }
 
     // 4. Cadastrar Configurações Operacionais Básicas
     const { error: settingsError } = await supabaseAdmin

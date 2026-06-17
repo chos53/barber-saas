@@ -469,7 +469,7 @@ useEffect(() => {
       }))
     )
 
-    setComandas(normalizedComandas)
+    setComandas(normalizedComandas as unknown as Comanda[])
 
     const initialEditingNotes: Record<string, string> = {}
     const initialDiscounts: Record<string, string> = {}
@@ -477,7 +477,7 @@ useEffect(() => {
     const initialSurcharges: Record<string, string> = {}
     const initialSurchargeTypes: Record<string, 'amount' | 'percentage'> = {}
 
-    normalizedComandas.forEach((comanda) => {
+    ;(normalizedComandas as unknown as Comanda[]).forEach((comanda) => {
       initialEditingNotes[comanda.id] = comanda.notes || ''
       initialDiscounts[comanda.id] = String(getComandaDiscountValue(comanda))
       initialDiscountTypes[comanda.id] = getComandaDiscountType(comanda)

@@ -651,7 +651,7 @@ export default function ProfessionalsPage() {
       }
     )
 
-    setProfessionals(normalizedProfessionals)
+  setProfessionals(normalizedProfessionals as any)
   }
 
   async function uploadPhoto() {
@@ -735,7 +735,7 @@ export default function ProfessionalsPage() {
     setEditMonthlyGoal(String(professional.monthly_goal ?? 0))
     setPhotoPreview(professional.photo_url || '')
   }
-
+  
   function cancelEditing() {
     setEditingProfessionalId('')
     setEditName('')

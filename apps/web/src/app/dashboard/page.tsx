@@ -1129,7 +1129,7 @@ export default function DashboardPage() {
     })
 
     setUpcomingAppointments(
-      (upcomingAppointmentsResult.data || []) as Appointment[]
+      (upcomingAppointmentsResult.data || []) as unknown as Appointment[]
     )
 
     setLoading(false)
