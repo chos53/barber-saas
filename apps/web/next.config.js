@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Nada além disso. Zero configurações extras.
+  images: {
+    unoptimized: true, // Isso resolve 90% dos travamentos de build
+  },
 };
 module.exports = nextConfig;

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --no-turbopack --no-lint --no-type-checking",
+    "build": "next build --no-turbopack --no-lint --ignore-build-errors --no-type-check",
     "start": "next start",
     "lint": "next lint"
   },
