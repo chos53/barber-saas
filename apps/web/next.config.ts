@@ -1,14 +1,14 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // Suas configurações originais
   allowedDevOrigins: [
     '192.168.0.64',
     'localhost',
     '127.0.0.1',
   ],
-  
-  // Nossas travas Anti-Crash para economizar memória na Vercel
+  // As travas de memória continuam funcionando, mas o eslint
+  // agora é configurado dentro da chave 'eslint' mas de forma 
+  // que o Next.js entenda. Tente este formato:
   eslint: {
     ignoreDuringBuilds: true,
   },
