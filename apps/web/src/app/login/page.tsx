@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
 
 const masterEmails = ['caheolsa@yahoo.com.br']
 
@@ -68,13 +69,20 @@ export default function LoginPage() {
           onChange={(event) => setEmail(event.target.value)}
         />
 
-        <input
-          type="password"
-          placeholder="Sua senha"
-          className="w-full rounded-lg bg-zinc-800 p-3 outline-none focus:ring-2 focus:ring-white"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+        <div className="space-y-1">
+          <input
+            type="password"
+            placeholder="Sua senha"
+            className="w-full rounded-lg bg-zinc-800 p-3 outline-none focus:ring-2 focus:ring-white"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          {isLoginView && (
+            <Link href="/forgot-password" className="text-xs text-zinc-500 hover:text-white block pt-1">
+              Esqueceu a senha?
+            </Link>
+          )}
+        </div>
 
         <button
           type="button"
