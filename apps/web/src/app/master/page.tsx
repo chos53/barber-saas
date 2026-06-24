@@ -1,65 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Save, Image as ImageIcon, MessageSquare, Star, Link as LinkIcon, Settings, Smartphone, Plus, Trash2, Upload } from 'lucide-react'
 
-type Company = {
-  id: string
-  created_at: string | null
-}
-
-type CompanySettings = {
-  company_id: string
-  company_name: string | null
-}
-
-type SaasPlan = {
-  id: string
-  name: string
-  price: number
-  active: boolean
-  max_users: number
-  max_professionals: number
-  max_monthly_appointments: number
-}
-
-type CompanySubscription = {
-  id: string
-  company_id: string
-  plan_id: string | null
-  status: string
-  trial_ends_at: string | null
-  subscription_starts_at: string | null
-  subscription_ends_at: string | null
-  blocked_at: string | null
-  created_at: string | null
-  saas_plans?: SaasPlan | null
-}
-
-type CompanyMetrics = {
-  users: number
-  clients: number
-  appointments: number
-  professionals: number
-  revenue: number
-}
-
-type CompanyRow = {
-  id: string
-  name: string
-  created_at: string | null
-  subscription: CompanySubscription | null
-  metrics: CompanyMetrics
-}
-
-type AsaasInvoice = {
-  id: string
-  dueDate: string
-  value: number
-  status: string
-  invoiceUrl: string
-  billingType: string
-}
+type Company = { id: string; created_at: string | null }
+type CompanySettings = { company_id: string; company_name: string | null }
+type SaasPlan = { id: string; name: string; price: number; active: boolean; max_users: number; max_professionals: number; max_monthly_appointments: number; features?: string | null }
+type CompanySubscription = { id: string; company_id: string; plan_id: string | null; status: string; trial_ends_at: string | null; subscription_starts_at: string | null; subscription_ends_at: string | null; blocked_at: string | null; created_at: string | null; saas_plans?: SaasPlan | null }
+type CompanyMetrics = { users: number; clients: number; appointments: number; professionals: number; revenue: number }
+type CompanyRow = { id: string; name: string; created_at: string | null; subscription: CompanySubscription | null; metrics: CompanyMetrics }
+type AsaasInvoice = { id: string; dueDate: string; value: number; status: string; invoiceUrl: string; billingType: string }
 
 const masterEmails = ['caheolsa@yahoo.com.br']
 
@@ -72,112 +23,87 @@ export default function MasterPage() {
   const [savingCompanyId, setSavingCompanyId] = useState('')
   const [search, setSearch] = useState('')
   
-  // Controle de Abas do Dashboard Reorganizado
-  const [activeTab, setActiveTab] = useState<'companies' | 'plans' | 'metrics'>('companies')
+  const [activeTab, setActiveTab] = useState<'companies' | 'plans' | 'metrics' | 'landing'>('companies')
 
-  // States para Nova Empresa
   const [newCompanyName, setNewCompanyName] = useState('')
   const [newOwnerEmail, setNewOwnerEmail] = useState('')
   const [newCompanyPlanId, setNewCompanyPlanId] = useState('')
   const [newCompanyTrialDays, setNewCompanyTrialDays] = useState('14')
   const [creatingCompany, setCreatingCompany] = useState(false)
 
-  // States para Novo Plano
+  // Planos - Novos campos
   const [newPlanName, setNewPlanName] = useState('')
   const [newPlanPrice, setNewPlanPrice] = useState('')
   const [newPlanMaxUsers, setNewPlanMaxUsers] = useState('1')
   const [newPlanMaxProfessionals, setNewPlanMaxProfessionals] = useState('3')
   const [newPlanMaxAppointments, setNewPlanMaxAppointments] = useState('100')
+  const [newPlanFeatures, setNewPlanFeatures] = useState('')
   const [creatingPlan, setCreatingPlan] = useState(false)
 
-  // States para Edição de Plano Existente
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [editPlanName, setEditPlanName] = useState('')
   const [editPlanPrice, setEditPlanPrice] = useState('')
   const [editPlanMaxUsers, setEditPlanMaxUsers] = useState('1')
   const [editPlanMaxProfessionals, setEditPlanMaxProfessionals] = useState('3')
   const [editPlanMaxAppointments, setEditPlanMaxAppointments] = useState('100')
+  const [editPlanFeatures, setEditPlanFeatures] = useState('')
   const [savingPlan, setSavingPlan] = useState(false)
 
-  // States para Modal de Consulta de Faturas do Asaas
   const [viewingInvoicesCompany, setViewingInvoicesCompany] = useState<string | null>(null)
   const [companyInvoices, setCompanyInvoices] = useState<AsaasInvoice[]>([])
   const [loadingInvoices, setLoadingInvoices] = useState(false)
+
+  const heroImageRef = useRef<HTMLInputElement>(null)
+  const [hero, setHero] = useState({ title: '', subtitle: '', image: null as File | null })
+  const [cta, setCta] = useState({ text: '', link: '' })
+  const [benefits, setBenefits] = useState([{ title: '', description: '' }])
+  const [testimonials, setTestimonials] = useState([{ name: '', role: '', text: '', photo: null as File | null }])
+  const [savingLanding, setSavingLanding] = useState(false)
 
   useEffect(() => {
     loadMasterData()
   }, [])
 
-  const activeSubscriptions = useMemo(() => {
-    return subscriptions.filter((subscription) => subscription.status === 'active')
-  }, [subscriptions])
-
-  const trialSubscriptions = useMemo(() => {
-    return subscriptions.filter((subscription) => subscription.status === 'trial')
-  }, [subscriptions])
-
-  const suspendedSubscriptions = useMemo(() => {
-    return subscriptions.filter((subscription) => subscription.status === 'suspended')
-  }, [subscriptions])
-
-  const cancelledSubscriptions = useMemo(() => {
-    return subscriptions.filter((subscription) => subscription.status === 'cancelled')
-  }, [subscriptions])
-
-  const estimatedMrr = useMemo(() => {
-    return activeSubscriptions.reduce((sum, subscription) => {
-      return sum + Number(subscription.saas_plans?.price || 0)
-    }, 0)
-  }, [activeSubscriptions])
+  const activeSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'active'), [subscriptions])
+  const trialSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'trial'), [subscriptions])
+  const suspendedSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'suspended'), [subscriptions])
+  const cancelledSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'cancelled'), [subscriptions])
+  const estimatedMrr = useMemo(() => activeSubscriptions.reduce((sum, s) => sum + Number(s.saas_plans?.price || 0), 0), [activeSubscriptions])
 
   const filteredCompanies = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase()
-
-    if (!normalizedSearch) return companies
-
-    return companies.filter((company) => {
-      return (
-        company.name.toLowerCase().includes(normalizedSearch) ||
-        company.id.toLowerCase().includes(normalizedSearch) ||
-        String(company.subscription?.saas_plans?.name || '').toLowerCase().includes(normalizedSearch) ||
-        String(company.subscription?.status || '').toLowerCase().includes(normalizedSearch)
-      )
-    })
+    const norm = search.trim().toLowerCase()
+    if (!norm) return companies
+    return companies.filter((c) => c.name.toLowerCase().includes(norm) || c.id.toLowerCase().includes(norm) || String(c.subscription?.saas_plans?.name || '').toLowerCase().includes(norm) || String(c.subscription?.status || '').toLowerCase().includes(norm))
   }, [companies, search])
 
-  const totalUsers = useMemo(() => {
-    return companies.reduce((sum, company) => sum + company.metrics.users, 0)
-  }, [companies])
+  const totalUsers = useMemo(() => companies.reduce((sum, c) => sum + c.metrics.users, 0), [companies])
+  const totalClients = useMemo(() => companies.reduce((sum, c) => sum + c.metrics.clients, 0), [companies])
+  const totalAppointments = useMemo(() => companies.reduce((sum, c) => sum + c.metrics.appointments, 0), [companies])
 
-  const totalClients = useMemo(() => {
-    return companies.reduce((sum, company) => sum + company.metrics.clients, 0)
-  }, [companies])
+  const addBenefit = () => setBenefits([...benefits, { title: '', description: '' }])
+  const removeBenefit = (index: number) => setBenefits(benefits.filter((_, i) => i !== index))
+  const addTestimonial = () => setTestimonials([...testimonials, { name: '', role: '', text: '', photo: null }])
+  const removeTestimonial = (index: number) => setTestimonials(testimonials.filter((_, i) => i !== index))
 
-  const totalAppointments = useMemo(() => {
-    return companies.reduce((sum, company) => sum + company.metrics.appointments, 0)
-  }, [companies])
-
-  const planDistribution = useMemo(() => {
-    const distribution: { [key: string]: number } = {}
-    companies.forEach((c) => {
-      const pId = c.subscription?.plan_id
-      if (pId) {
-        distribution[pId] = (distribution[pId] || 0) + 1
-      }
-    })
-    return distribution
-  }, [companies])
+  async function handleSaveLandingPage() {
+    setSavingLanding(true)
+    try {
+      const cleanTestimonials = testimonials.map(t => ({ name: t.name, role: t.role, text: t.text }))
+      const { error } = await supabase.from('landing_settings').upsert({
+        id: 'default', hero_title: hero.title, hero_subtitle: hero.subtitle, cta_text: cta.text,
+        cta_link: cta.link, benefits: benefits, testimonials: cleanTestimonials, updated_at: new Date().toISOString()
+      })
+      if (error) throw error
+      alert('Configurações da Landing Page salvas com sucesso!')
+    } catch (err: any) { alert(`Erro ao salvar Landing Page: ${err.message}`) } finally { setSavingLanding(false) }
+  }
 
   async function loadMasterData() {
     try {
       setLoading(true)
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
+      const { data: { user } } = await supabase.auth.getUser()
       const userEmail = user?.email?.toLowerCase() || ''
-      setCurrentEmail(userEmail)
+      currentEmail || setCurrentEmail(userEmail)
 
       if (!user || !masterEmails.includes(userEmail)) {
         window.location.href = '/dashboard'
@@ -185,77 +111,29 @@ export default function MasterPage() {
       }
 
       const [
-        companiesResult,
-        companySettingsResult,
-        subscriptionsResult,
-        plansResult,
-        profilesResult,
-        clientsResult,
-        appointmentsResult,
-        professionalsResult,
-        financialResult,
+        companiesResult, companySettingsResult, subscriptionsResult, plansResult, profilesResult, clientsResult, appointmentsResult, professionalsResult, financialResult, landingResult
       ] = await Promise.all([
-        supabase
-          .from('companies')
-          .select('id, created_at')
-          .order('created_at', { ascending: false }),
-
-        supabase
-          .from('company_settings')
-          .select('company_id, company_name'),
-
-        supabase
-          .from('company_subscriptions')
-          .select(`
-            id,
-            company_id,
-            plan_id,
-            status,
-            trial_ends_at,
-            subscription_starts_at,
-            subscription_ends_at,
-            blocked_at,
-            created_at,
-            saas_plans (
-              id,
-              name,
-              price,
-              active,
-              max_users,
-              max_professionals,
-              max_monthly_appointments
-            )
-          `)
-          .order('created_at', { ascending: false }),
-
-        supabase
-          .from('saas_plans')
-          .select('id, name, price, active, max_users, max_professionals, max_monthly_appointments')
-          .order('price', { ascending: true }),
-
-        supabase
-          .from('profiles')
-          .select('company_id'),
-
-        supabase
-          .from('clients')
-          .select('company_id'),
-
-        supabase
-          .from('appointments')
-          .select('company_id'),
-
-        supabase
-          .from('professionals')
-          .select('company_id'),
-
-        supabase
-          .from('financial_transactions')
-          .select('company_id, type, amount, status'),
+        supabase.from('companies').select('id, created_at').order('created_at', { ascending: false }),
+        supabase.from('company_settings').select('company_id, company_name'),
+        supabase.from('company_subscriptions').select(`id, company_id, plan_id, status, trial_ends_at, subscription_starts_at, subscription_ends_at, blocked_at, created_at, saas_plans (id, name, price, active, max_users, max_professionals, max_monthly_appointments)`).order('created_at', { ascending: false }),
+        supabase.from('saas_plans').select('*').order('price', { ascending: true }),
+        supabase.from('profiles').select('company_id'),
+        supabase.from('clients').select('company_id'),
+        supabase.from('appointments').select('company_id'),
+        supabase.from('professionals').select('company_id'),
+        supabase.from('financial_transactions').select('company_id, type, amount, status'),
+        supabase.from('landing_settings').select('*').eq('id', 'default').single()
       ])
 
       if (companiesResult.error) throw companiesResult.error
       if (subscriptionsResult.error) throw subscriptionsResult.error
+
+      if (landingResult.data) {
+        setHero({ title: landingResult.data.hero_title || '', subtitle: landingResult.data.hero_subtitle || '', image: null })
+        setCta({ text: landingResult.data.cta_text || '', link: landingResult.data.cta_link || '' })
+        if (landingResult.data.benefits?.length) setBenefits(landingResult.data.benefits)
+        if (landingResult.data.testimonials?.length) setTestimonials(landingResult.data.testimonials)
+      }
 
       const loadedCompanies = (companiesResult.data || []) as unknown as Company[]
       const loadedSettings = (companySettingsResult.data || []) as unknown as CompanySettings[]
@@ -263,33 +141,18 @@ export default function MasterPage() {
       const loadedPlans = (plansResult.data || []) as unknown as SaasPlan[]
       const loadedProfiles = (profilesResult.data || []) as unknown as Array<{ company_id: string | null }>
       const loadedClients = (clientsResult.data || []) as unknown as Array<{ company_id: string | null }>
- 
       const loadedAppointments = (appointmentsResult.data || []) as Array<{ company_id: string | null }>
       const loadedProfessionals = (professionalsResult.data || []) as Array<{ company_id: string | null }>
-      const loadedFinancialTransactions = (financialResult.data || []) as Array<{
-        company_id: string | null
-        type: string | null
-        amount: number | null
-        status: string | null
-      }>
+      const loadedFinancialTransactions = (financialResult.data || []) as Array<{ company_id: string | null; type: string | null; amount: number | null; status: string | null }>
 
       const settingsByCompany = new Map<string, CompanySettings>()
       const subscriptionByCompany = new Map<string, CompanySubscription>()
-
-      loadedSettings.forEach((setting) => {
-        settingsByCompany.set(setting.company_id, setting)
-      })
-
-      loadedSubscriptions.forEach((subscription) => {
-        subscriptionByCompany.set(subscription.company_id, subscription)
-      })
+      loadedSettings.forEach((s) => settingsByCompany.set(s.company_id, s))
+      loadedSubscriptions.forEach((s) => subscriptionByCompany.set(s.company_id, s))
 
       function countByCompany(items: Array<{ company_id: string | null }>) {
         const map = new Map<string, number>()
-        items.forEach((item) => {
-          if (!item.company_id) return
-          map.set(item.company_id, (map.get(item.company_id) || 0) + 1)
-        })
+        items.forEach((item) => { if (item.company_id) map.set(item.company_id, (map.get(item.company_id) || 0) + 1) })
         return map
       }
 
@@ -299,40 +162,31 @@ export default function MasterPage() {
       const professionalsByCompany = countByCompany(loadedProfessionals)
       const revenueByCompany = new Map<string, number>()
 
-      loadedFinancialTransactions.forEach((transaction) => {
-        if (!transaction.company_id) return
-        if (transaction.type !== 'income') return
-        if (transaction.status === 'cancelled') return
-
-        revenueByCompany.set(
-          transaction.company_id,
-          (revenueByCompany.get(transaction.company_id) || 0) + Number(transaction.amount || 0)
-        )
-      })
-
-      const rows: CompanyRow[] = loadedCompanies.map((company) => {
-        return {
-          id: company.id,
-          created_at: company.created_at,
-          name:
-            settingsByCompany.get(company.id)?.company_name ||
-            `Empresa ${company.id.slice(0, 8)}`,
-          subscription: subscriptionByCompany.get(company.id) || null,
-          metrics: {
-            users: usersByCompany.get(company.id) || 0,
-            clients: clientsByCompany.get(company.id) || 0,
-            appointments: appointmentsByCompany.get(company.id) || 0,
-            professionals: professionalsByCompany.get(company.id) || 0,
-            revenue: revenueByCompany.get(company.id) || 0,
-          },
+      loadedFinancialTransactions.forEach((t) => {
+        if (t.company_id && t.type === 'income' && t.status !== 'cancelled') {
+          revenueByCompany.set(t.company_id, (revenueByCompany.get(t.company_id) || 0) + Number(t.amount || 0))
         }
       })
+
+      const rows: CompanyRow[] = loadedCompanies.map((c) => ({
+        id: c.id,
+        created_at: c.created_at,
+        name: settingsByCompany.get(c.id)?.company_name || `Empresa ${c.id.slice(0, 8)}`,
+        subscription: subscriptionByCompany.get(c.id) || null,
+        metrics: {
+          users: usersByCompany.get(c.id) || 0,
+          clients: clientsByCompany.get(c.id) || 0,
+          appointments: appointmentsByCompany.get(c.id) || 0,
+          professionals: professionalsByCompany.get(c.id) || 0,
+          revenue: revenueByCompany.get(c.id) || 0,
+        },
+      }))
 
       setCompanies(rows)
       setSubscriptions(loadedSubscriptions)
       setPlans(loadedPlans)
     } catch (err: any) {
-      console.error('Erro ao carregar dados do painel master:', err)
+      console.error('Erro:', err)
       alert(`Erro no carregamento: ${err.message || err}`)
     } finally {
       setLoading(false)
@@ -342,20 +196,15 @@ export default function MasterPage() {
   async function openAsaasInvoicesModal(companyId: string) {
     try {
       setLoadingInvoices(true)
-      setViewingInvoicesCompany('Buscando informações...')
+      setViewingInvoicesCompany('Buscando...')
       setCompanyInvoices([])
-
       const response = await fetch(`/api/master/company-invoices?companyId=${companyId}`)
       const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao consultar faturas backend.')
-      }
-
+      if (!response.ok) throw new Error(data.error || 'Erro.')
       setViewingInvoicesCompany(data.companyName)
       setCompanyInvoices(data.invoices)
     } catch (err: any) {
-      alert(`Falha ao obter faturas do Asaas: ${err.message}`)
+      alert(`Erro: ${err.message}`)
       setViewingInvoicesCompany(null)
     } finally {
       setLoadingInvoices(false)
@@ -366,864 +215,383 @@ export default function MasterPage() {
     const companyName = newCompanyName.trim()
     const ownerEmail = newOwnerEmail.trim().toLowerCase()
     const trialDays = Number(newCompanyTrialDays || 14)
-
-    if (!companyName) {
-      alert('Digite o nome da empresa.')
-      return
-    }
-    if (!ownerEmail) {
-      alert('Digite o email do proprietário.')
-      return
-    }
-    if (!newCompanyPlanId) {
-      alert('Selecione um plano.')
-      return
-    }
-    if (!Number.isFinite(trialDays) || trialDays < 0) {
-      alert('Digite uma quantidade válida de dias de trial.')
-      return
-    }
+    if (!companyName || !ownerEmail || !newCompanyPlanId || trialDays < 0) return alert('Preencha todos os campos.')
 
     setCreatingCompany(true)
-
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('Sessão master não encontrada. Faça login novamente.')
-        return
-      }
+      if (!user) return alert('Sessão master não encontrada.')
 
       const response = await fetch('/api/master/create-company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyName,
-          ownerEmail,
-          planId: newCompanyPlanId,
-          trialDays,
-          masterUserId: user.id,
-        }),
+        body: JSON.stringify({ companyName, ownerEmail, planId: newCompanyPlanId, trialDays, masterUserId: user.id }),
       })
-
       const data = await response.json()
+      if (!response.ok) throw new Error(data.error)
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro desconhecido ao processar criação.')
-      }
-
-      setNewCompanyName('')
-      setNewOwnerEmail('')
-      setNewCompanyPlanId('')
-      setNewCompanyTrialDays('14')
-
+      setNewCompanyName(''); setNewOwnerEmail(''); setNewCompanyPlanId(''); setNewCompanyTrialDays('14')
       if (data.action_link) {
-        try {
-          await navigator.clipboard.writeText(data.action_link)
-        } catch (clipErr) {
-          console.warn('Bloqueio de cópia automática pelo navegador.')
-        }
-        
-        window.prompt(
-          'Empresa criada com sucesso e integrada ao Asaas!\n\nSe o link não foi para a sua área de transferência automaticamente, copie-o manualmente abaixo (Ctrl+C):',
-          data.action_link
-        )
+        try { await navigator.clipboard.writeText(data.action_link) } catch (e) {}
+        window.prompt('Link de convite gerado:', data.action_link)
       } else {
-        alert('Empresa criada com sucesso e integrada ao Asaas, mas o link de convite não pôde ser gerado (e-mail possivelmente já cadastrado no Auth).')
+        alert('Criada, mas e-mail já existe no Auth.')
       }
-
       await loadMasterData()
     } catch (err: any) {
-      alert(`Falha na criação da empresa: ${err.message}`)
+      alert(`Falha: ${err.message}`)
     } finally {
       setCreatingCompany(false)
     }
   }
 
   async function createPlan() {
-    if (!newPlanName.trim()) {
-      alert('Digite o nome do plano.')
-      return
-    }
-    if (Number(newPlanPrice) < 0 || newPlanPrice === '') {
-      alert('Digite um valor válido para o preço.')
-      return
-    }
-
+    if (!newPlanName.trim() || Number(newPlanPrice) < 0) return alert('Preencha os dados do plano.')
     setCreatingPlan(true)
-
     const { error } = await supabase.from('saas_plans').insert({
-      name: newPlanName.trim(),
-      price: Number(newPlanPrice),
-      max_users: Number(newPlanMaxUsers),
-      max_professionals: Number(newPlanMaxProfessionals),
-      max_monthly_appointments: Number(newPlanMaxAppointments),
-      active: true,
+      name: newPlanName.trim(), price: Number(newPlanPrice), max_users: Number(newPlanMaxUsers),
+      max_professionals: Number(newPlanMaxProfessionals), max_monthly_appointments: Number(newPlanMaxAppointments), 
+      features: newPlanFeatures.trim(), active: true,
     })
-
-    if (error) {
-      alert(`Erro ao criar plano: ${error.message}`)
-      setCreatingPlan(false)
-      return
-    }
-
-    setNewPlanName('')
-    setNewPlanPrice('')
-    setNewPlanMaxUsers('1')
-    setNewPlanMaxProfessionals('3')
-    setNewPlanMaxAppointments('100')
+    if (error) { alert(`Erro: ${error.message}`); setCreatingPlan(false); return }
+    setNewPlanName(''); setNewPlanPrice(''); setNewPlanMaxUsers('1'); setNewPlanMaxProfessionals('3'); setNewPlanMaxAppointments('100'); setNewPlanFeatures('');
     setCreatingPlan(false)
-
-    alert('Plano criado com sucesso!')
+    alert('Plano criado!')
     await loadMasterData()
   }
 
   function startEditingPlan(plan: SaasPlan) {
-    setEditingPlanId(plan.id)
-    setEditPlanName(plan.name)
-    setEditPlanPrice(String(plan.price))
-    setEditPlanMaxUsers(String(plan.max_users))
-    setEditPlanMaxProfessionals(String(plan.max_professionals))
-    setEditPlanMaxAppointments(String(plan.max_monthly_appointments))
+    setEditingPlanId(plan.id); setEditPlanName(plan.name); setEditPlanPrice(String(plan.price)); setEditPlanMaxUsers(String(plan.max_users)); setEditPlanMaxProfessionals(String(plan.max_professionals)); setEditPlanMaxAppointments(String(plan.max_monthly_appointments)); setEditPlanFeatures(plan.features || '')
   }
 
   async function savePlanEdits() {
-    if (!editingPlanId) return
-
-    if (!editPlanName.trim()) {
-      alert('Digite o nome do plano.')
-      return
-    }
-    if (Number(editPlanPrice) < 0 || editPlanPrice === '') {
-      alert('Digite um preço válido.')
-      return
-    }
-
+    if (!editingPlanId || !editPlanName.trim() || Number(editPlanPrice) < 0) return
     setSavingPlan(true)
-
-    const { error } = await supabase
-      .from('saas_plans')
-      .update({
-        name: editPlanName.trim(),
-        price: Number(editPlanPrice),
-        max_users: Number(editPlanMaxUsers),
-        max_professionals: Number(editPlanMaxProfessionals),
-        max_monthly_appointments: Number(editPlanMaxAppointments),
-      })
-      .eq('id', editingPlanId)
-
+    const { error } = await supabase.from('saas_plans').update({
+      name: editPlanName.trim(), price: Number(editPlanPrice), max_users: Number(editPlanMaxUsers),
+      max_professionals: Number(editPlanMaxProfessionals), max_monthly_appointments: Number(editPlanMaxAppointments),
+      features: editPlanFeatures.trim()
+    }).eq('id', editingPlanId)
     setSavingPlan(false)
-
-    if (error) {
-      alert(`Erro ao atualizar plano: ${error.message}`)
-      return
-    }
-
-    setPlans((prevPlans) =>
-      prevPlans.map((p) =>
-        p.id === editingPlanId
-          ? {
-              ...p,
-              name: editPlanName.trim(),
-              price: Number(editPlanPrice),
-              max_users: Number(editPlanMaxUsers),
-              max_professionals: Number(editPlanMaxProfessionals),
-              max_monthly_appointments: Number(editPlanMaxAppointments),
-            }
-          : p
-      )
-    )
-
+    if (error) return alert(`Erro: ${error.message}`)
     setEditingPlanId(null)
-    alert('Plano atualizado com sucesso!')
+    alert('Plano atualizado!')
     await loadMasterData()
   }
 
   async function togglePlanStatus(plan: SaasPlan) {
     const nextActiveState = !plan.active
-
-    const { error } = await supabase
-      .from('saas_plans')
-      .update({ active: nextActiveState })
-      .eq('id', plan.id)
-
-    if (error) {
-      alert(`Erro ao alternar status do plano: ${error.message}`)
-      return
-    }
-
-    setPlans((prevPlans) =>
-      prevPlans.map((p) => (p.id === plan.id ? { ...p, active: nextActiveState } : p))
-    )
+    const { error } = await supabase.from('saas_plans').update({ active: nextActiveState }).eq('id', plan.id)
+    if (error) return alert(`Erro: ${error.message}`)
+    setPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, active: nextActiveState } : p)))
   }
 
   async function deletePlan(planId: string) {
-    const isPlanInUse = subscriptions.some((sub) => sub.plan_id === planId)
-    if (isPlanInUse) {
-      alert('Não é possível excluir este plano porque existem empresas vinculadas a ele. Se deseja desativá-lo para novos cadastros, utilize a função "Inativar".')
-      return
-    }
-
-    if (!confirm('Tem certeza absoluta que deseja excluir este plano? Esta ação não pode ser desfeita.')) {
-      return
-    }
-
-    const { error } = await supabase
-      .from('saas_plans')
-      .delete()
-      .eq('id', planId)
-
-    if (error) {
-      alert(`Erro ao excluir plano: ${error.message}`)
-      return
-    }
-
-    setPlans((prevPlans) => prevPlans.filter((p) => p.id !== planId))
-    alert('Plano excluído com sucesso!')
+    if (subscriptions.some((s) => s.plan_id === planId)) return alert('Plano em uso!')
+    if (!confirm('Excluir plano?')) return
+    const { error } = await supabase.from('saas_plans').delete().eq('id', planId)
+    if (error) return alert(`Erro: ${error.message}`)
+    setPlans((prev) => prev.filter((p) => p.id !== planId))
   }
 
-  function getDateInputValue(value: string | null | undefined) {
-    if (!value) return ''
-    return value.split('T')[0]
-  }
+  function getDateInputValue(value: string | null | undefined) { return value ? value.split('T')[0] : '' }
 
-  async function saveCompanySubscription(
-    company: CompanyRow,
-    nextPlanId: string,
-    nextStatus: string,
-    nextTrialEndsAt: string,
-    nextSubscriptionEndsAt: string
-  ) {
-    if (!nextPlanId) {
-      alert('Selecione um plano.')
-      return
-    }
-    if (!nextStatus) {
-      alert('Selecione um status.')
-      return
-    }
-
-    setSavingCompanyId(company.id)
-
-    const { error } = await supabase
-      .from('company_subscriptions')
-      .upsert(
-        {
-          company_id: company.id,
-          plan_id: nextPlanId,
-          status: nextStatus,
-          trial_ends_at: nextTrialEndsAt ? `${nextTrialEndsAt}T23:59:59` : null,
-          subscription_starts_at:
-            company.subscription?.subscription_starts_at || new Date().toISOString(),
-          subscription_ends_at: nextSubscriptionEndsAt
-            ? `${nextSubscriptionEndsAt}T23:59:59`
-            : null,
-          blocked_at:
-            nextStatus === 'suspended'
-              ? company.subscription?.blocked_at || new Date().toISOString()
-              : null,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'company_id',
-        }
-      )
-
+  async function saveCompanySubscription(c: CompanyRow, pId: string, status: string, trialEnds: string, subEnds: string) {
+    if (!pId || !status) return alert('Selecione plano e status.')
+    setSavingCompanyId(c.id)
+    const { error } = await supabase.from('company_subscriptions').upsert({
+      company_id: c.id, plan_id: pId, status,
+      trial_ends_at: trialEnds ? `${trialEnds}T23:59:59` : null,
+      subscription_starts_at: c.subscription?.subscription_starts_at || new Date().toISOString(),
+      subscription_ends_at: subEnds ? `${subEnds}T23:59:59` : null,
+      blocked_at: status === 'suspended' ? c.subscription?.blocked_at || new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'company_id' })
     setSavingCompanyId('')
-
-    if (error) {
-      alert(`Erro ao salvar assinatura: ${error.message}`)
-      return
-    }
-
+    if (error) return alert(`Erro: ${error.message}`)
     await loadMasterData()
   }
 
-  async function updateCompanyStatus(company: CompanyRow, nextStatus: string) {
-    if (!company.subscription?.plan_id) {
-      alert('Esta empresa ainda não tem plano definido.')
-      return
-    }
-
-    await saveCompanySubscription(
-      company,
-      company.subscription.plan_id,
-      nextStatus,
-      getDateInputValue(company.subscription.trial_ends_at),
-      getDateInputValue(company.subscription.subscription_ends_at)
-    )
+  async function updateCompanyStatus(c: CompanyRow, status: string) {
+    if (!c.subscription?.plan_id) return alert('Sem plano definido.')
+    await saveCompanySubscription(c, c.subscription.plan_id, status, getDateInputValue(c.subscription.trial_ends_at), getDateInputValue(c.subscription.subscription_ends_at))
   }
 
-  async function resendInvite(company: CompanyRow) {
-    const ownerEmail = prompt(
-      `Digite o email do proprietário da empresa "${company.name}":`
-    )
-
-    if (!ownerEmail?.trim()) {
-      return
-    }
-  
-    const { data, error } = await supabase.functions.invoke(
-      'create-company-owner',
-      {
-        body: {
-          companyId: company.id,
-          companyName: company.name,
-          ownerEmail: ownerEmail.trim().toLowerCase(),
-        },
-      }
-    )
-  
-    if (error) {
-      alert(`Erro ao gerar convite: ${error.message || 'E-mail possivelmente já existente no sistema Auth.'}`)
-      return
-    }
-  
+  async function resendInvite(c: CompanyRow) {
+    const ownerEmail = prompt(`Email para convite:`)
+    if (!ownerEmail?.trim()) return
+    const { data, error } = await supabase.functions.invoke('create-company-owner', { body: { companyId: c.id, companyName: c.name, ownerEmail: ownerEmail.trim().toLowerCase() } })
+    if (error) return alert('Erro ao gerar convite.')
     if (data?.action_link) {
-      try {
-        await navigator.clipboard.writeText(data.action_link)
-      } catch (err) {}
-
-      window.prompt(
-        'Novo convite gerado!\n\nSe não copiou automaticamente, copie o link abaixo manualmente (Ctrl+C):',
-        data.action_link
-      )
-      return
+      try { await navigator.clipboard.writeText(data.action_link) } catch (e) {}
+      window.prompt('Link:', data.action_link)
     }
-  
-    alert('Aviso: O convite não pôde ser gerado. Certifique-se de que este e-mail não pertence a um usuário já ativo.')
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    window.location.href = '/login'
-  }
+  async function handleLogout() { await supabase.auth.signOut(); window.location.href = '/login' }
+  function formatCurrency(value: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) }
+  function formatDate(value: string | null) { if (!value) return '-'; const date = new Date(value); return new Date(date.getTime() + date.getTimezoneOffset() * 60000).toLocaleDateString('pt-BR') }
+  function getStatusLabel(s: string | null | undefined) { if (s === 'active') return 'Ativa'; if (s === 'trial') return 'Trial'; if (s === 'suspended') return 'Suspensa'; if (s === 'cancelled') return 'Cancelada'; return 'Sem assinatura' }
+  function getStatusClass(s: string | null | undefined) { if (s === 'active') return 'bg-green-500 text-black'; if (s === 'trial') return 'bg-blue-500 text-white'; if (s === 'suspended') return 'bg-yellow-500 text-black'; if (s === 'cancelled') return 'bg-red-500 text-white'; return 'bg-zinc-700 text-zinc-300' }
+  function translateAsaasStatus(s: string) { if (s === 'PENDING') return 'Pendente'; if (s === 'RECEIVED') return 'Paga'; if (s === 'OVERDUE') return 'Vencida'; return s }
 
-  function formatCurrency(value: number) {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value)
-  }
-
-  function formatDate(value: string | null) {
-    if (!value) return '-'
-    const date = new Date(value)
-    return new Date(date.getTime() + date.getTimezoneOffset() * 60000).toLocaleDateString('pt-BR')
-  }
-
-  function getStatusLabel(status: string | null | undefined) {
-    if (status === 'active') return 'Ativa'
-    if (status === 'trial') return 'Trial'
-    if (status === 'suspended') return 'Suspensa'
-    if (status === 'cancelled') return 'Cancelada'
-    return 'Sem assinatura'
-  }
-
-  function getStatusClass(status: string | null | undefined) {
-    if (status === 'active') return 'bg-green-500 text-black'
-    if (status === 'trial') return 'bg-blue-500 text-white'
-    if (status === 'suspended') return 'bg-yellow-500 text-black'
-    if (status === 'cancelled') return 'bg-red-500 text-white'
-    return 'bg-zinc-700 text-zinc-300'
-  }
-
-  function translateAsaasStatus(status: string) {
-    if (status === 'PENDING') return 'Pendente ⏳'
-    if (status === 'RECEIVED') return 'Paga ✅'
-    if (status === 'CONFIRMED') return 'Confirmada 💳'
-    if (status === 'OVERDUE') return 'Vencida 🚨'
-    if (status === 'REFUNDED') return 'Estornada ↩️'
-    return status
-  }
-
-  if (loading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-black text-white">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-8 py-6">
-          <p className="text-zinc-400">Carregando Dashboard Master Avançado...</p>
-        </div>
-      </main>
-    )
-  }
+  if (loading) return <main className="flex min-h-screen items-center justify-center bg-black text-white"><p>Carregando...</p></main>
 
   return (
     <main className="min-h-screen bg-black p-8 text-white relative">
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-zinc-500">Barber SaaS</p>
+            <p className="text-sm uppercase tracking-[0.25em] text-zinc-500">Salonix SaaS</p>
             <h1 className="mt-2 text-4xl font-bold">Dashboard Master</h1>
-            <p className="mt-2 text-zinc-400">Gestão centralizada e automação de faturamento do ecossistema.</p>
             <p className="mt-1 text-xs text-zinc-600">Acesso mestre: {currentEmail}</p>
           </div>
-
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={loadMasterData}
-              className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700"
-            >
-              Atualizar
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200"
-            >
-              Sair
-            </button>
+            <button onClick={loadMasterData} className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700">Atualizar</button>
+            <button onClick={handleLogout} className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200">Sair</button>
           </div>
         </header>
 
-        {/* KPIs Globais */}
-        <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
-            <p className="text-sm text-blue-300">Empresas</p>
-            <strong className="mt-2 block text-4xl">{companies.length}</strong>
-          </div>
-          <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5">
-            <p className="text-sm text-green-300">Ativas</p>
-            <strong className="mt-2 block text-4xl">{activeSubscriptions.length}</strong>
-          </div>
-          <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-5">
-            <p className="text-sm text-cyan-300">Trial</p>
-            <strong className="mt-2 block text-4xl">{trialSubscriptions.length}</strong>
-          </div>
-          <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5">
-            <p className="text-sm text-yellow-300">Suspensas</p>
-            <strong className="mt-2 block text-4xl">{suspendedSubscriptions.length}</strong>
-          </div>
-          <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5">
-            <p className="text-sm text-purple-300">MRR Estimado</p>
-            <strong className="mt-2 block text-3xl">{formatCurrency(estimatedMrr)}</strong>
-          </div>
+        <section className="mt-8 grid gap-4 md:grid-cols-5">
+          <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-5"><p className="text-sm text-blue-300">Empresas</p><strong className="mt-2 block text-4xl">{companies.length}</strong></div>
+          <div className="rounded-2xl border border-green-900 bg-green-950/30 p-5"><p className="text-sm text-green-300">Ativas</p><strong className="mt-2 block text-4xl">{activeSubscriptions.length}</strong></div>
+          <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-5"><p className="text-sm text-cyan-300">Trial</p><strong className="mt-2 block text-4xl">{trialSubscriptions.length}</strong></div>
+          <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-5"><p className="text-sm text-yellow-300">Suspensas</p><strong className="mt-2 block text-4xl">{suspendedSubscriptions.length}</strong></div>
+          <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-5"><p className="text-sm text-purple-300">MRR</p><strong className="mt-2 block text-3xl">{formatCurrency(estimatedMrr)}</strong></div>
         </section>
 
-        {/* Tabs */}
-        <div className="mt-8 flex gap-2 border-b border-zinc-800 pb-px">
-          <button
-            type="button"
-            onClick={() => setActiveTab('companies')}
-            className={`px-5 py-3 text-sm font-bold border-b-2 transition outline-none ${
-              activeTab === 'companies' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            Empresas e Assinaturas
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('plans')}
-            className={`px-5 py-3 text-sm font-bold border-b-2 transition outline-none ${
-              activeTab === 'plans' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            Configurar Planos SaaS
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('metrics')}
-            className={`px-5 py-3 text-sm font-bold border-b-2 transition outline-none ${
-              activeTab === 'metrics' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            Métricas Avançadas
-          </button>
+        <div className="mt-8 flex gap-2 border-b border-zinc-800 pb-px overflow-x-auto">
+          <button onClick={() => setActiveTab('companies')} className={`px-5 py-3 text-sm font-bold border-b-2 ${activeTab === 'companies' ? 'border-white text-white' : 'border-transparent text-zinc-500'}`}>Empresas</button>
+          <button onClick={() => setActiveTab('plans')} className={`px-5 py-3 text-sm font-bold border-b-2 ${activeTab === 'plans' ? 'border-white text-white' : 'border-transparent text-zinc-500'}`}>Planos</button>
+          <button onClick={() => setActiveTab('metrics')} className={`px-5 py-3 text-sm font-bold border-b-2 ${activeTab === 'metrics' ? 'border-white text-white' : 'border-transparent text-zinc-500'}`}>Métricas</button>
+          <button onClick={() => setActiveTab('landing')} className={`px-5 py-3 text-sm font-bold border-b-2 ${activeTab === 'landing' ? 'border-amber-500 text-amber-500' : 'border-transparent text-zinc-500'}`}>Landing Page</button>
         </div>
 
-        {/* ABA 1: EMPRESAS E ASSINATURAS */}
         {activeTab === 'companies' && (
           <div className="mt-6 space-y-6">
             <section className="rounded-2xl border border-blue-900 bg-blue-950/20 p-6">
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                <div>
-                  <h2 className="text-2xl font-bold">Nova empresa</h2>
-                  <p className="mt-1 text-sm text-blue-100">
-                    Provisiona a empresa no banco de dados local e cria automaticamente os contratos de assinatura recorrente no Asaas Gateway.
-                  </p>
-                </div>
-                <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">Asaas Active</span>
-              </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_1fr_0.7fr_auto]">
-                <input
-                  placeholder="Nome da empresa"
-                  className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
-                  value={newCompanyName}
-                  onChange={(event) => setNewCompanyName(event.target.value)}
-                />
-                <input
-                  type="email"
-                  placeholder="Email do proprietário"
-                  className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
-                  value={newOwnerEmail}
-                  onChange={(event) => setNewOwnerEmail(event.target.value)}
-                />
-                <select
-                  value={newCompanyPlanId}
-                  onChange={(event) => setNewCompanyPlanId(event.target.value)}
-                  className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
-                >
-                  <option value="">Selecione o plano</option>
-                  {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} — {formatCurrency(Number(plan.price || 0))}
-                    </option>
-                  ))}
+              <h2 className="text-xl font-bold mb-4">Nova empresa</h2>
+              <div className="grid gap-3 md:grid-cols-[1.2fr_1.2fr_1fr_0.7fr_auto]">
+                <input placeholder="Nome" className="rounded-xl border border-zinc-800 bg-black p-3" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)} />
+                <input placeholder="Email" className="rounded-xl border border-zinc-800 bg-black p-3" value={newOwnerEmail} onChange={(e) => setNewOwnerEmail(e.target.value)} />
+                <select value={newCompanyPlanId} onChange={(e) => setNewCompanyPlanId(e.target.value)} className="rounded-xl border border-zinc-800 bg-black p-3">
+                  <option value="">Plano</option>
+                  {plans.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                 </select>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="Dias de Trial"
-                  className="rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
-                  value={newCompanyTrialDays}
-                  onChange={(event) => setNewCompanyTrialDays(event.target.value)}
-                />
-                <button
-                  type="button"
-                  disabled={creatingCompany}
-                  onClick={createCompanyFromMaster}
-                  className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-                >
-                  {creatingCompany ? 'Processando...' : 'Criar empresa'}
-                </button>
+                <input type="number" placeholder="Trial" className="rounded-xl border border-zinc-800 bg-black p-3" value={newCompanyTrialDays} onChange={(e) => setNewCompanyTrialDays(e.target.value)} />
+                <button disabled={creatingCompany} onClick={createCompanyFromMaster} className="rounded-xl bg-white px-5 py-3 font-bold text-black">Criar</button>
               </div>
             </section>
+            
+            <section className="rounded-2xl border border-zinc-800 bg-[#0f0f11] p-6">
+              <input placeholder="Pesquisar..." className="w-full rounded-xl border border-zinc-800 bg-black p-3 mb-6" value={search} onChange={(e) => setSearch(e.target.value)} />
+              
+              <div className="flex flex-col">
+                {filteredCompanies.map((c) => (
+                  <div key={c.id} className="border-b border-zinc-800 py-6 flex flex-col xl:flex-row gap-6 items-start xl:items-center">
+                    
+                    <div className="w-full xl:w-[200px] flex-shrink-0">
+                      <h3 className="text-base font-bold text-white mb-1">{c.name}</h3>
+                      <p className="text-[10px] text-zinc-500 break-all leading-tight">{c.id}</p>
+                    </div>
 
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <h2 className="text-2xl font-bold">Empresas Cadastradas</h2>
-                <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
-                  {cancelledSubscriptions.length} cancelada(s)
-                </span>
-              </div>
+                    <div className="w-full xl:w-[150px] space-y-1 text-xs">
+                      <p><span className="text-zinc-400">Usuários:</span> <strong className="text-white">{c.metrics.users}</strong></p>
+                      <p><span className="text-zinc-400">Clientes:</span> <strong className="text-white">{c.metrics.clients}</strong></p>
+                      <p><span className="text-zinc-400">Agendamentos:</span> <strong className="text-white">{c.metrics.appointments}</strong></p>
+                      <p><span className="text-zinc-400">Profissionais:</span> <strong className="text-white">{c.metrics.professionals}</strong></p>
+                      <p><span className="text-zinc-400">Receita:</span> <strong className="text-green-500">{formatCurrency(c.metrics.revenue)}</strong></p>
+                    </div>
 
-              <div className="mt-5">
-                <input
-                  placeholder="Pesquisar por empresa, plano, status ou identificador ID..."
-                  className="w-full rounded-xl border border-zinc-800 bg-black p-3 text-white outline-none"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-
-              <div className="mt-6 overflow-x-auto">
-                <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-800 text-zinc-500">
-                      <th className="py-3 pr-4">Empresa</th>
-                      <th className="py-3 pr-4">Métricas de Uso</th>
-                      <th className="py-3 pr-4">Plano Atual</th>
-                      <th className="py-3 pr-4">Status Licença</th>
-                      <th className="py-3 pr-4">Trial Válido Até</th>
-                      <th className="py-3 pr-4">Data Vencimento</th>
-                      <th className="py-3 pr-4">Ações Base</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCompanies.map((company) => (
-                      <tr key={company.id} className="border-b border-zinc-800">
-                        <td className="py-4 pr-4">
-                          <strong className="block text-white">{company.name}</strong>
-                          <span className="text-xs text-zinc-600">{company.id}</span>
-                        </td>
-                        <td className="py-4 pr-4 text-zinc-300">
-                          <div className="grid gap-1 text-xs text-zinc-400">
-                            <span>Usuários: <strong className="text-white">{company.metrics.users}</strong></span>
-                            <span>Clientes: <strong className="text-white">{company.metrics.clients}</strong></span>
-                            <span>Agendamentos: <strong className="text-white">{company.metrics.appointments}</strong></span>
-                            <span>Profissionais: <strong className="text-white">{company.metrics.professionals}</strong></span>
-                            <span>Receita: <strong className="text-green-300">{formatCurrency(company.metrics.revenue)}</strong></span>
-                          </div>
-                        </td>
-                        <td className="py-4 pr-4 text-zinc-300">
-                          <select
-                            defaultValue={company.subscription?.plan_id || ''}
-                            id={`plan-${company.id}`}
-                            className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                          >
-                            <option value="">Selecione</option>
-                            {plans.map((plan) => (
-                              <option key={plan.id} value={plan.id}>{plan.name}</option>
-                            ))}
+                    <div className="flex-1 flex flex-wrap gap-3 items-center">
+                      <select id={`plan-${c.id}`} defaultValue={c.subscription?.plan_id || ''} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[130px]">
+                        <option value="">Plano...</option>
+                        {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      
+                      <div className="flex flex-col gap-2">
+                          <select id={`status-${c.id}`} defaultValue={c.subscription?.status || 'trial'} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[130px]">
+                              <option value="trial">Trial</option>
+                              <option value="active">Ativa</option>
+                              <option value="suspended">Suspensa</option>
+                              <option value="cancelled">Cancelada</option>
                           </select>
-                        </td>
-                        <td className="py-4 pr-4">
-                          <select
-                            defaultValue={company.subscription?.status || 'trial'}
-                            id={`status-${company.id}`}
-                            className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                          >
-                            <option value="trial">Trial</option>
-                            <option value="active">Ativa</option>
-                            <option value="suspended">Suspensa</option>
-                            <option value="cancelled">Cancelada</option>
-                          </select>
-                          <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getStatusClass(company.subscription?.status)}`}>
-                            {getStatusLabel(company.subscription?.status)}
+                          <span className={`inline-block px-3 py-1 text-center rounded-full text-xs font-bold w-[130px] ${getStatusClass(c.subscription?.status)}`}>
+                            {getStatusLabel(c.subscription?.status)}
                           </span>
-                        </td>
-                        <td className="py-4 pr-4 text-zinc-400">
-                          <input
-                            type="date"
-                            defaultValue={getDateInputValue(company.subscription?.trial_ends_at)}
-                            id={`trial-${company.id}`}
-                            className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                          />
-                        </td>
-                        <td className="py-4 pr-4 text-zinc-400">
-                          <input
-                            type="date"
-                            defaultValue={getDateInputValue(company.subscription?.subscription_ends_at)}
-                            id={`ends-${company.id}`}
-                            className="w-full rounded-lg border border-zinc-800 bg-black p-2 text-sm text-white outline-none"
-                          />
-                        </td>
-                        <td className="py-4 pr-4 text-zinc-400">
-                          <div className="space-y-2">
-                            <p className="text-xs text-zinc-500">Criada em {formatDate(company.created_at)}</p>
-                            
-                            <button
-                              type="button"
-                              onClick={() => openAsaasInvoicesModal(company.id)}
-                              className="w-full rounded-lg bg-blue-600 text-white border border-blue-500 px-3 py-2 text-xs font-bold transition hover:bg-blue-500"
-                            >
-                              Ver Faturas Asaas
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={savingCompanyId === company.id}
-                              onClick={() => {
-                                const planInput = document.getElementById(`plan-${company.id}`) as HTMLSelectElement | null
-                                const statusInput = document.getElementById(`status-${company.id}`) as HTMLSelectElement | null
-                                const trialInput = document.getElementById(`trial-${company.id}`) as HTMLInputElement | null
-                                const endsInput = document.getElementById(`ends-${company.id}`) as HTMLInputElement | null
-
-                                saveCompanySubscription(
-                                  company,
-                                  planInput?.value || '',
-                                  statusInput?.value || 'trial',
-                                  trialInput?.value || '',
-                                  endsInput?.value || ''
-                                )
-                              }}
-                              className="w-full rounded-lg bg-white px-3 py-2 text-xs font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-                            >
-                              {savingCompanyId === company.id ? 'Salvando...' : 'Salvar Alterações'}
-                            </button>
-                            
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => updateCompanyStatus(company, 'active')}
-                                className="rounded-lg bg-green-500/20 text-green-400 border border-green-900/40 py-1.5 text-[11px] font-bold transition hover:bg-green-500 hover:text-black"
-                              >
-                                Ativar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => updateCompanyStatus(company, 'suspended')}
-                                className="rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-900/40 py-1.5 text-[11px] font-bold transition hover:bg-yellow-500 hover:text-black"
-                              >
-                                Suspender
-                              </button>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => resendInvite(company)}
-                              className="w-full rounded-lg bg-zinc-800 text-zinc-300 px-3 py-1.5 text-xs font-bold transition hover:bg-zinc-700"
-                            >
-                              Reenviar convite auth
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* ABA 2: CONFIGURAÇÃO DE PLANOS */}
-        {activeTab === 'plans' && (
-          <div className="mt-6">
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="grid gap-6 lg:grid-cols-[350px_1fr]">
-                <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-4 h-fit">
-                  <h3 className="mb-3 text-sm font-bold text-zinc-300">Criar Novo Plano</h3>
-                  <div className="grid gap-3">
-                    <input type="text" placeholder="Nome do Plano" value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
-                    <input type="number" min={0} placeholder="Preço Mensal (R$)" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="mb-1 block text-xs text-zinc-400">Usuários</label>
-                        <input type="number" min={1} value={newPlanMaxUsers} onChange={(e) => setNewPlanMaxUsers(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
                       </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-zinc-400">Profissionais</label>
-                        <input type="number" min={1} value={newPlanMaxProfessionals} onChange={(e) => setNewPlanMaxProfessionals(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
+
+                      <input type="date" id={`trial-${c.id}`} defaultValue={getDateInputValue(c.subscription?.trial_ends_at)} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[140px]" title="Fim do Trial" />
+                      <input type="date" id={`sub-${c.id}`} defaultValue={getDateInputValue(c.subscription?.subscription_ends_at)} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[140px]" title="Fim da Assinatura" />
+                    </div>
+
+                    <div className="w-full xl:w-[250px] flex flex-col gap-2 flex-shrink-0">
+                      <p className="text-xs text-zinc-500 mb-1">Criada em {formatDate(c.created_at)}</p>
+                      <button onClick={() => openAsaasInvoicesModal(c.id)} className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500">Ver Faturas Asaas</button>
+                      <button onClick={() => {
+                          const pId = (document.getElementById(`plan-${c.id}`) as HTMLSelectElement).value;
+                          const status = (document.getElementById(`status-${c.id}`) as HTMLSelectElement).value;
+                          const trial = (document.getElementById(`trial-${c.id}`) as HTMLInputElement).value;
+                          const sub = (document.getElementById(`sub-${c.id}`) as HTMLInputElement).value;
+                          saveCompanySubscription(c, pId, status, trial, sub);
+                      }} className="w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200">Salvar Alterações</button>
+                      <div className="flex gap-2">
+                          <button onClick={() => updateCompanyStatus(c, 'active')} className="flex-1 rounded-lg bg-[#0f2e1b] border border-transparent px-2 py-2 text-xs font-bold text-[#4ade80] hover:bg-green-900/50 transition-colors">Ativar</button>
+                          <button onClick={() => updateCompanyStatus(c, 'suspended')} className="flex-1 rounded-lg bg-[#3f3114] border border-transparent px-2 py-2 text-xs font-bold text-[#fbbf24] hover:bg-yellow-900/50 transition-colors">Suspender</button>
                       </div>
+                      <button onClick={() => resendInvite(c)} className="w-full rounded-lg bg-[#27272a] px-4 py-2 text-xs font-bold text-white transition hover:bg-zinc-700">Reenviar convite auth</button>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-zinc-400">Agendamentos/Mês (0 = Ilimitado)</label>
-                      <input type="number" min={0} value={newPlanMaxAppointments} onChange={(e) => setNewPlanMaxAppointments(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white outline-none" />
-                    </div>
-                    <button type="button" disabled={creatingPlan} onClick={createPlan} className="mt-1 w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50">
-                      {creatingPlan ? 'Criando...' : 'Criar Plano'}
-                    </button>
+
                   </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 content-start">
-                  {plans.map((plan) => (
-                    <div key={plan.id} className="rounded-xl border border-zinc-800 bg-black/30 p-4 h-fit flex flex-col justify-between min-h-[240px]">
-                      {editingPlanId === plan.id ? (
-                        <div className="space-y-2 w-full">
-                          <input type="text" value={editPlanName} onChange={(e) => setEditPlanName(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
-                          <input type="number" min={0} value={editPlanPrice} onChange={(e) => setEditPlanPrice(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" />
-                          <div className="grid grid-cols-2 gap-2">
-                            <div><label className="text-[10px] text-zinc-500 block">Usuários</label><input type="number" min={1} value={editPlanMaxUsers} onChange={(e) => setEditPlanMaxUsers(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" /></div>
-                            <div><label className="text-[10px] text-zinc-500 block">Profissionais</label><input type="number" min={1} value={editPlanMaxProfessionals} onChange={(e) => setEditPlanMaxProfessionals(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" /></div>
-                          </div>
-                          <div><label className="text-[10px] text-zinc-500 block">Agendamentos/Mês</label><input type="number" min={0} value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white outline-none" /></div>
-                          <div className="flex gap-2 pt-2">
-                            <button type="button" disabled={savingPlan} onClick={savePlanEdits} className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white transition hover:bg-green-500">{savingPlan ? 'Salvando...' : 'Salvar'}</button>
-                            <button type="button" onClick={() => setEditingPlanId(null)} className="flex-1 rounded bg-zinc-700 px-2 py-1 text-xs font-bold text-zinc-300">Cancelar</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div>
-                            <div className="flex items-center justify-between gap-3">
-                              <strong>{plan.name}</strong>
-                              <span className={`rounded-full px-2 py-1 text-xs font-bold ${plan.active ? 'bg-green-500 text-black' : 'bg-zinc-700 text-zinc-300'}`}>{plan.active ? 'Ativo' : 'Inativo'}</span>
-                            </div>
-                            <p className="mt-2 text-2xl font-bold text-green-400">{formatCurrency(Number(plan.price || 0))}</p>
-                            <p className="mt-2 text-sm text-zinc-500">Usuários: {plan.max_users} · Profissionais: {plan.max_professionals}</p>
-                            <p className="mt-1 text-sm text-zinc-500">Agendamentos/mês: {plan.max_monthly_appointments === 0 ? 'Ilimitado' : plan.max_monthly_appointments}</p>
-                          </div>
-                          <div className="mt-4 space-y-2">
-                            <div className="flex gap-2">
-                              <button type="button" onClick={() => startEditingPlan(plan)} className="flex-1 rounded-lg bg-zinc-800 py-1.5 text-xs font-bold text-white transition hover:bg-zinc-700">Editar</button>
-                              <button type="button" onClick={() => togglePlanStatus(plan)} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${plan.active ? 'bg-zinc-800 text-red-400 hover:bg-zinc-700' : 'bg-green-600 text-white hover:bg-green-500'}`}>{plan.active ? 'Inativar' : 'Ativar'}</button>
-                            </div>
-                            <button type="button" onClick={() => deletePlan(plan.id)} className="w-full rounded-lg bg-red-950/40 text-red-400 border border-red-900/40 py-1 text-xs font-bold transition hover:bg-red-900 hover:text-white">Excluir Plano</button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
             </section>
           </div>
         )}
 
-        {/* ABA 3: MÉTRICAS AVANÇADAS */}
+        {/* ABA PLANOS */}
+        {activeTab === 'plans' && (
+          <div className="mt-6 grid gap-6 lg:grid-cols-[350px_1fr]">
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 h-fit">
+              <h3 className="mb-4 font-bold">Criar Plano</h3>
+              <div className="space-y-3">
+                <input placeholder="Nome" value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} className="w-full bg-black p-3 rounded-xl border border-zinc-800" />
+                <input type="number" placeholder="Preço" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} className="w-full bg-black p-3 rounded-xl border border-zinc-800" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="mb-1 block text-xs text-zinc-400">Usuários</label><input type="number" value={newPlanMaxUsers} onChange={(e) => setNewPlanMaxUsers(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
+                  <div><label className="mb-1 block text-xs text-zinc-400">Profissionais</label><input type="number" value={newPlanMaxProfessionals} onChange={(e) => setNewPlanMaxProfessionals(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
+                </div>
+                <div><label className="mb-1 block text-xs text-zinc-400">Agendamentos/Mês (0 = Ilimitado)</label><input type="number" value={newPlanMaxAppointments} onChange={(e) => setNewPlanMaxAppointments(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
+                <div>
+                  <label className="mb-1 block text-xs text-zinc-400 text-amber-500">Serviços Extras (separe por vírgula)</label>
+                  <textarea rows={2} placeholder="Ex: Gestão Financeira, Relatórios, Suporte VIP" value={newPlanFeatures} onChange={(e) => setNewPlanFeatures(e.target.value)} className="w-full rounded-lg border border-amber-900/50 bg-black p-2 text-sm text-white outline-none focus:border-amber-500" />
+                </div>
+                <button onClick={createPlan} className="w-full bg-white text-black py-3 rounded-xl font-bold">Salvar Plano</button>
+              </div>
+            </section>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {plans.map((p) => (
+                <div key={p.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 flex flex-col justify-between">
+                  {editingPlanId === p.id ? (
+                    <div className="space-y-2">
+                      <input type="text" value={editPlanName} onChange={(e) => setEditPlanName(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" />
+                      <input type="number" value={editPlanPrice} onChange={(e) => setEditPlanPrice(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><label className="text-[10px] text-zinc-500">Usuários</label><input type="number" value={editPlanMaxUsers} onChange={(e) => setEditPlanMaxUsers(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
+                        <div><label className="text-[10px] text-zinc-500">Profissionais</label><input type="number" value={editPlanMaxProfessionals} onChange={(e) => setEditPlanMaxProfessionals(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
+                      </div>
+                      <div><label className="text-[10px] text-zinc-500">Agendamentos/Mês</label><input type="number" value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
+                      <div><label className="text-[10px] text-amber-500">Serviços Extras (separe por vírgula)</label><textarea rows={2} value={editPlanFeatures} onChange={(e) => setEditPlanFeatures(e.target.value)} className="w-full rounded border border-amber-900/50 bg-black p-1 text-xs text-white outline-none focus:border-amber-500" /></div>
+                      <div className="flex gap-2 pt-2">
+                        <button onClick={savePlanEdits} className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white">Salvar</button>
+                        <button onClick={() => setEditingPlanId(null)} className="flex-1 rounded bg-zinc-700 px-2 py-1 text-xs font-bold text-white">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <strong>{p.name}</strong>
+                          <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${p.active ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800 text-zinc-400'}`}>{p.active ? 'Ativo' : 'Inativo'}</span>
+                        </div>
+                        <span className="text-xl font-bold text-green-400 block mt-1">{formatCurrency(p.price)}</span>
+                        <p className="text-xs text-zinc-400 mt-2">Até {p.max_users} usuários e {p.max_professionals} profissionais</p>
+                        {p.features && (
+                          <div className="mt-3 p-2 bg-black rounded-lg border border-zinc-800">
+                            <span className="text-[10px] text-amber-500 font-bold block mb-1">SERVIÇOS INCLUSOS:</span>
+                            <p className="text-xs text-zinc-300 leading-relaxed">{p.features}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <button onClick={() => startEditingPlan(p)} className="flex-1 bg-zinc-800 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-zinc-700 transition">Editar</button>
+                        <button onClick={() => togglePlanStatus(p)} className="flex-1 bg-zinc-800 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-zinc-700 transition text-amber-500">{p.active ? 'Inativar' : 'Ativar'}</button>
+                        <button onClick={() => deletePlan(p.id)} className="bg-red-900/30 text-red-400 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-900/50 transition">Excluir</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ABA MÉTRICAS */}
         {activeTab === 'metrics' && (
+          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <h2 className="text-xl font-bold">Métricas Detalhadas</h2>
+            <p className="mt-2 text-zinc-400">Usuários: {totalUsers} | Clientes: {totalClients} | Agendamentos: {totalAppointments}</p>
+          </div>
+        )}
+
+        {/* ABA LANDING PAGE */}
+        {activeTab === 'landing' && (
           <div className="mt-6 space-y-6">
-            <section className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Usuários totais integrados</p>
-                <strong className="mt-2 block text-3xl">{totalUsers}</strong>
+            <section className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-white">Editor da Landing Page</h2>
+                <div className="flex gap-3">
+                  <button onClick={() => window.open('/', 'MobilePreview', 'width=375,height=812,resizable=no,scrollbars=yes')} className="px-4 py-2 bg-zinc-800 text-xs rounded-lg font-bold">Ver Mobile</button>
+                  <button onClick={handleSaveLandingPage} disabled={savingLanding} className="px-4 py-2 bg-amber-500 text-black font-bold text-xs rounded-lg">{savingLanding ? 'Salvando...' : 'Publicar Alterações'}</button>
+                </div>
               </div>
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Clientes finais indexados</p>
-                <strong className="mt-2 block text-3xl">{totalClients}</strong>
-              </div>
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-                <p className="text-sm text-zinc-400">Agendamentos operados</p>
-                <strong className="mt-2 block text-3xl">{totalAppointments}</strong>
+              <div className="space-y-4">
+                <input placeholder="Título Principal" value={hero.title} onChange={(e) => setHero({ ...hero, title: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
+                <textarea rows={3} placeholder="Subtítulo" value={hero.subtitle} onChange={(e) => setHero({ ...hero, subtitle: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
+                <div className="grid md:grid-cols-2 gap-4">
+                  <input placeholder="Botão Call to Action" value={cta.text} onChange={(e) => setCta({ ...cta, text: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
+                  <input placeholder="Link (ex: /register)" value={cta.link} onChange={(e) => setCta({ ...cta, link: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
+                </div>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="text-xl font-bold mb-2">Distribuição de Empresas por Plano</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-5">
-                {plans.map((plan) => {
-                  const count = planDistribution[plan.id] || 0
-                  const percentage = companies.length > 0 ? ((count / companies.length) * 100).toFixed(1) : '0.0'
-                  return (
-                    <div key={plan.id} className="rounded-xl border border-zinc-800 bg-black/40 p-4 flex flex-col justify-between">
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-zinc-500 font-bold">{plan.name}</span>
-                        <strong className="block text-3xl mt-1 font-bold text-white">{count} <span className="text-sm font-normal text-zinc-400">empresa(s)</span></strong>
-                      </div>
-                      <div className="mt-4">
-                        <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
-                          <div className="bg-blue-500 h-full rounded-full" style={{ width: `${percentage}%` }} />
-                        </div>
-                        <span className="text-xs text-zinc-400 mt-1 block text-right">{percentage}% do SaaS</span>
-                      </div>
+            <section className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+              <h2 className="text-xl font-bold text-white mb-4">Benefícios</h2>
+              {benefits.map((b, i) => (
+                <div key={i} className="flex gap-4 mb-3 items-center">
+                  <div className="flex-1 space-y-2">
+                    <input placeholder="Título" value={b.title} onChange={(e) => { const nb = [...benefits]; nb[i].title = e.target.value; setBenefits(nb) }} className="w-full p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+                    <textarea placeholder="Descrição" value={b.description} onChange={(e) => { const nb = [...benefits]; nb[i].description = e.target.value; setBenefits(nb) }} className="w-full p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+                  </div>
+                  <button onClick={() => removeBenefit(i)} className="text-red-400 p-2"><Trash2 className="h-5 w-5" /></button>
+                </div>
+              ))}
+              <button onClick={addBenefit} className="w-full py-2 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm">Adicionar Benefício</button>
+            </section>
+
+            <section className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+              <h2 className="text-xl font-bold text-white mb-4">Depoimentos</h2>
+              {testimonials.map((t, i) => (
+                <div key={i} className="flex gap-4 mb-3 items-center">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex gap-2">
+                      <input placeholder="Nome" value={t.name} onChange={(e) => { const nt = [...testimonials]; nt[i].name = e.target.value; setTestimonials(nt) }} className="w-1/2 p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+                      <input placeholder="Cargo" value={t.role} onChange={(e) => { const nt = [...testimonials]; nt[i].role = e.target.value; setTestimonials(nt) }} className="w-1/2 p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
                     </div>
-                  )
-                })}
-              </div>
+                    <textarea placeholder="Depoimento" value={t.text} onChange={(e) => { const nt = [...testimonials]; nt[i].text = e.target.value; setTestimonials(nt) }} className="w-full p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+                  </div>
+                  <button onClick={() => removeTestimonial(i)} className="text-red-400 p-2"><Trash2 className="h-5 w-5" /></button>
+                </div>
+              ))}
+              <button onClick={addTestimonial} className="w-full py-2 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm">Adicionar Depoimento</button>
             </section>
           </div>
         )}
       </div>
 
-      {/* OVERLAY MODAL: VISUALIZAÇÃO DE FATURAS REAIS DO ASAAS */}
       {viewingInvoicesCompany && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl animate-fadeIn">
-            <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
-              <div>
-                <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Gateway de Faturamento</span>
-                <h3 className="text-xl font-bold text-white mt-0.5">Faturas Asaas — {viewingInvoicesCompany}</h3>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex justify-between mb-4">
+              <h3 className="font-bold">Faturas de {viewingInvoicesCompany}</h3>
+              <button onClick={() => setViewingInvoicesCompany(null)}>Fechar</button>
+            </div>
+            {loadingInvoices ? <p>Carregando...</p> : companyInvoices.map(inv => (
+              <div key={inv.id} className="bg-black p-3 mb-2 rounded flex justify-between">
+                <div><span>{formatCurrency(inv.value)}</span> <span className="text-xs ml-2 text-zinc-500">{inv.status}</span></div>
+                <a href={inv.invoiceUrl} target="_blank" className="text-blue-400 text-sm">Ver Asaas</a>
               </div>
-              <button 
-                type="button" 
-                onClick={() => setViewingInvoicesCompany(null)}
-                className="text-zinc-400 hover:text-white font-bold bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-xl text-sm transition"
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="mt-5 max-h-[380px] overflow-y-auto space-y-3 pr-1">
-              {loadingInvoices ? (
-                <p className="text-sm text-zinc-500 text-center py-8">Consultando api do Asaas em tempo real...</p>
-              ) : companyInvoices.length === 0 ? (
-                <p className="text-sm text-zinc-500 text-center py-8">Nenhuma fatura gerada para este cliente no Asaas.</p>
-              ) : (
-                companyInvoices.map((invoice) => (
-                  <div key={invoice.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-zinc-800 bg-black/40 p-4 rounded-xl">
-                    <div>
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-sm font-bold text-white">{formatCurrency(invoice.value)}</span>
-                        <span className="text-xs bg-zinc-800 px-2 py-0.5 rounded text-zinc-400">{invoice.billingType === 'UNDEFINED' ? 'A escolher' : invoice.billingType}</span>
-                      </div>
-                      <p className="text-xs text-zinc-500 mt-1">Vencimento: <strong className="text-zinc-300">{formatDate(invoice.dueDate)}</strong></p>
-                      <p className="text-[11px] text-zinc-600 mt-0.5">Ref ID: {invoice.id}</p>
-                    </div>
-
-                    <div className="flex items-center gap-3 justify-between sm:justify-end">
-                      <span className="text-xs font-bold text-zinc-300 bg-zinc-800 px-2.5 py-1 rounded-full">
-                        {translateAsaasStatus(invoice.status)}
-                      </span>
-                      
-                      <a 
-                        href={invoice.invoiceUrl} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-black transition hover:bg-zinc-200"
-                      >
-                        Link de Checkout ➡️
-                      </a>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="mt-6 border-t border-zinc-800 pt-4 flex justify-end">
-              <p className="text-[11px] text-zinc-600 text-left w-full">Ambiente Sandbox Asaas conectado.</p>
-            </div>
+            ))}
           </div>
         </div>
       )}

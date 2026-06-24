@@ -45,6 +45,9 @@ const chartColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
 export default function ReportsPage() {
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('Barber SaaS')
+  // Novo estado para controlar se a conta está em período de Trial
+  const [isTrial, setIsTrial] = useState(false)
+  
   const [expectedRevenue, setExpectedRevenue] = useState(0)
   const [realizedRevenue, setRealizedRevenue] = useState(0)
   const [appointmentsCount, setAppointmentsCount] = useState(0)
@@ -81,7 +84,6 @@ export default function ReportsPage() {
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;')
   }
-
 
   function escapeCsvValue(value: string | number | boolean | null | undefined) {
     const text = String(value ?? '')
@@ -148,7 +150,6 @@ export default function ReportsPage() {
     return profile.company_id
   }
 
-
   async function createAuditLog(description: string, metadata: Record<string, unknown> = {}) {
     const currentCompanyId = await ensureCompanyId()
 
@@ -168,9 +169,18 @@ export default function ReportsPage() {
     })
   }
 
-  async function exportClientsCsv() {
-    const currentCompanyId = await ensureCompanyId()
+  // Helper para verificar se está em trial antes de exportar (segurança extra)
+  function canExport() {
+    if (isTrial) {
+      alert('A exportação de dados é uma funcionalidade exclusiva para assinantes. Faça o upgrade do seu plano para liberar este recurso.')
+      return false
+    }
+    return true
+  }
 
+  async function exportClientsCsv() {
+    if (!canExport()) return
+    const currentCompanyId = await ensureCompanyId()
     if (!currentCompanyId) return
 
     const { data, error } = await supabase
@@ -204,8 +214,8 @@ export default function ReportsPage() {
   }
 
   async function exportServicesCsv() {
+    if (!canExport()) return
     const currentCompanyId = await ensureCompanyId()
-
     if (!currentCompanyId) return
 
     const { data, error } = await supabase
@@ -238,8 +248,8 @@ export default function ReportsPage() {
   }
 
   async function exportProductsCsv() {
+    if (!canExport()) return
     const currentCompanyId = await ensureCompanyId()
-
     if (!currentCompanyId) return
 
     const { data, error } = await supabase
@@ -274,8 +284,8 @@ export default function ReportsPage() {
   }
 
   async function exportFinancialCsv() {
+    if (!canExport()) return
     const currentCompanyId = await ensureCompanyId()
-
     if (!currentCompanyId) return
 
     const { data, error } = await supabase
@@ -311,8 +321,8 @@ export default function ReportsPage() {
   }
 
   async function exportAppointmentsCsv() {
+    if (!canExport()) return
     const currentCompanyId = await ensureCompanyId()
-
     if (!currentCompanyId) return
 
     const { data, error } = await supabase
@@ -427,165 +437,34 @@ export default function ReportsPage() {
           <title>Relatório Gerencial - ${escapePdfText(companyName)}</title>
 
           <style>
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              font-family: Arial, sans-serif;
-              color: #111827;
-              margin: 28px;
-              background: #ffffff;
-            }
-
-            h1 {
-              margin: 0;
-              font-size: 30px;
-              color: #111827;
-            }
-
-            h2 {
-              margin-top: 30px;
-              border-bottom: 2px solid #111827;
-              padding-bottom: 8px;
-              font-size: 20px;
-              color: #111827;
-            }
-
-            p {
-              color: #4b5563;
-              margin: 6px 0;
-            }
-
-            .header {
-              display: flex;
-              justify-content: space-between;
-              gap: 20px;
-              align-items: flex-start;
-              border-bottom: 3px solid #111827;
-              padding-bottom: 18px;
-              margin-bottom: 24px;
-            }
-
-            .company {
-              font-size: 16px;
-              font-weight: 700;
-              color: #374151;
-              margin-top: 6px;
-            }
-
-            .badge {
-              display: inline-block;
-              border-radius: 999px;
-              background: #111827;
-              color: #ffffff;
-              padding: 8px 12px;
-              font-size: 12px;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: .08em;
-            }
-
-            .grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-              margin-top: 16px;
-            }
-
-            .grid-4 {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 12px;
-              margin-top: 16px;
-            }
-
-            .card {
-              border: 1px solid #d1d5db;
-              border-radius: 12px;
-              padding: 14px;
-              min-height: 86px;
-            }
-
-            .label {
-              font-size: 12px;
-              color: #6b7280;
-              margin-bottom: 6px;
-              text-transform: uppercase;
-              letter-spacing: .04em;
-            }
-
-            .value {
-              font-size: 22px;
-              font-weight: 700;
-              color: #111827;
-            }
-
-            .green {
-              color: #047857;
-            }
-
-            .red {
-              color: #b91c1c;
-            }
-
-            .blue {
-              color: #1d4ed8;
-            }
-
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 12px;
-              page-break-inside: auto;
-            }
-
-            tr {
-              page-break-inside: avoid;
-              page-break-after: auto;
-            }
-
-            th,
-            td {
-              border: 1px solid #d1d5db;
-              padding: 10px;
-              text-align: left;
-              font-size: 13px;
-            }
-
-            th {
-              background: #f3f4f6;
-              color: #374151;
-              text-transform: uppercase;
-              letter-spacing: .04em;
-              font-size: 11px;
-            }
-
-            .footer {
-              margin-top: 34px;
-              padding-top: 14px;
-              border-top: 1px solid #d1d5db;
-              color: #6b7280;
-              font-size: 11px;
-              text-align: center;
-            }
-
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color: #111827; margin: 28px; background: #ffffff; }
+            h1 { margin: 0; font-size: 30px; color: #111827; }
+            h2 { margin-top: 30px; border-bottom: 2px solid #111827; padding-bottom: 8px; font-size: 20px; color: #111827; }
+            p { color: #4b5563; margin: 6px 0; }
+            .header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; border-bottom: 3px solid #111827; padding-bottom: 18px; margin-bottom: 24px; }
+            .company { font-size: 16px; font-weight: 700; color: #374151; margin-top: 6px; }
+            .badge { display: inline-block; border-radius: 999px; background: #111827; color: #ffffff; padding: 8px 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+            .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+            .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+            .card { border: 1px solid #d1d5db; border-radius: 12px; padding: 14px; min-height: 86px; }
+            .label { font-size: 12px; color: #6b7280; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+            .value { font-size: 22px; font-weight: 700; color: #111827; }
+            .green { color: #047857; }
+            .red { color: #b91c1c; }
+            .blue { color: #1d4ed8; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; font-size: 13px; }
+            th { background: #f3f4f6; color: #374151; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+            .footer { margin-top: 34px; padding-top: 14px; border-top: 1px solid #d1d5db; color: #6b7280; font-size: 11px; text-align: center; }
             @media print {
-              button {
-                display: none;
-              }
-
-              body {
-                margin: 18px;
-              }
-
-              h2 {
-                page-break-after: avoid;
-              }
+              button { display: none; }
+              body { margin: 18px; }
+              h2 { page-break-after: avoid; }
             }
           </style>
         </head>
-
         <body>
           <div class="header">
             <div>
@@ -594,119 +473,37 @@ export default function ReportsPage() {
               <p>Emitido em ${today}</p>
               <p>Período: últimos ${period} dia(s)</p>
             </div>
-
-            <div>
-              <span class="badge">Barber SaaS</span>
-            </div>
+            <div><span class="badge">Barber SaaS</span></div>
           </div>
 
           <h2>Resumo financeiro</h2>
-
           <div class="grid">
-            <div class="card">
-              <div class="label">Faturamento previsto</div>
-              <div class="value">${formatCurrency(expectedRevenue)}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Faturamento realizado</div>
-              <div class="value green">${formatCurrency(realizedRevenue)}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Agendamentos</div>
-              <div class="value">${appointmentsCount}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Concluídos</div>
-              <div class="value green">${completedCount}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Cancelados</div>
-              <div class="value red">${cancelledCount}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Comissão total do mês</div>
-              <div class="value blue">${formatCurrency(totalCommission)}</div>
-            </div>
+            <div class="card"><div class="label">Faturamento previsto</div><div class="value">${formatCurrency(expectedRevenue)}</div></div>
+            <div class="card"><div class="label">Faturamento realizado</div><div class="value green">${formatCurrency(realizedRevenue)}</div></div>
+            <div class="card"><div class="label">Agendamentos</div><div class="value">${appointmentsCount}</div></div>
+            <div class="card"><div class="label">Concluídos</div><div class="value green">${completedCount}</div></div>
+            <div class="card"><div class="label">Cancelados</div><div class="value red">${cancelledCount}</div></div>
+            <div class="card"><div class="label">Comissão total do mês</div><div class="value blue">${formatCurrency(totalCommission)}</div></div>
           </div>
 
           <h2>Formas de pagamento</h2>
-
           <div class="grid-4">
-            <div class="card">
-              <div class="label">Dinheiro</div>
-              <div class="value">${formatCurrency(cashRevenue)}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Pix</div>
-              <div class="value">${formatCurrency(pixRevenue)}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Crédito</div>
-              <div class="value">${formatCurrency(creditRevenue)}</div>
-            </div>
-
-            <div class="card">
-              <div class="label">Débito</div>
-              <div class="value">${formatCurrency(debitRevenue)}</div>
-            </div>
+            <div class="card"><div class="label">Dinheiro</div><div class="value">${formatCurrency(cashRevenue)}</div></div>
+            <div class="card"><div class="label">Pix</div><div class="value">${formatCurrency(pixRevenue)}</div></div>
+            <div class="card"><div class="label">Crédito</div><div class="value">${formatCurrency(creditRevenue)}</div></div>
+            <div class="card"><div class="label">Débito</div><div class="value">${formatCurrency(debitRevenue)}</div></div>
           </div>
 
           <h2>Relatório mensal de comissões</h2>
-
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Profissional</th>
-                <th>% Comissão</th>
-                <th>Faturamento</th>
-                <th>Comissão</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${commissionRows}
-            </tbody>
-          </table>
+          <table><thead><tr><th>#</th><th>Profissional</th><th>% Comissão</th><th>Faturamento</th><th>Comissão</th></tr></thead><tbody>${commissionRows}</tbody></table>
 
           <h2>Ranking de profissionais</h2>
-
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Profissional</th>
-                <th>Faturamento</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${professionalRows}
-            </tbody>
-          </table>
+          <table><thead><tr><th>#</th><th>Profissional</th><th>Faturamento</th></tr></thead><tbody>${professionalRows}</tbody></table>
 
           <h2>Serviços mais vendidos</h2>
-
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Serviço</th>
-                <th>Vendas</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${serviceRows}
-            </tbody>
-          </table>
-          <div class="footer">
-            Relatório gerado automaticamente pelo sistema em ${today}.
-          </div>
+          <table><thead><tr><th>#</th><th>Serviço</th><th>Vendas</th></tr></thead><tbody>${serviceRows}</tbody></table>
+          
+          <div class="footer">Relatório gerado automaticamente pelo sistema em ${today}.</div>
         </body>
       </html>
     `
@@ -752,6 +549,17 @@ export default function ReportsPage() {
     if (!profile?.company_id) return
 
     setCompanyId(profile.company_id)
+
+    // BUSCA O STATUS DA ASSINATURA PARA VER SE ESTÁ EM TRIAL
+    const { data: subscription } = await supabase
+      .from('company_subscriptions')
+      .select('status')
+      .eq('company_id', profile.company_id)
+      .maybeSingle()
+      
+    if (subscription?.status === 'trial') {
+      setIsTrial(true)
+    }
 
     const { data: settings } = await supabase
       .from('company_settings')
@@ -1079,7 +887,25 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-blue-900 bg-blue-950/20 p-6">
+      <div className="mt-8 rounded-2xl border border-blue-900 bg-blue-950/20 p-6 relative overflow-hidden">
+        {/* Camada de bloqueio visual se for Trial */}
+        {isTrial && (
+          <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-6 text-center">
+            <div className="bg-zinc-900 border border-amber-500/50 p-6 rounded-2xl max-w-lg shadow-[0_0_30px_rgba(245,158,11,0.1)]">
+              <h3 className="text-xl font-bold text-white mb-2">Exportação Bloqueada no Teste</h3>
+              <p className="text-zinc-400 text-sm mb-6">
+                A exportação de planilhas CSV é uma funcionalidade exclusiva para assinantes dos nossos planos. Faça o upgrade para organizar os seus dados no Excel ou Google Sheets.
+              </p>
+              <button 
+                className="bg-amber-500 text-black px-6 py-2.5 rounded-lg font-bold text-sm w-full hover:bg-amber-400 transition-colors"
+                onClick={() => window.location.href = '/dashboard/configuracoes'} // Ajuste o link para a sua tela de pagamento/assinatura
+              >
+                Fazer Upgrade Agora
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h2 className="text-2xl font-bold">
@@ -1100,7 +926,8 @@ export default function ReportsPage() {
           <button
             type="button"
             onClick={exportClientsCsv}
-            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+            disabled={isTrial}
+            className={`rounded-xl px-4 py-3 text-sm font-bold transition ${isTrial ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'}`}
           >
             Exportar clientes CSV
           </button>
@@ -1108,7 +935,8 @@ export default function ReportsPage() {
           <button
             type="button"
             onClick={exportServicesCsv}
-            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+            disabled={isTrial}
+            className={`rounded-xl px-4 py-3 text-sm font-bold transition ${isTrial ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'}`}
           >
             Exportar serviços CSV
           </button>
@@ -1116,7 +944,8 @@ export default function ReportsPage() {
           <button
             type="button"
             onClick={exportProductsCsv}
-            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+            disabled={isTrial}
+            className={`rounded-xl px-4 py-3 text-sm font-bold transition ${isTrial ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'}`}
           >
             Exportar produtos CSV
           </button>
@@ -1124,7 +953,8 @@ export default function ReportsPage() {
           <button
             type="button"
             onClick={exportFinancialCsv}
-            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+            disabled={isTrial}
+            className={`rounded-xl px-4 py-3 text-sm font-bold transition ${isTrial ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'}`}
           >
             Exportar financeiro CSV
           </button>
@@ -1132,7 +962,8 @@ export default function ReportsPage() {
           <button
             type="button"
             onClick={exportAppointmentsCsv}
-            className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
+            disabled={isTrial}
+            className={`rounded-xl px-4 py-3 text-sm font-bold transition ${isTrial ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'}`}
           >
             Exportar agendamentos CSV
           </button>
