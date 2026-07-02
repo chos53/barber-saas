@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Save, Image as ImageIcon, MessageSquare, Star, Link as LinkIcon, Settings, Smartphone, Plus, Trash2, Upload } from 'lucide-react'
+import MetricsChart from '@/components/MetricsChart'
 
 type Company = { id: string; created_at: string | null }
 type CompanySettings = { company_id: string; company_name: string | null }
@@ -19,6 +20,7 @@ export default function MasterPage() {
   const [companies, setCompanies] = useState<CompanyRow[]>([])
   const [plans, setPlans] = useState<SaasPlan[]>([])
   const [subscriptions, setSubscriptions] = useState<CompanySubscription[]>([])
+  const [metrics, setMetrics] = useState<any[]>([])
   const [currentEmail, setCurrentEmail] = useState('')
   const [savingCompanyId, setSavingCompanyId] = useState('')
   const [search, setSearch] = useState('')
@@ -76,9 +78,9 @@ export default function MasterPage() {
     return companies.filter((c) => c.name.toLowerCase().includes(norm) || c.id.toLowerCase().includes(norm) || String(c.subscription?.saas_plans?.name || '').toLowerCase().includes(norm) || String(c.subscription?.status || '').toLowerCase().includes(norm))
   }, [companies, search])
 
-  const totalUsers = useMemo(() => companies.reduce((sum, c) => sum + c.metrics.users, 0), [companies])
-  const totalClients = useMemo(() => companies.reduce((sum, c) => sum + c.metrics.clients, 0), [companies])
-  const totalAppointments = useMemo(() => companies.reduce((sum, c) => sum + c.metrics.appointments, 0), [companies])
+  const totalUsers = useMemo(() => companies.reduce((sum, c) => sum + (c.metrics?.users || 0), 0), [companies])
+  const totalClients = useMemo(() => companies.reduce((sum, c) => sum + (c.metrics?.clients || 0), 0), [companies])
+  const totalAppointments = useMemo(() => companies.reduce((sum, c) => sum + (c.metrics?.appointments || 0), 0), [companies])
 
   const addBenefit = () => setBenefits([...benefits, { title: '', description: '' }])
   const removeBenefit = (index: number) => setBenefits(benefits.filter((_, i) => i !== index))
@@ -111,7 +113,7 @@ export default function MasterPage() {
       }
 
       const [
-        companiesResult, companySettingsResult, subscriptionsResult, plansResult, profilesResult, clientsResult, appointmentsResult, professionalsResult, financialResult, landingResult
+        companiesResult, companySettingsResult, subscriptionsResult, plansResult, profilesResult, clientsResult, appointmentsResult, professionalsResult, financialResult, landingResult, metricsResult
       ] = await Promise.all([
         supabase.from('companies').select('id, created_at').order('created_at', { ascending: false }),
         supabase.from('company_settings').select('company_id, company_name'),
@@ -122,7 +124,8 @@ export default function MasterPage() {
         supabase.from('appointments').select('company_id'),
         supabase.from('professionals').select('company_id'),
         supabase.from('financial_transactions').select('company_id, type, amount, status'),
-        supabase.from('landing_settings').select('*').eq('id', 'default').single()
+        supabase.from('landing_settings').select('*').eq('id', 'default').single(),
+        supabase.from('saas_metrics').select('*').order('month', { ascending: true })
       ])
 
       if (companiesResult.error) throw companiesResult.error
@@ -185,6 +188,7 @@ export default function MasterPage() {
       setCompanies(rows)
       setSubscriptions(loadedSubscriptions)
       setPlans(loadedPlans)
+      setMetrics(metricsResult.data || [])
     } catch (err: any) {
       console.error('Erro:', err)
       alert(`Erro no carregamento: ${err.message || err}`)
@@ -261,7 +265,8 @@ export default function MasterPage() {
   }
 
   function startEditingPlan(plan: SaasPlan) {
-    setEditingPlanId(plan.id); setEditPlanName(plan.name); setEditPlanPrice(String(plan.price)); setEditPlanMaxUsers(String(plan.max_users)); setEditPlanMaxProfessionals(String(plan.max_professionals)); setEditPlanMaxAppointments(String(plan.max_monthly_appointments)); setEditPlanFeatures(plan.features || '')
+    setEditingPlanId(plan.id);
+    setEditPlanName(plan.name); setEditPlanPrice(String(plan.price)); setEditPlanMaxUsers(String(plan.max_users)); setEditPlanMaxProfessionals(String(plan.max_professionals)); setEditPlanMaxAppointments(String(plan.max_monthly_appointments)); setEditPlanFeatures(plan.features || '')
   }
 
   async function savePlanEdits() {
@@ -417,7 +422,7 @@ export default function MasterPage() {
                               <option value="cancelled">Cancelada</option>
                           </select>
                           <span className={`inline-block px-3 py-1 text-center rounded-full text-xs font-bold w-[130px] ${getStatusClass(c.subscription?.status)}`}>
-                            {getStatusLabel(c.subscription?.status)}
+                              {getStatusLabel(c.subscription?.status)}
                           </span>
                       </div>
 
@@ -520,7 +525,12 @@ export default function MasterPage() {
         {activeTab === 'metrics' && (
           <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
             <h2 className="text-xl font-bold">Métricas Detalhadas</h2>
-            <p className="mt-2 text-zinc-400">Usuários: {totalUsers} | Clientes: {totalClients} | Agendamentos: {totalAppointments}</p>
+            <div className="mt-6 h-[300px]">
+              <MetricsChart data={metrics} />
+            </div>
+            <p className="mt-6 text-zinc-400">
+              Usuários: {totalUsers} | Clientes: {totalClients} | Agendamentos: {totalAppointments}
+            </p>
           </div>
         )}
 
