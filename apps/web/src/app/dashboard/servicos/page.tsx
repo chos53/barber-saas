@@ -71,25 +71,80 @@ export default function ServicesPage() {
       alert('Digite o nome do serviço.')
       return
     }
-
-    const { error } = await supabase.from('services').insert({
-      company_id: companyId,
-      name: name.trim(),
-      duration_minutes: Number(duration),
-      price: Number(price),
-      active: true,
-    })
-
-    if (error) {
-      alert(error.message)
+    if (!companyId) {
+      alert('Erro: Empresa não identificada.')
       return
     }
 
-    setName('')
-    setDuration('30')
-    setPrice('0')
+    try {
+      // 1. TRAVA SaaS: Buscar plano e status de assinatura da empresa em tempo real
+      const { data: sub, error: subError } = await supabase
+        .from('company_subscriptions')
+        .select('status, trial_ends_at, subscription_ends_at, saas_plans ( max_services )')
+        .eq('company_id', companyId)
+        .single()
 
-    loadData()
+      if (subError) throw new Error('Não foi possível verificar seu plano SaaS.')
+
+      // 2. Calcular expiração real para AMBOS os cenários (Trial ou Ativa vencida)
+      const hoje = new Date()
+      const dataVencimento = sub?.status === 'trial' ? sub?.trial_ends_at : sub?.subscription_ends_at
+      
+      const assinaturaExpirada = dataVencimento && new Date(dataVencimento) < hoje
+      const statusEfetivo = assinaturaExpirada ? 'expired' : sub?.status
+
+      // Se estiver expirada, suspensa ou cancelada, bloqueia na hora!
+      if (statusEfetivo === 'expired' || statusEfetivo === 'suspended' || statusEfetivo === 'cancelled') {
+        alert('Sua assinatura ou período de testes está expirado/suspenso. Regularize seu plano no painel para gerenciar os serviços.')
+        return
+      }
+
+      // 3. Blindagem da relação do Plano
+      const dadosDoPlano = Array.isArray(sub?.saas_plans) ? sub.saas_plans[0] : sub?.saas_plans
+      const limitePlanoDefinido = dadosDoPlano?.max_services
+
+      const maxServicos = statusEfetivo === 'trial' 
+        ? 999 
+        : (limitePlanoDefinido === 0 ? 999 : (limitePlanoDefinido || 5))
+
+      // 4. Contagem por array de IDs
+      const { data: servicosAtivos, error: countError } = await supabase
+        .from('services')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('active', true)
+
+      if (countError) throw countError
+      const totalAtivos = servicosAtivos?.length || 0
+
+      // 5. Comparar contagem e aplicar o bloqueio rígido do Downgrade
+      if (totalAtivos >= maxServicos) {
+        alert(`Seu plano atual permite até ${limitePlanoDefinido || 5} serviços ativos, mas você possui ${totalAtivos}. Inative serviços antigos ou faça um upgrade para continuar!`)
+        return
+      }
+
+      // Se passou em todas as travas, executa o INSERT normalmente
+      const { error } = await supabase.from('services').insert({
+        company_id: companyId,
+        name: name.trim(),
+        duration_minutes: Number(duration),
+        price: Number(price),
+        active: true,
+      })
+
+      if (error) {
+        alert(error.message)
+        return
+      }
+
+      setName('')
+      setDuration('30')
+      setPrice('0')
+
+      loadData()
+    } catch (err: any) {
+      alert(`Falha na validação de limites: ${err.message || err}`)
+    }
   }
 
   function startEditing(service: Service) {

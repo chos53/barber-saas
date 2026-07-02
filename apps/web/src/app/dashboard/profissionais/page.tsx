@@ -238,7 +238,6 @@ export default function ProfessionalsPage() {
       )
   }, [professionals])
 
-
   const totalMonthlyAppointments = useMemo(() => {
     return professionals.reduce(
       (sum, professional) => sum + Number(professional.monthly_appointments || 0),
@@ -328,142 +327,47 @@ export default function ProfessionalsPage() {
       <html>
         <head>
           <title>Relatório Profissional</title>
-
           <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 32px;
-              color: #111827;
-            }
-
-            h1 {
-              margin-bottom: 24px;
-            }
-
-            .card {
-              border: 1px solid #d1d5db;
-              border-radius: 12px;
-              padding: 20px;
-              margin-top: 16px;
-            }
-
-            .label {
-              color: #6b7280;
-              font-size: 12px;
-              margin-bottom: 6px;
-            }
-
-            .value {
-              font-size: 24px;
-              font-weight: bold;
-            }
+            body { font-family: Arial, sans-serif; padding: 32px; color: #111827; }
+            h1 { margin-bottom: 24px; }
+            .card { border: 1px solid #d1d5db; border-radius: 12px; padding: 20px; margin-top: 16px; }
+            .label { color: #6b7280; font-size: 12px; margin-bottom: 6px; }
+            .value { font-size: 24px; font-weight: bold; }
           </style>
         </head>
-
         <body>
           <h1>Relatório de Comissão</h1>
-
           <p><strong>Profissional:</strong> ${professional.name}</p>
           <p><strong>Função:</strong> ${professional.role || '-'}</p>
           <p><strong>Emitido em:</strong> ${today}</p>
           <p><strong>Mês de referência:</strong> ${monthReference}</p>
           <p><strong>Ranking:</strong> ${professional.ranking_position || '-'}º lugar</p>
-
-          <div class="card">
-            <div class="label">Atendimentos no mês</div>
-            <div class="value">
-              ${professional.monthly_appointments || 0}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Meta mensal</div>
-            <div class="value">
-              ${formatCurrency(professional.monthly_goal || 0)}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Meta atingida</div>
-            <div class="value">
-              ${formatPercentage(professional.goal_percentage || 0)}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Comissão (%)</div>
-            <div class="value">
-              ${Number(professional.commission_percentage || 0).toFixed(2)}%
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Faturamento no mês</div>
-            <div class="value">
-              ${formatCurrency(professional.monthly_revenue || 0)}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Comissão estimada</div>
-            <div class="value">
-              ${formatCurrency(professional.monthly_commission || 0)}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Saldo da empresa após comissão</div>
-            <div class="value">
-              ${formatCurrency(
-                Number(professional.monthly_revenue || 0) -
-                  Number(professional.monthly_commission || 0)
-              )}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Status do pagamento</div>
-            <div class="value">
-              ${getCommissionStatusLabel(professional.commission_payment_status)}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="label">Data do pagamento</div>
-            <div class="value">
-              ${professional.commission_payment_date
-                ? new Date(professional.commission_payment_date).toLocaleDateString('pt-BR')
-                : '-'}
-            </div>
-          </div>
+          <div class="card"><div class="label">Atendimentos no mês</div><div class="value">${professional.monthly_appointments || 0}</div></div>
+          <div class="card"><div class="label">Meta mensal</div><div class="value">${formatCurrency(professional.monthly_goal || 0)}</div></div>
+          <div class="card"><div class="label">Meta atingida</div><div class="value">${formatPercentage(professional.goal_percentage || 0)}</div></div>
+          <div class="card"><div class="label">Comissão (%)</div><div class="value">${Number(professional.commission_percentage || 0).toFixed(2)}%</div></div>
+          <div class="card"><div class="label">Faturamento no mês</div><div class="value">${formatCurrency(professional.monthly_revenue || 0)}</div></div>
+          <div class="card"><div class="label">Comissão estimada</div><div class="value">${formatCurrency(professional.monthly_commission || 0)}</div></div>
+          <div class="card"><div class="label">Saldo da empresa após comissão</div><div class="value">${formatCurrency(Number(professional.monthly_revenue || 0) - Number(professional.monthly_commission || 0))}</div></div>
+          <div class="card"><div class="label">Status do pagamento</div><div class="value">${getCommissionStatusLabel(professional.commission_payment_status)}</div></div>
+          <div class="card"><div class="label">Data do pagamento</div><div class="value">${professional.commission_payment_date ? new Date(professional.commission_payment_date).toLocaleDateString('pt-BR') : '-'}</div></div>
         </body>
       </html>
     `
 
     const printWindow = window.open('', '_blank')
-
     if (!printWindow) {
       alert('Não foi possível abrir o PDF.')
       return
     }
-
     printWindow.document.write(html)
     printWindow.document.close()
-
-    setTimeout(() => {
-      printWindow.print()
-    }, 300)
+    setTimeout(() => { printWindow.print() }, 300)
   }
 
   async function loadData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      window.location.href = '/login'
-      return
-    }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { window.location.href = '/login'; return }
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -472,21 +376,15 @@ export default function ProfessionalsPage() {
       .single()
 
     if (!profile?.company_id) return
-
     setCompanyId(profile.company_id)
 
     const { data: professionalsData, error: professionalsError } = await supabase
       .from('professionals')
-      .select(
-        'id, name, phone, email, role, active, photo_url, commission_percentage, monthly_goal'
-      )
+      .select('id, name, phone, email, role, active, photo_url, commission_percentage, monthly_goal')
       .eq('company_id', profile.company_id)
       .order('created_at', { ascending: false })
 
-    if (professionalsError) {
-      alert(professionalsError.message)
-      return
-    }
+    if (professionalsError) { alert(professionalsError.message); return }
 
     const { data: servicesData } = await supabase
       .from('services')
@@ -505,10 +403,7 @@ export default function ProfessionalsPage() {
     const profilesByEmail = new Map(
       (companyProfiles || [])
         .filter((companyProfile) => companyProfile.email)
-        .map((companyProfile) => [
-          String(companyProfile.email).toLowerCase(),
-          companyProfile,
-        ])
+        .map((companyProfile) => [String(companyProfile.email).toLowerCase(), companyProfile])
     )
 
     const monthStartDate = getCurrentMonthStartDate()
@@ -533,17 +428,7 @@ export default function ProfessionalsPage() {
 
     const { data: comandaItemsData } = await supabase
       .from('comanda_items')
-      .select(`
-        id,
-        professional_id,
-        quantity,
-        price,
-        comandas!inner (
-          company_id,
-          status,
-          closed_at
-        )
-      `)
+      .select(`id, professional_id, quantity, price, comandas!inner ( company_id, status, closed_at )`)
       .eq('comandas.company_id', profile.company_id)
       .eq('comandas.status', 'closed')
       .gte('comandas.closed_at', `${monthStartDate}T00:00:00`)
@@ -555,256 +440,175 @@ export default function ProfessionalsPage() {
       .eq('company_id', profile.company_id)
       .eq('month_reference', monthReference)
 
-    const commissionPaymentsMap = new Map(
-      (commissionPaymentsData || []).map((payment) => [
-        payment.professional_id,
-        payment,
-      ])
-    )
-
+    const commissionPaymentsMap = new Map((commissionPaymentsData || []).map((payment) => [payment.professional_id, payment]))
     const revenueByProfessional = new Map<string, number>()
     const appointmentsByProfessional = new Map<string, number>()
 
     ;(serviceIncomeTransactionsData || []).forEach((transaction) => {
       if (!transaction.professional_id) return
-
-      revenueByProfessional.set(
-        transaction.professional_id,
-        (revenueByProfessional.get(transaction.professional_id) || 0) +
-          Number(transaction.amount || 0)
-      )
-
-      appointmentsByProfessional.set(
-        transaction.professional_id,
-        (appointmentsByProfessional.get(transaction.professional_id) || 0) + 1
-      )
+      revenueByProfessional.set(transaction.professional_id, (revenueByProfessional.get(transaction.professional_id) || 0) + Number(transaction.amount || 0))
+      appointmentsByProfessional.set(transaction.professional_id, (appointmentsByProfessional.get(transaction.professional_id) || 0) + 1)
     })
 
     ;(comandaItemsData || []).forEach((item) => {
       if (!item.professional_id) return
-
-      const itemTotal =
-        Number(item.price || 0) * Number(item.quantity || 1)
-
-      revenueByProfessional.set(
-        item.professional_id,
-        (revenueByProfessional.get(item.professional_id) || 0) + itemTotal
-      )
-
-      appointmentsByProfessional.set(
-        item.professional_id,
-        (appointmentsByProfessional.get(item.professional_id) || 0) +
-          Number(item.quantity || 1)
-      )
+      const itemTotal = Number(item.price || 0) * Number(item.quantity || 1)
+      revenueByProfessional.set(item.professional_id, (revenueByProfessional.get(item.professional_id) || 0) + itemTotal)
+      appointmentsByProfessional.set(item.professional_id, (appointmentsByProfessional.get(item.professional_id) || 0) + Number(item.quantity || 1))
     })
 
     const rankingByProfessional = new Map<string, number>()
-
     ;[...(professionalsData || [])]
       .sort((a, b) => {
-        const revenueDifference =
-          Number(revenueByProfessional.get(b.id) || 0) -
-          Number(revenueByProfessional.get(a.id) || 0)
-
+        const revenueDifference = Number(revenueByProfessional.get(b.id) || 0) - Number(revenueByProfessional.get(a.id) || 0)
         if (revenueDifference !== 0) return revenueDifference
-
         return a.name.localeCompare(b.name)
       })
-      .forEach((professional, index) => {
-        rankingByProfessional.set(professional.id, index + 1)
-      })
+      .forEach((professional, index) => { rankingByProfessional.set(professional.id, index + 1) })
 
-    const normalizedProfessionals = (professionalsData || []).map(
-      (professional) => {
+    const normalizedProfessionals = (professionalsData || []).map((professional) => {
         const percentage = Number(professional.commission_percentage || 0)
         const monthlyGoal = Number(professional.monthly_goal || 0)
         const monthlyRevenue = revenueByProfessional.get(professional.id) || 0
         const monthlyAppointments = appointmentsByProfessional.get(professional.id) || 0
-        const goalPercentage =
-          monthlyGoal > 0 ? Math.min(100, (monthlyRevenue / monthlyGoal) * 100) : 0
-
+        const goalPercentage = monthlyGoal > 0 ? Math.min(100, (monthlyRevenue / monthlyGoal) * 100) : 0
         const payment = commissionPaymentsMap.get(professional.id)
-        const linkedProfile = professional.email
-          ? profilesByEmail.get(String(professional.email).toLowerCase())
-          : null
+        const linkedProfile = professional.email ? profilesByEmail.get(String(professional.email).toLowerCase()) : null
 
         return {
           ...professional,
           commission_percentage: percentage,
           monthly_goal: monthlyGoal,
-          user_access_role: linkedProfile
-            ? normalizeUserAccessRole(linkedProfile.role)
-            : null,
+          user_access_role: linkedProfile ? normalizeUserAccessRole(linkedProfile.role) : null,
           monthly_revenue: monthlyRevenue,
           monthly_commission: (monthlyRevenue * percentage) / 100,
           monthly_appointments: monthlyAppointments,
           goal_percentage: goalPercentage,
           ranking_position: rankingByProfessional.get(professional.id) || 0,
-          commission_payment_status:
-            payment?.status === 'paid'
-              ? 'paid'
-              : payment?.status === 'released'
-                ? 'released'
-                : 'pending',
+          commission_payment_status: payment?.status === 'paid' ? 'paid' : payment?.status === 'released' ? 'released' : 'pending',
           commission_payment_date: payment?.paid_at || null,
         }
-      }
-    )
+      })
 
-  setProfessionals(normalizedProfessionals as any)
+    setProfessionals(normalizedProfessionals as any)
   }
 
   async function uploadPhoto() {
     if (!photoFile) return ''
-
     const fileExt = photoFile.name.split('.').pop()
     const fileName = `${uuidv4()}.${fileExt}`
-
-    const { error } = await supabase.storage
-      .from('professionals')
-      .upload(fileName, photoFile)
-
-    if (error) {
-      alert(error.message)
-      return ''
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from('professionals').getPublicUrl(fileName)
-
+    const { error } = await supabase.storage.from('professionals').upload(fileName, photoFile)
+    if (error) { alert(error.message); return '' }
+    const { data: { publicUrl } } = supabase.storage.from('professionals').getPublicUrl(fileName)
     return publicUrl
   }
 
   async function createProfessional() {
-    if (!name.trim()) {
-      alert('Digite o nome do profissional.')
-      return
+    if (!name.trim()) { alert('Digite o nome do profissional.'); return }
+    if (!companyId) { alert('Erro: Empresa não identificada.'); return }
+
+    try {
+      // 1. TRAVA SaaS: Buscar plano e status de assinatura da empresa em tempo real
+      const { data: sub, error: subError } = await supabase
+        .from('company_subscriptions')
+        .select('status, trial_ends_at, saas_plans ( max_professionals )')
+        .eq('company_id', companyId)
+        .single()
+
+      if (subError) throw new Error('Não foi possível verificar seu plano SaaS.')
+
+      // 2. Calcular o status efetivo considerando expiração do trial
+      const trialExpirou = sub?.status === 'trial' && sub?.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
+      const statusEfetivo = trialExpirou ? 'expired' : sub?.status
+
+      if (statusEfetivo === 'expired' || statusEfetivo === 'suspended' || statusEfetivo === 'cancelled') {
+        alert('Sua assinatura está suspensa ou expirada. Regularize seu plano para voltar a cadastrar profissionais.')
+        return
+      }
+
+      // 3. Definir o limite real (Modo Trial dinâmico: liberado, senão aplica limite do plano real)
+      const maxProfissionais = statusEfetivo === 'trial' ? 999 : (sub?.saas_plans?.max_professionals || 3)
+
+      // 4. Contar quantos profissionais ATIVOS já existem cadastrados no banco
+      const { count: totalAtivos, error: countError } = await supabase
+        .from('professionals')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('active', true)
+
+      if (countError) throw countError
+
+      // 5. Comparar contagem e barrar se exceder o limite do plano contratado (Bloqueio do downgrade)
+      if (totalAtivos >= maxProfissionais) {
+        alert(`Seu plano atual permite até ${maxProfissionais} profissionais ativos, mas você possui ${totalAtivos}. Inative profissionais antigos ou faça um upgrade para continuar!`)
+        return
+      }
+
+      // Se passou nas travas, continua o upload e salvamento
+      let photoUrl = ''
+      if (photoFile) { photoUrl = await uploadPhoto() }
+
+      const { error } = await supabase.from('professionals').insert({
+        company_id: companyId,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        role: role.trim(),
+        commission_percentage: Number(commissionPercentage || 0),
+        monthly_goal: Number(monthlyGoal || 0),
+        photo_url: photoUrl || null,
+        active: true,
+      })
+
+      if (error) { alert(error.message); return }
+
+      if (email.trim()) {
+        await updateProfilePermissionByEmail(email.trim(), userAccessRole, false)
+      }
+
+      setName(''); setPhone(''); setEmail(''); setRole(''); setUserAccessRole('barber')
+      setCommissionPercentage('40'); setMonthlyGoal('0'); setPhotoFile(null); setPhotoPreview('')
+      loadData()
+    } catch (err: any) {
+      alert(`Falha na validação de limites: ${err.message || err}`)
     }
-
-    let photoUrl = ''
-
-    if (photoFile) {
-      photoUrl = await uploadPhoto()
-    }
-
-    const { error } = await supabase.from('professionals').insert({
-      company_id: companyId,
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      role: role.trim(),
-      commission_percentage: Number(commissionPercentage || 0),
-      monthly_goal: Number(monthlyGoal || 0),
-      photo_url: photoUrl || null,
-      active: true,
-    })
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    if (email.trim()) {
-      await updateProfilePermissionByEmail(email.trim(), userAccessRole, false)
-    }
-
-    setName('')
-    setPhone('')
-    setEmail('')
-    setRole('')
-    setUserAccessRole('barber')
-    setCommissionPercentage('40')
-    setMonthlyGoal('0')
-    setPhotoFile(null)
-    setPhotoPreview('')
-
-    loadData()
   }
 
   function startEditing(professional: Professional) {
-    setEditingProfessionalId(professional.id)
-    setEditName(professional.name)
-    setEditPhone(professional.phone || '')
-    setEditEmail(professional.email || '')
-    setEditRole(professional.role || '')
-    setEditUserAccessRole(
-      normalizeUserAccessRole(professional.user_access_role || 'barber')
-    )
-    setEditCommissionPercentage(String(professional.commission_percentage ?? 0))
-    setEditMonthlyGoal(String(professional.monthly_goal ?? 0))
+    setEditingProfessionalId(professional.id); setEditName(professional.name)
+    setEditPhone(professional.phone || ''); setEditEmail(professional.email || ''); setEditRole(professional.role || '')
+    setEditUserAccessRole(normalizeUserAccessRole(professional.user_access_role || 'barber'))
+    setEditCommissionPercentage(String(professional.commission_percentage ?? 0)); setEditMonthlyGoal(String(professional.monthly_goal ?? 0))
     setPhotoPreview(professional.photo_url || '')
   }
   
   function cancelEditing() {
-    setEditingProfessionalId('')
-    setEditName('')
-    setEditPhone('')
-    setEditEmail('')
-    setEditRole('')
-    setEditUserAccessRole('barber')
-    setEditCommissionPercentage('40')
-    setEditMonthlyGoal('0')
-    setPhotoFile(null)
-    setPhotoPreview('')
+    setEditingProfessionalId(''); setEditName(''); setEditPhone(''); setEditEmail(''); setEditRole('')
+    setEditUserAccessRole('barber'); setEditCommissionPercentage('40'); setEditMonthlyGoal('0'); setPhotoFile(null); setPhotoPreview('')
   }
 
   async function updateProfessional(professionalId: string) {
-    if (!editName.trim()) {
-      alert('Digite o nome do profissional.')
-      return
-    }
-
+    if (!editName.trim()) { alert('Digite o nome do profissional.'); return }
     let photoUrl = photoPreview
-
-    if (photoFile) {
-      photoUrl = await uploadPhoto()
-    }
+    if (photoFile) { photoUrl = await uploadPhoto() }
 
     const { error } = await supabase
       .from('professionals')
       .update({
-        name: editName.trim(),
-        phone: editPhone.trim(),
-        email: editEmail.trim(),
-        role: editRole.trim(),
-        commission_percentage: Number(editCommissionPercentage || 0),
-        monthly_goal: Number(editMonthlyGoal || 0),
-        photo_url: photoUrl || null,
+        name: editName.trim(), phone: editPhone.trim(), email: editEmail.trim(), role: editRole.trim(),
+        commission_percentage: Number(editCommissionPercentage || 0), monthly_goal: Number(editMonthlyGoal || 0), photo_url: photoUrl || null,
       })
       .eq('id', professionalId)
 
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    if (editEmail.trim()) {
-      await updateProfilePermissionByEmail(
-        editEmail.trim(),
-        editUserAccessRole,
-        false
-      )
-    }
-
+    if (error) { alert(error.message); return }
+    if (editEmail.trim()) { await updateProfilePermissionByEmail(editEmail.trim(), editUserAccessRole, false) }
     cancelEditing()
     loadData()
   }
 
-  async function updateProfilePermissionByEmail(
-    userEmail: string,
-    accessRole: UserAccessRole,
-    showSuccessAlert = true
-  ) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return false
-    }
-
-    if (!userEmail.trim()) {
-      alert('Informe o e-mail do usuário para alterar a permissão.')
-      return false
-    }
+  async function updateProfilePermissionByEmail(userEmail: string, accessRole: UserAccessRole, showSuccessAlert = true) {
+    if (!companyId) { alert('Empresa não identificada.'); return false }
+    if (!userEmail.trim()) { alert('Informe o e-mail do usuário para alterar a permissão.'); return false }
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -813,20 +617,12 @@ export default function ProfessionalsPage() {
       .eq('email', userEmail.trim().toLowerCase())
       .maybeSingle()
 
-    if (profileError) {
-      alert(
-        `Erro ao buscar usuário. Verifique se a tabela profiles possui a coluna email. Detalhe: ${profileError.message}`
-      )
-      return false
-    }
+    if (profileError) { alert(`Erro ao buscar usuário: ${profileError.message}`); return false }
 
     if (!profile) {
       if (showSuccessAlert) {
-        alert(
-          'Nenhum usuário do sistema foi encontrado com este e-mail. O profissional foi salvo, mas a permissão só será aplicada quando existir um usuário com esse e-mail em profiles.'
-        )
+        alert('Nenhum usuário do sistema foi encontrado com este e-mail. O profissional foi salvo, mas a permissão só será aplicada quando existir um usuário com esse e-mail em profiles.')
       }
-
       return false
     }
 
@@ -836,825 +632,304 @@ export default function ProfessionalsPage() {
       .eq('id', profile.id)
       .eq('company_id', companyId)
 
-    if (error) {
-      alert(`Erro ao atualizar permissão: ${error.message}`)
-      return false
-    }
-
-    if (showSuccessAlert) {
-      alert('Permissão atualizada com sucesso.')
-    }
-
+    if (error) { alert(`Erro ao atualizar permissão: ${error.message}`); return false }
+    if (showSuccessAlert) { alert('Permissão actualizada com sucesso.') }
     return true
   }
 
   async function updateProfessionalAccessRole(professional: Professional) {
-    if (!professional.email) {
-      alert('Este profissional não possui e-mail vinculado.')
-      return
-    }
-
+    if (!professional.email) { alert('Este profissional não possui e-mail vinculado.'); return }
     setSavingPermissionId(professional.id)
-
-    const updated = await updateProfilePermissionByEmail(
-      professional.email,
-      normalizeUserAccessRole(professional.user_access_role || 'barber')
-    )
-
+    const updated = await updateProfilePermissionByEmail(professional.email, normalizeUserAccessRole(professional.user_access_role || 'barber'))
     setSavingPermissionId('')
-
-    if (updated) {
-      loadData()
-    }
+    if (updated) { loadData() }
   }
 
   async function toggleProfessionalActive(professionalId: string, active: boolean) {
-    const { error } = await supabase
-      .from('professionals')
-      .update({ active: !active })
-      .eq('id', professionalId)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
+    const { error } = await supabase.from('professionals').update({ active: !active }).eq('id', professionalId)
+    if (error) { alert(error.message); return }
     loadData()
   }
 
   async function releaseCommission(professional: Professional) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return
-    }
-
-    if (!professional.monthly_commission || professional.monthly_commission <= 0) {
-      alert('Este profissional não possui comissão para liberar no mês.')
-      return
-    }
-
-    const confirmRelease = window.confirm(
-      `Liberar comissão de ${professional.name} para pagamento?`
-    )
-
+    if (!companyId) { alert('Empresa não identificada.'); return }
+    if (!professional.monthly_commission || professional.monthly_commission <= 0) { alert('Este profissional não possui comissão para liberar no mês.'); return }
+    const confirmRelease = window.confirm(`Liberar comissão de ${professional.name} para pagamento?`)
     if (!confirmRelease) return
 
     setPayingCommissionId(professional.id)
-
-    const { error } = await supabase
-      .from('professional_commission_payments')
-      .upsert(
-        {
-        company_id: companyId,
-        professional_id: professional.id,
-        month_reference: monthReference,
-        commission_amount: Number(professional.monthly_commission || 0),
-        revenue_amount: Number(professional.monthly_revenue || 0),
-        status: 'released',
-        paid_at: null,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'company_id,professional_id,month_reference',
-      }
-      )
+    const { error } = await supabase.from('professional_commission_payments').upsert({
+        company_id: companyId, professional_id: professional.id, month_reference: monthReference,
+        commission_amount: Number(professional.monthly_commission || 0), revenue_amount: Number(professional.monthly_revenue || 0),
+        status: 'released', paid_at: null, updated_at: new Date().toISOString(),
+      }, { onConflict: 'company_id,professional_id,month_reference' })
 
     setPayingCommissionId('')
-
-    if (error) {
-      alert(`Erro ao liberar comissão: ${error.message}`)
-      return
-    }
-
+    if (error) { alert(`Erro ao liberar comissão: ${error.message}`); return }
     loadData()
   }
 
   async function markCommissionAsPaid(professional: Professional) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return
-    }
-
-    if (!professional.monthly_commission || professional.monthly_commission <= 0) {
-      alert('Este profissional não possui comissão para pagar no mês.')
-      return
-    }
-
-    const confirmPayment = window.confirm(
-      `Marcar comissão de ${professional.name} como paga?`
-    )
-
+    if (!companyId) { alert('Empresa não identificada.'); return }
+    if (!professional.monthly_commission || professional.monthly_commission <= 0) { alert('Este profissional não possui comissão para pagar no mês.'); return }
+    const confirmPayment = window.confirm(`Marcar comissão de ${professional.name} como paga?`)
     if (!confirmPayment) return
 
     setPayingCommissionId(professional.id)
-
-    const { error } = await supabase
-      .from('professional_commission_payments')
-      .upsert(
-        {
-        company_id: companyId,
-        professional_id: professional.id,
-        month_reference: monthReference,
-        commission_amount: Number(professional.monthly_commission || 0),
-        revenue_amount: Number(professional.monthly_revenue || 0),
-        status: 'paid',
-        paid_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'company_id,professional_id,month_reference',
-      }
-      )
+    const { error } = await supabase.from('professional_commission_payments').upsert({
+        company_id: companyId, professional_id: professional.id, month_reference: monthReference,
+        commission_amount: Number(professional.monthly_commission || 0), revenue_amount: Number(professional.monthly_revenue || 0),
+        status: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }, { onConflict: 'company_id,professional_id,month_reference' })
 
     setPayingCommissionId('')
-
-    if (error) {
-      alert(`Erro ao marcar comissão como paga: ${error.message}`)
-      return
-    }
-
+    if (error) { alert(`Erro ao marcar comissão como paga: ${error.message}`); return }
     loadData()
   }
 
   async function reopenCommissionPayment(professional: Professional) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return
-    }
-
-    const confirmReopen = window.confirm(
-      `Reabrir pagamento da comissão de ${professional.name}?`
-    )
-
+    if (!companyId) { alert('Empresa não identificada.'); return }
+    const confirmReopen = window.confirm(`Reabrir pagamento da comissão de ${professional.name}?`)
     if (!confirmReopen) return
 
     setPayingCommissionId(professional.id)
-
-    const { error } = await supabase
-      .from('professional_commission_payments')
-      .upsert(
-        {
-        company_id: companyId,
-        professional_id: professional.id,
-        month_reference: monthReference,
-        commission_amount: Number(professional.monthly_commission || 0),
-        revenue_amount: Number(professional.monthly_revenue || 0),
-        status: 'pending',
-        paid_at: null,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'company_id,professional_id,month_reference',
-      }
-      )
+    const { error } = await supabase.from('professional_commission_payments').upsert({
+        company_id: companyId, professional_id: professional.id, month_reference: monthReference,
+        commission_amount: Number(professional.monthly_commission || 0), revenue_amount: Number(professional.monthly_revenue || 0),
+        status: 'pending', paid_at: null, updated_at: new Date().toISOString(),
+      }, { onConflict: 'company_id,professional_id,month_reference' })
 
     setPayingCommissionId('')
-
-    if (error) {
-      alert(`Erro ao reabrir comissão: ${error.message}`)
-      return
-    }
-
+    if (error) { alert(`Erro ao reabrir comissão: ${error.message}`); return }
     loadData()
   }
 
-
   async function openSpecialties(professional: Professional) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return
-    }
-
+    if (!companyId) { alert('Empresa não identificada.'); return }
     setSpecialtyProfessional(professional)
-
-    const { data, error } = await supabase
-      .from('professional_services')
-      .select('service_id')
-      .eq('company_id', companyId)
-      .eq('professional_id', professional.id)
-
-    if (error) {
-      alert(`Erro ao carregar especialidades: ${error.message}`)
-      setSelectedSpecialtyServiceIds([])
-      return
-    }
-
-    setSelectedSpecialtyServiceIds(
-      (data || []).map((item) => String(item.service_id))
-    )
+    const { data, error } = await supabase.from('professional_services').select('service_id').eq('company_id', companyId).eq('professional_id', professional.id)
+    if (error) { alert(`Erro ao carregar especialidades: ${error.message}`); setSelectedSpecialtyServiceIds([]); return }
+    setSelectedSpecialtyServiceIds((data || []).map((item) => String(item.service_id)))
   }
 
   function toggleSpecialtyService(serviceId: string) {
-    setSelectedSpecialtyServiceIds((currentIds) =>
-      currentIds.includes(serviceId)
-        ? currentIds.filter((id) => id !== serviceId)
-        : [...currentIds, serviceId]
-    )
+    setSelectedSpecialtyServiceIds((currentIds) => currentIds.includes(serviceId) ? currentIds.filter((id) => id !== serviceId) : [...currentIds, serviceId])
   }
 
   async function saveProfessionalSpecialties() {
-    if (!companyId || !specialtyProfessional) {
-      alert('Empresa ou profissional não identificado.')
-      return
-    }
-
+    if (!companyId || !specialtyProfessional) { alert('Empresa ou profissional não identificado.'); return }
     setSavingSpecialties(true)
 
-    const { error: deleteError } = await supabase
-      .from('professional_services')
-      .delete()
-      .eq('company_id', companyId)
-      .eq('professional_id', specialtyProfessional.id)
-
-    if (deleteError) {
-      setSavingSpecialties(false)
-      alert(`Erro ao atualizar especialidades: ${deleteError.message}`)
-      return
-    }
+    const { error: deleteError } = await supabase.from('professional_services').delete().eq('company_id', companyId).eq('professional_id', specialtyProfessional.id)
+    if (deleteError) { setSavingSpecialties(false); alert(`Erro ao atualizar especialidades: ${deleteError.message}`); return }
 
     if (selectedSpecialtyServiceIds.length > 0) {
-      const payload = selectedSpecialtyServiceIds.map((serviceId) => ({
-        company_id: companyId,
-        professional_id: specialtyProfessional.id,
-        service_id: serviceId,
-      }))
-
-      const { error: insertError } = await supabase
-        .from('professional_services')
-        .insert(payload)
-
-      if (insertError) {
-        setSavingSpecialties(false)
-        alert(`Erro ao salvar especialidades: ${insertError.message}`)
-        return
-      }
+      const payload = selectedSpecialtyServiceIds.map((serviceId) => ({ company_id: companyId, professional_id: specialtyProfessional.id, service_id: serviceId }))
+      const { error: insertError } = await supabase.from('professional_services').insert(payload)
+      if (insertError) { setSavingSpecialties(false); alert(`Erro ao salvar especialidades: ${insertError.message}`); return }
     }
 
-    setSavingSpecialties(false)
-    alert('Especialidades salvas com sucesso.')
-    setSpecialtyProfessional(null)
+    setSavingSpecialties(false); alert('Especialidades salvas com sucesso.'); setSpecialtyProfessional(null)
   }
 
   function getBlockTypeLabel(type: ProfessionalBlock['block_type']) {
-    switch (type) {
-      case 'vacation':
-        return 'Férias'
-      case 'temporary':
-        return 'Bloqueio temporário'
-      default:
-        return 'Folga'
-    }
+    if (type === 'vacation') return 'Férias'
+    if (type === 'temporary') return 'Bloqueio temporário'
+    return 'Folga'
   }
 
   async function openBlocks(professional: Professional) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return
-    }
+    if (!companyId) { alert('Empresa não identificada.'); return }
+    setBlockProfessional(professional); setBlockType('day_off'); setBlockStartDate(''); setBlockEndDate(''); setBlockReason('')
 
-    setBlockProfessional(professional)
-    setBlockType('day_off')
-    setBlockStartDate('')
-    setBlockEndDate('')
-    setBlockReason('')
-
-    const { data, error } = await supabase
-      .from('professional_time_blocks')
-      .select('id, professional_id, start_date, end_date, reason, block_type')
-      .eq('company_id', companyId)
-      .eq('professional_id', professional.id)
-      .order('start_date', { ascending: true })
-
-    if (error) {
-      alert(`Erro ao carregar bloqueios: ${error.message}`)
-      setProfessionalBlocks([])
-      return
-    }
-
+    const { data, error } = await supabase.from('professional_time_blocks').select('id, professional_id, start_date, end_date, reason, block_type').eq('company_id', companyId).eq('professional_id', professional.id).order('start_date', { ascending: true })
+    if (error) { alert(`Erro ao carregar bloqueios: ${error.message}`); setProfessionalBlocks([]); return }
     setProfessionalBlocks((data || []) as ProfessionalBlock[])
   }
 
   async function saveProfessionalBlock() {
-    if (!companyId || !blockProfessional) {
-      alert('Empresa ou profissional não identificado.')
-      return
-    }
-
-    if (!blockStartDate || !blockEndDate) {
-      alert('Informe a data inicial e final do bloqueio.')
-      return
-    }
-
-    if (blockStartDate > blockEndDate) {
-      alert('A data inicial não pode ser maior que a data final.')
-      return
-    }
-
+    if (!companyId || !blockProfessional) { alert('Empresa ou profissional não identificado.'); return }
+    if (!blockStartDate || !blockEndDate) { alert('Informe a data inicial e final do bloqueio.'); return }
+    if (blockStartDate > blockEndDate) { alert('A data inicial não pode ser maior que a data final.'); return }
     setSavingBlock(true)
 
-    const { data: existingAppointments, error: appointmentsError } =
-      await supabase
+    const { data: existingAppointments, error: appointmentsError } = await supabase
         .from('appointments')
-        .select(`
-          id,
-          appointment_date,
-          appointment_time,
-          status,
-          clients (
-            name
-          ),
-          services (
-            name
-          )
-        `)
-        .eq('company_id', companyId)
-        .eq('professional_id', blockProfessional.id)
-        .gte('appointment_date', blockStartDate)
-        .lte('appointment_date', blockEndDate)
-        .not('status', 'in', '("cancelled","completed","no_show")')
-        .limit(5)
+        .select(`id, appointment_date, appointment_time, status, clients ( name ), services ( name )`)
+        .eq('company_id', companyId).eq('professional_id', blockProfessional.id)
+        .gte('appointment_date', blockStartDate).lte('appointment_date', blockEndDate)
+        .not('status', 'in', '("cancelled","completed","no_show")').limit(5)
 
-    if (appointmentsError) {
-      setSavingBlock(false)
-      alert(`Erro ao verificar agendamentos: ${appointmentsError.message}`)
-      return
-    }
+    if (appointmentsError) { setSavingBlock(false); alert(`Erro ao verificar agendamentos: ${appointmentsError.message}`); return }
 
     if (existingAppointments && existingAppointments.length > 0) {
       setSavingBlock(false)
+      const appointmentsText = existingAppointments.map((appointment: any) => {
+          const clientName = Array.isArray(appointment.clients) ? appointment.clients[0]?.name : appointment.clients?.name
+          const serviceName = Array.isArray(appointment.services) ? appointment.services[0]?.name : appointment.services?.name
+          return `${appointment.appointment_date} às ${String(appointment.appointment_time).slice(0, 5)} - ${clientName || 'Cliente'} - ${serviceName || 'Serviço'}`
+        }).join('\n')
 
-      const appointmentsText = existingAppointments
-        .map((appointment: any) => {
-          const clientName = Array.isArray(appointment.clients)
-            ? appointment.clients[0]?.name
-            : appointment.clients?.name
-
-          const serviceName = Array.isArray(appointment.services)
-            ? appointment.services[0]?.name
-            : appointment.services?.name
-
-          return `${appointment.appointment_date} às ${String(
-            appointment.appointment_time
-          ).slice(0, 5)} - ${clientName || 'Cliente'} - ${
-            serviceName || 'Serviço'
-          }`
-        })
-        .join('\n')
-
-      alert(
-        `Não foi possível criar este bloqueio. Existem agendamentos ativos neste período.\n\nReagende, cancele ou conclua estes horários antes de cadastrar a folga/férias:\n\n${appointmentsText}`
-      )
+      alert(`Não foi possível criar este bloqueio. Existem agendamentos ativos neste período.\n\nReagende, cancele ou conclua estes horários antes de cadastrar a folga/férias:\n\n${appointmentsText}`)
       return
     }
 
-    const { error } = await supabase
-      .from('professional_time_blocks')
-      .insert({
-        company_id: companyId,
-        professional_id: blockProfessional.id,
-        start_date: blockStartDate,
-        end_date: blockEndDate,
-        block_type: blockType,
-        reason: blockReason.trim() || null,
-      })
-
+    const { error } = await supabase.from('professional_time_blocks').insert({ company_id: companyId, professional_id: blockProfessional.id, start_date: blockStartDate, end_date: blockEndDate, block_type: blockType, reason: blockReason.trim() || null })
     setSavingBlock(false)
+    if (error) { alert(`Erro ao salvar bloqueio: ${error.message}`); return }
 
-    if (error) {
-      alert(`Erro ao salvar bloqueio: ${error.message}`)
-      return
-    }
-
-    setBlockType('day_off')
-    setBlockStartDate('')
-    setBlockEndDate('')
-    setBlockReason('')
-
+    setBlockType('day_off'); setBlockStartDate(''); setBlockEndDate(''); setBlockReason('')
     await openBlocks(blockProfessional)
   }
 
   async function deleteProfessionalBlock(blockId: string) {
     const confirmDelete = window.confirm('Remover este bloqueio?')
-
     if (!confirmDelete) return
-
     setDeletingBlockId(blockId)
 
-    const { error } = await supabase
-      .from('professional_time_blocks')
-      .delete()
-      .eq('id', blockId)
-      .eq('company_id', companyId)
-
+    const { error } = await supabase.from('professional_time_blocks').delete().eq('id', blockId).eq('company_id', companyId)
     setDeletingBlockId('')
-
-    if (error) {
-      alert(`Erro ao remover bloqueio: ${error.message}`)
-      return
-    }
-
-    if (blockProfessional) {
-      await openBlocks(blockProfessional)
-    }
+    if (error) { alert(`Erro ao remover bloqueio: ${error.message}`); return }
+    if (blockProfessional) { await openBlocks(blockProfessional) }
   }
 
   async function openAvailability(professional: Professional) {
-    if (!companyId) {
-      alert('Empresa não identificada.')
-      return
-    }
-
+    if (!companyId) { alert('Empresa não identificada.'); return }
     setAvailabilityProfessional(professional)
 
-    const { data, error } = await supabase
-      .from('professional_availability')
-      .select('weekday, available, pause_start_time, pause_end_time')
-      .eq('company_id', companyId)
-      .eq('professional_id', professional.id)
+    const { data, error } = await supabase.from('professional_availability').select('weekday, available, pause_start_time, pause_end_time').eq('company_id', companyId).eq('professional_id', professional.id)
+    if (error) { alert(`Erro ao carregar disponibilidade: ${error.message}`); setAvailabilityRows(defaultAvailability); return }
 
-    if (error) {
-      alert(`Erro ao carregar disponibilidade: ${error.message}`)
-      setAvailabilityRows(defaultAvailability)
-      return
-    }
-
-    const availabilityMap = new Map(
-      (data || []).map((item) => [Number(item.weekday), item])
-    )
-
-    setAvailabilityRows(
-      defaultAvailability.map((defaultRow) => {
+    const availabilityMap = new Map((data || []).map((item) => [Number(item.weekday), item]))
+    setAvailabilityRows(defaultAvailability.map((defaultRow) => {
         const savedRow = availabilityMap.get(defaultRow.weekday)
-
         return {
           weekday: defaultRow.weekday,
           available: savedRow?.available ?? defaultRow.available,
-          pause_start_time: savedRow?.pause_start_time
-            ? String(savedRow.pause_start_time).slice(0, 5)
-            : '',
-          pause_end_time: savedRow?.pause_end_time
-            ? String(savedRow.pause_end_time).slice(0, 5)
-            : '',
+          pause_start_time: savedRow?.pause_start_time ? String(savedRow.pause_start_time).slice(0, 5) : '',
+          pause_end_time: savedRow?.pause_end_time ? String(savedRow.pause_end_time).slice(0, 5) : '',
         }
-      })
-    )
+      }))
   }
 
-  function updateAvailabilityRow(
-    weekday: number,
-    field: keyof ProfessionalAvailability,
-    value: string | boolean
-  ) {
-    setAvailabilityRows((currentRows) =>
-      currentRows.map((row) =>
-        row.weekday === weekday
-          ? {
-              ...row,
-              [field]: value,
-            }
-          : row
-      )
-    )
+  function updateAvailabilityRow(weekday: number, field: keyof ProfessionalAvailability, value: string | boolean) {
+    setAvailabilityRows((currentRows) => currentRows.map((row) => row.weekday === weekday ? { ...row, [field]: value } : row))
   }
 
   async function saveProfessionalAvailability() {
-    if (!companyId || !availabilityProfessional) {
-      alert('Empresa ou profissional não identificado.')
-      return
-    }
-
-    const invalidPause = availabilityRows.find(
-      (row) =>
-        row.available &&
-        row.pause_start_time &&
-        row.pause_end_time &&
-        row.pause_start_time >= row.pause_end_time
-    )
+    if (!companyId || !availabilityProfessional) { alert('Empresa ou profissional não identificado.'); return }
+    const invalidPause = availabilityRows.find((row) => row.available && row.pause_start_time && row.pause_end_time && row.pause_start_time >= row.pause_end_time)
 
     if (invalidPause) {
-      const dayName =
-        weekDays.find((day) => day.value === invalidPause.weekday)?.label ||
-        'dia selecionado'
-
+      const dayName = weekDays.find((day) => day.value === invalidPause.weekday)?.label || 'dia selecionado'
       alert(`A pausa de ${dayName} está inválida. O início deve ser menor que o fim.`)
       return
     }
 
     setSavingAvailability(true)
-
     const payload = availabilityRows.map((row) => ({
-      company_id: companyId,
-      professional_id: availabilityProfessional.id,
-      weekday: row.weekday,
-      available: row.available,
-      pause_start_time:
-        row.available && row.pause_start_time ? row.pause_start_time : null,
-      pause_end_time:
-        row.available && row.pause_end_time ? row.pause_end_time : null,
+      company_id: companyId, professional_id: availabilityProfessional.id, weekday: row.weekday, available: row.available,
+      pause_start_time: row.available && row.pause_start_time ? row.pause_start_time : null,
+      pause_end_time: row.available && row.pause_end_time ? row.pause_end_time : null,
       updated_at: new Date().toISOString(),
     }))
 
-    const { error } = await supabase
-      .from('professional_availability')
-      .upsert(payload, {
-        onConflict: 'company_id,professional_id,weekday',
-      })
-
+    const { error } = await supabase.from('professional_availability').upsert(payload, { onConflict: 'company_id,professional_id,weekday' })
     setSavingAvailability(false)
+    if (error) { alert(`Erro ao salvar disponibilidade: ${error.message}`); return }
 
-    if (error) {
-      alert(`Erro ao salvar disponibilidade: ${error.message}`)
-      return
-    }
-
-    alert('Disponibilidade semanal salva com sucesso.')
-    setAvailabilityProfessional(null)
+    alert('Disponibilidade semanal salva com sucesso.'); setAvailabilityProfessional(null)
   }
 
   return (
     <div>
       <h1 className="text-4xl font-bold">Profissionais</h1>
-
-      <p className="mt-2 text-zinc-400">
-        Cadastro, edição, permissões e comissão mensal da equipe para salões,
-        barbearias, estética, esmalterias e negócios de beleza.
-      </p>
+      <p className="mt-2 text-zinc-400">Cadastro, edição, permissões e comissão mensal da equipe para salões, barbearias, estética, esmalterias e negócios de beleza.</p>
 
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-        <label className="mb-2 block text-sm text-zinc-400">
-          Mês de referência da comissão
-        </label>
-
-        <input
-          type="month"
-          value={monthReference}
-          onChange={(event) => setMonthReference(event.target.value)}
-          className="rounded-lg bg-zinc-800 p-3 text-white outline-none"
-        />
-
-        <p className="mt-2 text-xs text-zinc-500">
-          Os cálculos usam entradas financeiras de serviços concluídos e comandas fechadas do mês selecionado.
-        </p>
+        <label className="mb-2 block text-sm text-zinc-400">Mês de referência da comissão</label>
+        <input type="month" value={monthReference} onChange={(event) => setMonthReference(event.target.value)} className="rounded-lg bg-zinc-800 p-3 text-white outline-none" />
+        <p className="mt-2 text-xs text-zinc-500">Os cálculos usam entradas financeiras de serviços concluídos e comandas fechadas do mês selecionado.</p>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-green-300">
-            Total produzido no mês
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatCurrency(totalProduced)}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-purple-300">
-            Atendimentos no mês
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {totalMonthlyAppointments}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-indigo-900 bg-indigo-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-indigo-300">
-            Meta atingida
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatPercentage(totalGoalPercentage)}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-blue-300">
-            Comissão a pagar
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatCurrency(totalCommissionToPay)}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-yellow-300">
-            Saldo da empresa após comissão
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatCurrency(companyBalanceAfterCommission)}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-cyan-300">
-            Comissão paga
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatCurrency(totalCommissionPaid)}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-blue-300">
-            Comissão liberada
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatCurrency(totalCommissionReleased)}
-          </strong>
-        </div>
-
-        <div className="rounded-2xl border border-red-900 bg-red-950/30 p-7">
-          <p className="min-h-[40px] text-sm leading-5 text-red-300">
-            Comissão pendente
-          </p>
-
-          <strong className="mt-3 block text-3xl text-white">
-            {formatCurrency(totalCommissionPending)}
-          </strong>
-        </div>
+        <div className="rounded-2xl border border-green-900 bg-green-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-green-300">Total produzido no mês</p><strong className="mt-3 block text-3xl text-white">{formatCurrency(totalProduced)}</strong></div>
+        <div className="rounded-2xl border border-purple-900 bg-purple-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-purple-300">Atendimentos no mês</p><strong className="mt-3 block text-3xl text-white">{totalMonthlyAppointments}</strong></div>
+        <div className="rounded-2xl border border-indigo-900 bg-indigo-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-indigo-300">Meta atingida</p><strong className="mt-3 block text-3xl text-white">{formatPercentage(totalGoalPercentage)}</strong></div>
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-blue-300">Comissão a pagar</p><strong className="mt-3 block text-3xl text-white">{formatCurrency(totalCommissionToPay)}</strong></div>
+        <div className="rounded-2xl border border-yellow-900 bg-yellow-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-yellow-300">Saldo da empresa após comissão</p><strong className="mt-3 block text-3xl text-white">{formatCurrency(companyBalanceAfterCommission)}</strong></div>
+        <div className="rounded-2xl border border-cyan-900 bg-cyan-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-cyan-300">Comissão paga</p><strong className="mt-3 block text-3xl text-white">{formatCurrency(totalCommissionPaid)}</strong></div>
+        <div className="rounded-2xl border border-blue-900 bg-blue-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-blue-300">Comissão liberada</p><strong className="mt-3 block text-3xl text-white">{formatCurrency(totalCommissionReleased)}</strong></div>
+        <div className="rounded-2xl border border-red-900 bg-red-950/30 p-7"><p className="min-h-[40px] text-sm leading-5 text-red-300">Comissão pendente</p><strong className="mt-3 block text-3xl text-white">{formatCurrency(totalCommissionPending)}</strong></div>
       </div>
 
       <div className="mt-8 grid gap-4 rounded-2xl bg-zinc-900 p-6">
         <h2 className="text-2xl font-bold">Cadastrar profissional</h2>
-
-        <input
-          placeholder="Nome"
-          className="rounded-lg bg-zinc-800 p-3"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        <input
-          placeholder="Telefone"
-          className="rounded-lg bg-zinc-800 p-3"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-
-        <input
-          placeholder="Email"
-          className="rounded-lg bg-zinc-800 p-3"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          placeholder="Função profissional"
-          className="rounded-lg bg-zinc-800 p-3"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        />
+        <input placeholder="Nome" className="rounded-lg bg-zinc-800 p-3" value={name} onChange={(e) => setName(e.target.value)} />
+        <input placeholder="Telefone" className="rounded-lg bg-zinc-800 p-3" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <input placeholder="Email" className="rounded-lg bg-zinc-800 p-3" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input placeholder="Função profissional" className="rounded-lg bg-zinc-800 p-3" value={role} onChange={(e) => setRole(e.target.value)} />
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-400">
-            Permissão de acesso no sistema
-          </label>
-
-          <select
-            className="w-full rounded-lg bg-zinc-800 p-3"
-            value={userAccessRole}
-            onChange={(e) =>
-              setUserAccessRole(e.target.value as UserAccessRole)
-            }
-          >
-            {userAccessRoles.map((accessRole) => (
-              <option key={accessRole.value} value={accessRole.value}>
-                {accessRole.label}
-              </option>
-            ))}
+          <label className="mb-2 block text-sm text-zinc-400">Permissão de acesso no sistema</label>
+          <select className="w-full rounded-lg bg-zinc-800 p-3" value={userAccessRole} onChange={(e) => setUserAccessRole(e.target.value as UserAccessRole)}>
+            {userAccessRoles.map((accessRole) => <option key={accessRole.value} value={accessRole.value}>{accessRole.label}</option>)}
           </select>
-
-          <p className="mt-2 text-xs text-zinc-500">
-            A permissão será aplicada ao usuário do sistema com o mesmo e-mail.
-          </p>
+          <p className="mt-2 text-xs text-zinc-500">A permissão será aplicada ao usuário do sistema com o mesmo e-mail.</p>
         </div>
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-400">
-            Comissão sobre serviços concluídos (%)
-          </label>
-
-          <input
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            placeholder="Ex: 40"
-            className="w-full rounded-lg bg-zinc-800 p-3"
-            value={commissionPercentage}
-            onChange={(e) => setCommissionPercentage(e.target.value)}
-          />
+          <label className="mb-2 block text-sm text-zinc-400">Comissão sobre serviços concluídos (%)</label>
+          <input type="number" min="0" max="100" step="0.01" placeholder="Ex: 40" className="w-full rounded-lg bg-zinc-800 p-3" value={commissionPercentage} onChange={(e) => setCommissionPercentage(e.target.value)} />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-400">
-            Meta mensal de produção (R$)
-          </label>
-
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="Ex: 5000"
-            className="w-full rounded-lg bg-zinc-800 p-3"
-            value={monthlyGoal}
-            onChange={(e) => setMonthlyGoal(e.target.value)}
-          />
+          <label className="mb-2 block text-sm text-zinc-400">Meta mensal de produção (R$)</label>
+          <input type="number" min="0" step="0.01" placeholder="Ex: 5000" className="w-full rounded-lg bg-zinc-800 p-3" value={monthlyGoal} onChange={(e) => setMonthlyGoal(e.target.value)} />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm text-zinc-400">
-            Foto do profissional
-          </label>
-
+          <label className="mb-2 block text-sm text-zinc-400">Foto do profissional</label>
           <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
             <span className="font-medium">Escolher foto</span>
-
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
                 setPhotoFile(file)
                 setPhotoPreview(URL.createObjectURL(file))
-              }}
-            />
+              }} />
           </label>
-
           {photoPreview && !editingProfessionalId && (
             <div className="mt-4 flex justify-center">
-              <img
-                src={photoPreview}
-                alt="Preview"
-                className="h-28 w-28 rounded-full object-cover ring-4 ring-zinc-700"
-              />
+              <img src={photoPreview} alt="Preview" className="h-28 w-28 rounded-full object-cover ring-4 ring-zinc-700" />
             </div>
           )}
         </div>
 
-        <button
-          onClick={createProfessional}
-          className="rounded-lg bg-white p-3 font-bold text-black"
-        >
-          Cadastrar profissional
-        </button>
+        <button onClick={createProfessional} className="rounded-lg bg-white p-3 font-bold text-black">Cadastrar profissional</button>
       </div>
 
       <div className="mt-8">
-        <input
-          placeholder="Pesquisar profissional..."
-          className="w-full rounded-xl bg-zinc-900 p-4"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <input placeholder="Pesquisar profissional..." className="w-full rounded-xl bg-zinc-900 p-4" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       <div className="mt-8 rounded-2xl border border-blue-900 bg-blue-950/30 p-5">
-        <h2 className="text-xl font-bold text-white">
-          Fluxo profissional da comissão
-        </h2>
-
-        <p className="mt-2 text-sm text-blue-100">
-          Pendente: comissão calculada automaticamente. Liberada: conferida e pronta para pagamento. Pago: pagamento confirmado com data registrada.
-        </p>
+        <h2 className="text-xl font-bold text-white">Fluxo profissional da comissão</h2>
+        <p className="mt-2 text-sm text-blue-100">Pendente: comissão calculada automaticamente. Liberada: conferida e pronta para pagamento. Pago: pagamento confirmado com data registrada.</p>
       </div>
 
       <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-        <h2 className="text-xl font-bold text-white">
-          Ranking do mês
-        </h2>
-
-        <p className="mt-2 text-sm text-zinc-400">
-          Ordenado pelo total produzido no mês selecionado.
-        </p>
-
+        <h2 className="text-xl font-bold text-white">Ranking do mês</h2>
+        <p className="mt-2 text-sm text-zinc-400">Ordenado pelo total produzido no mês selecionado.</p>
         <div className="mt-5 space-y-3">
           {rankedProfessionals.slice(0, 5).map((professional, index) => (
-            <div
-              key={`ranking-${professional.id}`}
-              className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[80px_1fr_auto] md:items-center"
-            >
-              <strong className="text-2xl text-yellow-400">
-                {index + 1}º
-              </strong>
-
+            <div key={`ranking-${professional.id}`} className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[80px_1fr_auto] md:items-center">
+              <strong className="text-2xl text-yellow-400">{index + 1}º</strong>
               <div>
                 <p className="font-bold text-white">{professional.name}</p>
-                <p className="text-sm text-zinc-500">
-                  {professional.monthly_appointments || 0} atendimento(s) · meta: {formatPercentage(professional.goal_percentage || 0)}
-                </p>
+                <p className="text-sm text-zinc-500">{professional.monthly_appointments || 0} atendimento(s) · meta: {formatPercentage(professional.goal_percentage || 0)}</p>
               </div>
-
-              <strong className="text-green-400">
-                {formatCurrency(professional.monthly_revenue || 0)}
-              </strong>
+              <strong className="text-green-400">{formatCurrency(professional.monthly_revenue || 0)}</strong>
             </div>
           ))}
         </div>
@@ -1668,146 +943,57 @@ export default function ProfessionalsPage() {
             <div key={professional.id} className="rounded-xl bg-zinc-900 p-4">
               {isEditing ? (
                 <div className="grid gap-3">
-                  <input
-                    className="rounded-lg bg-zinc-800 p-3"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                  />
-
-                  <input
-                    className="rounded-lg bg-zinc-800 p-3"
-                    value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                  />
-
-                  <input
-                    className="rounded-lg bg-zinc-800 p-3"
-                    value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
-                  />
+                  <input className="rounded-lg bg-zinc-800 p-3" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                  <input className="rounded-lg bg-zinc-800 p-3" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+                  <input className="rounded-lg bg-zinc-800 p-3" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-400">
-                      Função profissional
-                    </label>
-
-                    <input
-                      list="edit-professional-roles"
-                      className="w-full rounded-lg bg-zinc-800 p-3"
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value)}
-                    />
-
+                    <label className="mb-2 block text-sm text-zinc-400">Função profissional</label>
+                    <input navigation-list="edit-professional-roles" className="w-full rounded-lg bg-zinc-800 p-3" value={editRole} onChange={(e) => setEditRole(e.target.value)} />
                     <datalist id="edit-professional-roles">
-                      {professionalRoles.map((professionalRole) => (
-                        <option key={professionalRole} value={professionalRole} />
-                      ))}
+                      {professionalRoles.map((professionalRole) => <option key={professionalRole} value={professionalRole} />)}
                     </datalist>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-400">
-                      Permissão de acesso no sistema
-                    </label>
-
-                    <select
-                      className="w-full rounded-lg bg-zinc-800 p-3"
-                      value={editUserAccessRole}
-                      onChange={(e) =>
-                        setEditUserAccessRole(
-                          e.target.value as UserAccessRole
-                        )
-                      }
-                    >
-                      {userAccessRoles.map((accessRole) => (
-                        <option key={accessRole.value} value={accessRole.value}>
-                          {accessRole.label}
-                        </option>
-                      ))}
+                    <label className="mb-2 block text-sm text-zinc-400">Permissão de acesso no sistema</label>
+                    <select className="w-full rounded-lg bg-zinc-800 p-3" value={editUserAccessRole} onChange={(e) => setEditUserAccessRole(e.target.value as UserAccessRole)}>
+                      {userAccessRoles.map((accessRole) => <option key={accessRole.value} value={accessRole.value}>{accessRole.label}</option>)}
                     </select>
-
-                    <p className="mt-2 text-xs text-zinc-500">
-                      Será aplicada ao usuário do sistema com o mesmo e-mail.
-                    </p>
+                    <p className="mt-2 text-xs text-zinc-500">Será aplicada ao usuário do sistema com o mesmo e-mail.</p>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-400">
-                      Comissão sobre serviços concluídos (%)
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      className="w-full rounded-lg bg-zinc-800 p-3"
-                      value={editCommissionPercentage}
-                      onChange={(e) => setEditCommissionPercentage(e.target.value)}
-                    />
+                    <label className="mb-2 block text-sm text-zinc-400">Comissão sobre serviços concluídos (%)</label>
+                    <input type="number" min="0" max="100" step="0.01" className="w-full rounded-lg bg-zinc-800 p-3" value={editCommissionPercentage} onChange={(e) => setEditCommissionPercentage(e.target.value)} />
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-400">
-                      Meta mensal de produção (R$)
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full rounded-lg bg-zinc-800 p-3"
-                      value={editMonthlyGoal}
-                      onChange={(e) => setEditMonthlyGoal(e.target.value)}
-                    />
+                    <label className="mb-2 block text-sm text-zinc-400">Meta mensal de produção (R$)</label>
+                    <input type="number" min="0" step="0.01" className="w-full rounded-lg bg-zinc-800 p-3" value={editMonthlyGoal} onChange={(e) => setEditMonthlyGoal(e.target.value)} />
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-zinc-400">
-                      Foto do profissional
-                    </label>
-
+                    <label className="mb-2 block text-sm text-zinc-400">Foto do profissional</label>
                     <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-800 p-6 transition hover:bg-zinc-700">
                       <span className="font-medium">Trocar foto</span>
-
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (!file) return
                           setPhotoFile(file)
                           setPhotoPreview(URL.createObjectURL(file))
-                        }}
-                      />
+                        }} />
                     </label>
-
                     {photoPreview && (
                       <div className="mt-4 flex justify-center">
-                        <img
-                          src={photoPreview}
-                          alt="Preview"
-                          className="h-28 w-28 rounded-full object-cover ring-4 ring-zinc-700"
-                        />
+                        <img src={photoPreview} alt="Preview" className="h-28 w-28 rounded-full object-cover ring-4 ring-zinc-700" />
                       </div>
                     )}
                   </div>
 
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => updateProfessional(professional.id)}
-                      className="rounded-lg bg-green-600 px-4 py-2 font-bold"
-                    >
-                      Salvar
-                    </button>
-
-                    <button
-                      onClick={cancelEditing}
-                      className="rounded-lg bg-zinc-700 px-4 py-2 font-bold"
-                    >
-                      Cancelar
-                    </button>
+                    <button onClick={() => updateProfessional(professional.id)} className="rounded-lg bg-green-600 px-4 py-2 font-bold">Salvar</button>
+                    <button onClick={cancelEditing} className="rounded-lg bg-zinc-700 px-4 py-2 font-bold">Cancelar</button>
                   </div>
                 </div>
               ) : (
@@ -1815,15 +1001,9 @@ export default function ProfessionalsPage() {
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-4">
                       {professional.photo_url ? (
-                        <img
-                          src={professional.photo_url}
-                          alt={professional.name}
-                          className="h-20 w-20 rounded-full object-cover"
-                        />
+                        <img src={professional.photo_url} alt={professional.name} className="h-20 w-20 rounded-full object-cover" />
                       ) : (
-                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800 text-2xl font-bold">
-                          {professional.name.charAt(0)}
-                        </div>
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800 text-2xl font-bold">{professional.name.charAt(0)}</div>
                       )}
 
                       <div>
@@ -1831,244 +1011,75 @@ export default function ProfessionalsPage() {
                         <p className="text-zinc-400">{professional.role}</p>
                         <p className="text-zinc-500">{professional.phone}</p>
                         <p className="text-zinc-500">{professional.email}</p>
-
-                        <p className="mt-2 text-sm text-zinc-500">
-                          Permissão:{' '}
-                          <span className="font-bold text-blue-400">
-                            {getUserAccessRoleLabel(professional.user_access_role)}
-                          </span>
-                        </p>
-
-                        <p className="mt-2 text-sm text-zinc-500">
-                          Status:{' '}
-                          <span
-                            className={
-                              professional.active
-                                ? 'text-green-400'
-                                : 'text-yellow-400'
-                            }
-                          >
-                            {professional.active ? 'Ativo' : 'Inativo'}
-                          </span>
-                        </p>
+                        <p className="mt-2 text-sm text-zinc-500">Permissão: <span className="font-bold text-blue-400">{getUserAccessRoleLabel(professional.user_access_role)}</span></p>
+                        <p className="mt-2 text-sm text-zinc-500">Status: <span className={professional.active ? 'text-green-400' : 'text-yellow-400'}>{professional.active ? 'Ativo' : 'Inativo'}</span></p>
                       </div>
                     </div>
 
                     <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-right md:min-w-[320px]">
-                      <div>
-                        <p className="text-sm text-zinc-500">Ranking</p>
-                        <strong className="text-xl text-yellow-400">
-                          {professional.ranking_position || '-'}º lugar
-                        </strong>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-zinc-500">Atendimentos</p>
-                        <strong className="text-xl text-white">
-                          {professional.monthly_appointments || 0}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-zinc-500">Meta mensal</p>
-                        <strong className="text-indigo-400">
-                          {formatCurrency(professional.monthly_goal || 0)}
-                        </strong>
-                      </div>
-
+                      <div><p className="text-sm text-zinc-500">Ranking</p><strong className="text-xl text-yellow-400">{professional.ranking_position || '-'}º lugar</strong></div>
+                      <div><p className="text-sm text-zinc-500">Atendimentos</p><strong className="text-xl text-white">{professional.monthly_appointments || 0}</strong></div>
+                      <div><p className="text-sm text-zinc-500">Meta mensal</p><strong className="text-indigo-400">{formatCurrency(professional.monthly_goal || 0)}</strong></div>
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-3 text-sm text-zinc-500">
                           <span>Meta atingida</span>
-                          <strong className="text-indigo-300">
-                            {formatPercentage(professional.goal_percentage || 0)}
-                          </strong>
+                          <strong className="text-indigo-300">{formatPercentage(professional.goal_percentage || 0)}</strong>
                         </div>
-
                         <div className="h-3 overflow-hidden rounded-full bg-zinc-800">
-                          <div
-                            className="h-full rounded-full bg-indigo-500"
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                Number(professional.goal_percentage || 0)
-                              )}%`,
-                            }}
-                          />
+                          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, Number(professional.goal_percentage || 0))}%` }} />
                         </div>
                       </div>
-
-                      <div>
-                        <p className="text-sm text-zinc-500">Comissão</p>
-                        <strong className="text-xl text-yellow-400">
-                          {Number(professional.commission_percentage || 0).toFixed(2)}%
-                        </strong>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-zinc-500">Total produzido</p>
-                        <strong className="text-green-400">
-                          {formatCurrency(professional.monthly_revenue || 0)}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-zinc-500">Comissão a pagar</p>
-                        <strong className="text-blue-400">
-                          {formatCurrency(professional.monthly_commission || 0)}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-zinc-500">Saldo da empresa</p>
-                        <strong className="text-purple-400">
-                          {formatCurrency(
-                            Number(professional.monthly_revenue || 0) -
-                              Number(professional.monthly_commission || 0)
-                          )}
-                        </strong>
-                      </div>
-
+                      <div><p className="text-sm text-zinc-500">Comissão</p><strong className="text-xl text-yellow-400">{Number(professional.commission_percentage || 0).toFixed(2)}%</strong></div>
+                      <div><p className="text-sm text-zinc-500">Total produzido</p><strong className="text-green-400">{formatCurrency(professional.monthly_revenue || 0)}</strong></div>
+                      <div><p className="text-sm text-zinc-500">Comissão a pagar</p><strong className="text-blue-400">{formatCurrency(professional.monthly_commission || 0)}</strong></div>
+                      <div><p className="text-sm text-zinc-500">Saldo da empresa</p><strong className="text-purple-400">{formatCurrency(Number(professional.monthly_revenue || 0) - Number(professional.monthly_commission || 0))}</strong></div>
                       <div>
                         <p className="text-sm text-zinc-500">Pagamento</p>
-                        <strong
-                          className={getCommissionStatusClass(
-                            professional.commission_payment_status
-                          )}
-                        >
-                          {getCommissionStatusLabel(
-                            professional.commission_payment_status
-                          )}
-                        </strong>
-
-                        {professional.commission_payment_date && (
-                          <p className="mt-1 text-xs text-zinc-500">
-                            Pago em{' '}
-                            {new Date(
-                              professional.commission_payment_date
-                            ).toLocaleDateString('pt-BR')}
-                          </p>
-                        )}
+                        <strong className={getCommissionStatusClass(professional.commission_payment_status)}>{getCommissionStatusLabel(professional.commission_payment_status)}</strong>
+                        {professional.commission_payment_date && <p className="mt-1 text-xs text-zinc-500">Pago em {new Date(professional.commission_payment_date).toLocaleDateString('pt-BR')}</p>}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => startEditing(professional)}
-                      className="rounded-lg bg-white px-4 py-2 font-bold text-black"
-                    >
-                      Editar
-                    </button>
-
-                    <button
-                      onClick={() => openAvailability(professional)}
-                      className="rounded-lg bg-cyan-600 px-4 py-2 font-bold text-white"
-                    >
-                      Disponibilidade
-                    </button>
-
-                    <button
-                      onClick={() => openBlocks(professional)}
-                      className="rounded-lg bg-orange-600 px-4 py-2 font-bold text-white"
-                    >
-                      Férias/Folgas
-                    </button>
-
-                    <button
-                      onClick={() => openSpecialties(professional)}
-                      className="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white"
-                    >
-                      Especialidades
-                    </button>
+                    <button onClick={() => startEditing(professional)} className="rounded-lg bg-white px-4 py-2 font-bold text-black">Editar</button>
+                    <button onClick={() => openAvailability(professional)} className="rounded-lg bg-cyan-600 px-4 py-2 font-bold text-white">Disponibilidade</button>
+                    <button onClick={() => openBlocks(professional)} className="rounded-lg bg-orange-600 px-4 py-2 font-bold text-white">Férias/Folgas</button>
+                    <button onClick={() => openSpecialties(professional)} className="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white">Especialidades</button>
 
                     {professional.commission_payment_status === 'pending' && (
-                      <button
-                        onClick={() => releaseCommission(professional)}
-                        disabled={payingCommissionId === professional.id}
-                        className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50"
-                      >
-                        {payingCommissionId === professional.id
-                          ? 'Salvando...'
-                          : 'Liberar comissão'}
+                      <button onClick={() => releaseCommission(professional)} disabled={payingCommissionId === professional.id} className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50">
+                        {payingCommissionId === professional.id ? 'Salvando...' : 'Liberar comissão'}
                       </button>
                     )}
 
                     {professional.commission_payment_status !== 'paid' && (
-                      <button
-                        onClick={() => markCommissionAsPaid(professional)}
-                        disabled={payingCommissionId === professional.id}
-                        className="rounded-lg bg-green-600 px-4 py-2 font-bold text-white disabled:opacity-50"
-                      >
-                        {payingCommissionId === professional.id
-                          ? 'Salvando...'
-                          : 'Marcar como pago'}
+                      <button onClick={() => markCommissionAsPaid(professional)} disabled={payingCommissionId === professional.id} className="rounded-lg bg-green-600 px-4 py-2 font-bold text-white disabled:opacity-50">
+                        {payingCommissionId === professional.id ? 'Salvando...' : 'Marcar como pago'}
                       </button>
                     )}
 
                     {professional.commission_payment_status === 'paid' && (
-                      <button
-                        onClick={() => reopenCommissionPayment(professional)}
-                        disabled={payingCommissionId === professional.id}
-                        className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white disabled:opacity-50"
-                      >
-                        {payingCommissionId === professional.id
-                          ? 'Salvando...'
-                          : 'Reabrir comissão'}
+                      <button onClick={() => reopenCommissionPayment(professional)} disabled={payingCommissionId === professional.id} className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white disabled:opacity-50">
+                        {payingCommissionId === professional.id ? 'Salvando...' : 'Reabrir comissão'}
                       </button>
                     )}
 
-                    <button
-                      onClick={() => generateProfessionalPdf(professional)}
-                      className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white"
-                    >
-                      PDF
-                    </button>
+                    <button onClick={() => generateProfessionalPdf(professional)} className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white">PDF</button>
 
-                    <select
-                      value={professional.user_access_role || 'barber'}
-                      onChange={(e) => {
+                    <select value={professional.user_access_role || 'barber'} onChange={(e) => {
                         setProfessionals((currentProfessionals) =>
-                          currentProfessionals.map((item) =>
-                            item.id === professional.id
-                              ? {
-                                  ...item,
-                                  user_access_role:
-                                    e.target.value as UserAccessRole,
-                                }
-                              : item
-                          )
+                          currentProfessionals.map((item) => item.id === professional.id ? { ...item, user_access_role: e.target.value as UserAccessRole } : item)
                         )
-                      }}
-                      className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white"
-                    >
-                      {userAccessRoles.map((accessRole) => (
-                        <option key={accessRole.value} value={accessRole.value}>
-                          {accessRole.label}
-                        </option>
-                      ))}
+                      }} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white">
+                      {userAccessRoles.map((accessRole) => <option key={accessRole.value} value={accessRole.value}>{accessRole.label}</option>)}
                     </select>
 
-                    <button
-                      onClick={() => updateProfessionalAccessRole(professional)}
-                      disabled={savingPermissionId === professional.id}
-                      className="rounded-lg bg-purple-600 px-4 py-2 font-bold text-white disabled:opacity-50"
-                    >
-                      {savingPermissionId === professional.id
-                        ? 'Salvando...'
-                        : 'Salvar permissão'}
+                    <button onClick={() => updateProfessionalAccessRole(professional)} disabled={savingPermissionId === professional.id} className="rounded-lg bg-purple-600 px-4 py-2 font-bold text-white disabled:opacity-50">
+                      {savingPermissionId === professional.id ? 'Salvando...' : 'Salvar permissão'}
                     </button>
 
-                    <button
-                      onClick={() =>
-                        toggleProfessionalActive(
-                          professional.id,
-                          professional.active
-                        )
-                      }
-                      className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black"
-                    >
-                      {professional.active ? 'Inativar' : 'Ativar'}
-                    </button>
+                    <button onClick={() => toggleProfessionalActive(professional.id, professional.active)} className="rounded-lg bg-yellow-600 px-4 py-2 font-bold text-black">{professional.active ? 'Inativar' : 'Ativar'}</button>
                   </div>
                 </>
               )}
@@ -2077,92 +1088,38 @@ export default function ProfessionalsPage() {
         })}
       </div>
 
-
-
       {specialtyProfessional && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
               <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
-                  Especialidades do profissional
-                </p>
-
-                <h2 className="mt-2 text-3xl font-bold">
-                  {specialtyProfessional.name}
-                </h2>
-
-                <p className="mt-2 text-zinc-400">
-                  Selecione quais serviços este profissional pode realizar.
-                </p>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">Especialidades do profissional</p>
+                <h2 className="mt-2 text-3xl font-bold">{specialtyProfessional.name}</h2>
+                <p className="mt-2 text-zinc-400">Selecione quais serviços este profissional pode realizar.</p>
               </div>
-
-              <button
-                onClick={() => setSpecialtyProfessional(null)}
-                className="rounded-xl bg-zinc-800 px-4 py-2"
-              >
-                Fechar
-              </button>
+              <button onClick={() => setSpecialtyProfessional(null)} className="rounded-xl bg-zinc-800 px-4 py-2">Fechar</button>
             </div>
 
-            <div className="mt-8 rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-sm text-emerald-200">
-              A agenda pública usará essas especialidades para mostrar apenas profissionais compatíveis com o serviço escolhido.
-            </div>
-
+            <div className="mt-8 rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-sm text-emerald-200">A agenda pública usará essas especialidades para mostrar apenas profissionais compatíveis com o serviço escolhido.</div>
             <div className="mt-6 grid gap-3">
-              {services.length === 0 && (
-                <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
-                  Nenhum serviço ativo encontrado.
-                </p>
-              )}
-
+              {services.length === 0 && <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">Nenhum serviço ativo encontrado.</p>}
               {services.map((service) => {
                 const checked = selectedSpecialtyServiceIds.includes(service.id)
-
                 return (
-                  <label
-                    key={service.id}
-                    className={`flex cursor-pointer items-center justify-between rounded-2xl border p-4 transition ${
-                      checked
-                        ? 'border-emerald-500 bg-emerald-950/40'
-                        : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'
-                    }`}
-                  >
+                  <label key={service.id} className={`flex cursor-pointer items-center justify-between rounded-2xl border p-4 transition ${checked ? 'border-emerald-500 bg-emerald-950/40' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
                     <div>
                       <p className="font-bold">{service.name}</p>
-
-                      <p className="mt-1 text-sm text-zinc-500">
-                        {service.duration_minutes || 0} min · R${' '}
-                        {Number(service.price || 0).toFixed(2)}
-                      </p>
+                      <p className="mt-1 text-sm text-zinc-500">{service.duration_minutes || 0} min · R$ {Number(service.price || 0).toFixed(2)}</p>
                     </div>
-
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleSpecialtyService(service.id)}
-                      className="h-5 w-5"
-                    />
+                    <input type="checkbox" checked={checked} onChange={() => toggleSpecialtyService(service.id)} className="h-5 w-5" />
                   </label>
                 )
               })}
             </div>
 
             <div className="mt-6 flex flex-col gap-3 md:flex-row">
-              <button
-                onClick={saveProfessionalSpecialties}
-                disabled={savingSpecialties}
-                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-              >
-                {savingSpecialties ? 'Salvando...' : 'Salvar especialidades'}
-              </button>
-
-              <button
-                onClick={() => setSpecialtyProfessional(null)}
-                className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700"
-              >
-                Cancelar
-              </button>
+              <button onClick={saveProfessionalSpecialties} disabled={savingSpecialties} className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50">{savingSpecialties ? 'Salvando...' : 'Salvar especialidades'}</button>
+              <button onClick={() => setSpecialtyProfessional(null)} className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700">Cancelar</button>
             </div>
           </div>
         </div>
@@ -2173,150 +1130,54 @@ export default function ProfessionalsPage() {
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
               <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
-                  Férias, folgas e bloqueios
-                </p>
-
-                <h2 className="mt-2 text-3xl font-bold">
-                  {blockProfessional.name}
-                </h2>
-
-                <p className="mt-2 text-zinc-400">
-                  Cadastre períodos em que este profissional não poderá receber agendamentos.
-                </p>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">Férias, folgas e bloqueios</p>
+                <h2 className="mt-2 text-3xl font-bold">{blockProfessional.name}</h2>
+                <p className="mt-2 text-zinc-400">Cadastre períodos em que este profissional não poderá receber agendamentos.</p>
               </div>
-
-              <button
-                onClick={() => setBlockProfessional(null)}
-                className="rounded-xl bg-zinc-800 px-4 py-2"
-              >
-                Fechar
-              </button>
+              <button onClick={() => setBlockProfessional(null)} className="rounded-xl bg-zinc-800 px-4 py-2">Fechar</button>
             </div>
 
             <div className="mt-8 grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
               <h3 className="text-xl font-bold">Novo bloqueio</h3>
-
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <label className="mb-2 block text-sm text-zinc-400">
-                    Tipo
-                  </label>
-
-                  <select
-                    value={blockType}
-                    onChange={(event) =>
-                      setBlockType(event.target.value as ProfessionalBlock['block_type'])
-                    }
-                    className="w-full rounded-lg bg-zinc-800 p-3"
-                  >
+                  <label className="mb-2 block text-sm text-zinc-400">Tipo</label>
+                  <select value={blockType} onChange={(event) => setBlockType(event.target.value as ProfessionalBlock['block_type'])} className="w-full rounded-lg bg-zinc-800 p-3">
                     <option value="day_off">Folga</option>
                     <option value="vacation">Férias</option>
                     <option value="temporary">Bloqueio temporário</option>
                   </select>
                 </div>
-
                 <div>
-                  <label className="mb-2 block text-sm text-zinc-400">
-                    Data inicial
-                  </label>
-
-                  <input
-                    type="date"
-                    value={blockStartDate}
-                    onChange={(event) => {
-                      setBlockStartDate(event.target.value)
-
-                      if (!blockEndDate) {
-                        setBlockEndDate(event.target.value)
-                      }
-                    }}
-                    className="w-full rounded-lg bg-zinc-800 p-3"
-                  />
+                  <label className="mb-2 block text-sm text-zinc-400">Data inicial</label>
+                  <input type="date" value={blockStartDate} onChange={(event) => { setBlockStartDate(event.target.value); if (!blockEndDate) { setBlockEndDate(event.target.value) } }} className="w-full rounded-lg bg-zinc-800 p-3" />
                 </div>
-
                 <div>
-                  <label className="mb-2 block text-sm text-zinc-400">
-                    Data final
-                  </label>
-
-                  <input
-                    type="date"
-                    value={blockEndDate}
-                    onChange={(event) => setBlockEndDate(event.target.value)}
-                    className="w-full rounded-lg bg-zinc-800 p-3"
-                  />
+                  <label className="mb-2 block text-sm text-zinc-400">Data final</label>
+                  <input type="date" value={blockEndDate} onChange={(event) => setBlockEndDate(event.target.value)} className="w-full rounded-lg bg-zinc-800 p-3" />
                 </div>
               </div>
-
-              <textarea
-                placeholder="Motivo opcional. Ex: férias, curso, evento pessoal..."
-                value={blockReason}
-                onChange={(event) => setBlockReason(event.target.value)}
-                className="rounded-lg bg-zinc-800 p-3"
-              />
-
-              <button
-                onClick={saveProfessionalBlock}
-                disabled={savingBlock}
-                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-              >
-                {savingBlock ? 'Salvando...' : 'Salvar bloqueio'}
-              </button>
+              <textarea placeholder="Motivo opcional. Ex: férias, curso, evento pessoal..." value={blockReason} onChange={(event) => setBlockReason(event.target.value)} className="rounded-lg bg-zinc-800 p-3" />
+              <button onClick={saveProfessionalBlock} disabled={savingBlock} className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50">{savingBlock ? 'Salvando...' : 'Salvar bloqueio'}</button>
             </div>
 
             <div className="mt-8">
               <h3 className="text-xl font-bold">Bloqueios cadastrados</h3>
-
               <div className="mt-4 space-y-3">
-                {professionalBlocks.length === 0 && (
-                  <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">
-                    Nenhum bloqueio cadastrado para este profissional.
-                  </p>
-                )}
-
+                {professionalBlocks.length === 0 && <p className="rounded-xl bg-zinc-800 p-4 text-zinc-500">Nenhum bloqueio cadastrado para este profissional.</p>}
                 {professionalBlocks.map((block) => (
-                  <div
-                    key={block.id}
-                    className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[1fr_auto]"
-                  >
+                  <div key={block.id} className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[1fr_auto]">
                     <div>
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-bold ${
-                          block.block_type === 'vacation'
-                            ? 'bg-blue-900 text-blue-300'
-                            : block.block_type === 'temporary'
-                              ? 'bg-orange-900 text-orange-300'
-                              : 'bg-yellow-900 text-yellow-300'
-                        }`}
-                      >
-                        {getBlockTypeLabel(block.block_type)}
-                      </span>
-
-                      <p className="mt-3 font-bold">
-                        {block.start_date} até {block.end_date}
-                      </p>
-
-                      <p className="mt-1 text-sm text-zinc-500">
-                        {block.reason || 'Sem motivo informado'}
-                      </p>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${block.block_type === 'vacation' ? 'bg-blue-900 text-blue-300' : block.block_type === 'temporary' ? 'bg-orange-900 text-orange-300' : 'bg-yellow-900 text-yellow-300'}`}>{getBlockTypeLabel(block.block_type)}</span>
+                      <p className="mt-3 font-bold">{block.start_date} até {block.end_date}</p>
+                      <p className="mt-1 text-sm text-zinc-500">{block.reason || 'Sem motivo informado'}</p>
                     </div>
-
-                    <button
-                      onClick={() => deleteProfessionalBlock(block.id)}
-                      disabled={deletingBlockId === block.id}
-                      className="rounded-xl bg-red-600 px-4 py-2 font-bold text-white disabled:opacity-50"
-                    >
-                      {deletingBlockId === block.id ? 'Removendo...' : 'Remover'}
-                    </button>
+                    <button onClick={() => deleteProfessionalBlock(block.id)} disabled={deletingBlockId === block.id} className="rounded-xl bg-red-600 px-4 py-2 font-bold text-white disabled:opacity-50">{deletingBlockId === block.id ? 'Removendo...' : 'Remover'}</button>
                   </div>
                 ))}
               </div>
             </div>
-
-            <div className="mt-6 rounded-2xl border border-orange-900 bg-orange-950/30 p-4 text-sm text-orange-200">
-              O sistema impede o cadastro de férias/folgas quando já existem agendamentos ativos no período. Reagende ou cancele os horários antes de bloquear a agenda.
-            </div>
+            <div className="mt-6 rounded-2xl border border-orange-900 bg-orange-950/30 p-4 text-sm text-orange-200">O sistema impede o cadastro de férias/folgas quando já existem agendamentos ativos no período. Reagende ou cancele os horários antes de bloquear a agenda.</div>
           </div>
         </div>
       )}
@@ -2326,130 +1187,47 @@ export default function ProfessionalsPage() {
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
               <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">
-                  Disponibilidade semanal
-                </p>
-
-                <h2 className="mt-2 text-3xl font-bold">
-                  {availabilityProfessional.name}
-                </h2>
-
-                <p className="mt-2 text-zinc-400">
-                  Defina os dias disponíveis e a pausa individual deste profissional.
-                </p>
+                <p className="text-sm uppercase tracking-[0.2em] text-zinc-500">Disponibilidade semanal</p>
+                <h2 className="mt-2 text-3xl font-bold">{availabilityProfessional.name}</h2>
+                <p className="mt-2 text-zinc-400">Defina os dias disponíveis e a pausa individual deste profissional.</p>
               </div>
-
-              <button
-                onClick={() => setAvailabilityProfessional(null)}
-                className="rounded-xl bg-zinc-800 px-4 py-2"
-              >
-                Fechar
-              </button>
+              <button onClick={() => setAvailabilityProfessional(null)} className="rounded-xl bg-zinc-800 px-4 py-2">Fechar</button>
             </div>
 
             <div className="mt-8 space-y-3">
               {availabilityRows.map((row) => {
                 const day = weekDays.find((item) => item.value === row.weekday)
-
                 return (
-                  <div
-                    key={row.weekday}
-                    className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[1fr_auto_auto_auto]"
-                  >
+                  <div key={row.weekday} className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-[1fr_auto_auto_auto]">
                     <div>
                       <p className="font-bold">{day?.label}</p>
-
-                      <p className="mt-1 text-sm text-zinc-500">
-                        {row.available
-                          ? 'Dia disponível para agendamentos'
-                          : 'Dia bloqueado para este profissional'}
-                      </p>
+                      <p className="mt-1 text-sm text-zinc-500">{row.available ? 'Dia disponível para agendamentos' : 'Dia bloqueado para este profissional'}</p>
                     </div>
-
                     <label className="flex items-center gap-2 rounded-xl bg-zinc-800 px-4 py-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={row.available}
-                        onChange={(event) =>
-                          updateAvailabilityRow(
-                            row.weekday,
-                            'available',
-                            event.target.checked
-                          )
-                        }
-                      />
-
+                      <input type="checkbox" checked={row.available} onChange={(event) => updateAvailabilityRow(row.weekday, 'available', event.target.checked)} />
                       Disponível
                     </label>
-
                     <div>
-                      <label className="mb-1 block text-xs text-zinc-500">
-                        Pausa início
-                      </label>
-
-                      <input
-                        type="time"
-                        value={row.pause_start_time}
-                        disabled={!row.available}
-                        onChange={(event) =>
-                          updateAvailabilityRow(
-                            row.weekday,
-                            'pause_start_time',
-                            event.target.value
-                          )
-                        }
-                        className="w-full rounded-lg bg-zinc-800 p-3 disabled:opacity-40"
-                      />
+                      <label className="mb-1 block text-xs text-zinc-500">Pausa início</label>
+                      <input type="time" value={row.pause_start_time} disabled={!row.available} onChange={(event) => updateAvailabilityRow(row.weekday, 'pause_start_time', event.target.value)} className="w-full rounded-lg bg-zinc-800 p-3 disabled:opacity-40" />
                     </div>
-
                     <div>
-                      <label className="mb-1 block text-xs text-zinc-500">
-                        Pausa fim
-                      </label>
-
-                      <input
-                        type="time"
-                        value={row.pause_end_time}
-                        disabled={!row.available}
-                        onChange={(event) =>
-                          updateAvailabilityRow(
-                            row.weekday,
-                            'pause_end_time',
-                            event.target.value
-                          )
-                        }
-                        className="w-full rounded-lg bg-zinc-800 p-3 disabled:opacity-40"
-                      />
+                      <label className="mb-1 block text-xs text-zinc-500">Pausa fim</label>
+                      <input type="time" value={row.pause_end_time} disabled={!row.available} onChange={(event) => updateAvailabilityRow(row.weekday, 'pause_end_time', event.target.value)} className="w-full rounded-lg bg-zinc-800 p-3 disabled:opacity-40" />
                     </div>
                   </div>
                 )
               })}
             </div>
 
-            <div className="mt-6 rounded-2xl border border-cyan-900 bg-cyan-950/30 p-4 text-sm text-cyan-200">
-              A agenda vai bloquear automaticamente os horários da pausa e os dias indisponíveis deste profissional.
-            </div>
-
+            <div className="mt-6 rounded-2xl border border-cyan-900 bg-cyan-950/30 p-4 text-sm text-cyan-200">A agenda vai bloquear automaticamente os horários da pausa e os dias indisponíveis deste profissional.</div>
             <div className="mt-6 flex flex-col gap-3 md:flex-row">
-              <button
-                onClick={saveProfessionalAvailability}
-                disabled={savingAvailability}
-                className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50"
-              >
-                {savingAvailability ? 'Salvando...' : 'Salvar disponibilidade'}
-              </button>
-
-              <button
-                onClick={() => setAvailabilityProfessional(null)}
-                className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700"
-              >
-                Cancelar
-              </button>
+              <button onClick={saveProfessionalAvailability} disabled={savingAvailability} className="rounded-xl bg-white px-5 py-3 font-bold text-black transition hover:bg-zinc-200 disabled:opacity-50">{savingAvailability ? 'Salvando...' : 'Salvar disponibilidade'}</button>
+              <button onClick={() => setAvailabilityProfessional(null)} className="rounded-xl bg-zinc-800 px-5 py-3 font-bold text-white transition hover:bg-zinc-700">Cancelar</button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   )
 }

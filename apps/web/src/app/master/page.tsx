@@ -7,7 +7,7 @@ import MetricsChart from '@/components/MetricsChart'
 
 type Company = { id: string; created_at: string | null }
 type CompanySettings = { company_id: string; company_name: string | null }
-type SaasPlan = { id: string; name: string; price: number; active: boolean; max_users: number; max_professionals: number; max_monthly_appointments: number; features?: string | null }
+type SaasPlan = { id: string; name: string; price: number; active: boolean; max_users: number; max_professionals: number; max_monthly_appointments: number; max_services: number; features?: string | null }
 type CompanySubscription = { id: string; company_id: string; plan_id: string | null; status: string; trial_ends_at: string | null; subscription_starts_at: string | null; subscription_ends_at: string | null; blocked_at: string | null; created_at: string | null; saas_plans?: SaasPlan | null }
 type CompanyMetrics = { users: number; clients: number; appointments: number; professionals: number; revenue: number }
 type CompanyRow = { id: string; name: string; created_at: string | null; subscription: CompanySubscription | null; metrics: CompanyMetrics }
@@ -39,6 +39,7 @@ export default function MasterPage() {
   const [newPlanMaxUsers, setNewPlanMaxUsers] = useState('1')
   const [newPlanMaxProfessionals, setNewPlanMaxProfessionals] = useState('3')
   const [newPlanMaxAppointments, setNewPlanMaxAppointments] = useState('100')
+  const [newPlanMaxServices, setNewPlanMaxServices] = useState('5')
   const [newPlanFeatures, setNewPlanFeatures] = useState('')
   const [creatingPlan, setCreatingPlan] = useState(false)
 
@@ -48,6 +49,7 @@ export default function MasterPage() {
   const [editPlanMaxUsers, setEditPlanMaxUsers] = useState('1')
   const [editPlanMaxProfessionals, setEditPlanMaxProfessionals] = useState('3')
   const [editPlanMaxAppointments, setEditPlanMaxAppointments] = useState('100')
+  const [editPlanMaxServices, setEditPlanMaxServices] = useState('5')
   const [editPlanFeatures, setEditPlanFeatures] = useState('')
   const [savingPlan, setSavingPlan] = useState(false)
 
@@ -67,8 +69,19 @@ export default function MasterPage() {
   }, [])
 
   const activeSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'active'), [subscriptions])
-  const trialSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'trial'), [subscriptions])
-  const suspendedSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'suspended'), [subscriptions])
+  const trialSubscriptions = useMemo(() => {
+    return subscriptions.filter((s) => {
+      const dentroDoPrazo = s.trial_ends_at ? new Date(s.trial_ends_at) >= new Date() : true
+      return s.status === 'trial' && dentroDoPrazo
+    })
+  }, [subscriptions])
+
+  const suspendedSubscriptions = useMemo(() => {
+    return subscriptions.filter((s) => {
+      const passouDoPrazo = s.trial_ends_at ? new Date(s.trial_ends_at) < new Date() : false
+      return s.status === 'suspended' || (s.status === 'trial' && passouDoPrazo)
+    })
+  }, [subscriptions])
   const cancelledSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === 'cancelled'), [subscriptions])
   const estimatedMrr = useMemo(() => activeSubscriptions.reduce((sum, s) => sum + Number(s.saas_plans?.price || 0), 0), [activeSubscriptions])
 
@@ -117,7 +130,7 @@ export default function MasterPage() {
       ] = await Promise.all([
         supabase.from('companies').select('id, created_at').order('created_at', { ascending: false }),
         supabase.from('company_settings').select('company_id, company_name'),
-        supabase.from('company_subscriptions').select(`id, company_id, plan_id, status, trial_ends_at, subscription_starts_at, subscription_ends_at, blocked_at, created_at, saas_plans (id, name, price, active, max_users, max_professionals, max_monthly_appointments)`).order('created_at', { ascending: false }),
+        supabase.from('company_subscriptions').select(`id, company_id, plan_id, status, trial_ends_at, subscription_starts_at, subscription_ends_at, blocked_at, created_at, saas_plans (id, name, price, active, max_users, max_professionals, max_monthly_appointments, max_services)`).order('created_at', { ascending: false }),
         supabase.from('saas_plans').select('*').order('price', { ascending: true }),
         supabase.from('profiles').select('company_id'),
         supabase.from('clients').select('company_id'),
@@ -255,10 +268,11 @@ export default function MasterPage() {
     const { error } = await supabase.from('saas_plans').insert({
       name: newPlanName.trim(), price: Number(newPlanPrice), max_users: Number(newPlanMaxUsers),
       max_professionals: Number(newPlanMaxProfessionals), max_monthly_appointments: Number(newPlanMaxAppointments), 
+      max_services: Number(newPlanMaxServices),
       features: newPlanFeatures.trim(), active: true,
     })
     if (error) { alert(`Erro: ${error.message}`); setCreatingPlan(false); return }
-    setNewPlanName(''); setNewPlanPrice(''); setNewPlanMaxUsers('1'); setNewPlanMaxProfessionals('3'); setNewPlanMaxAppointments('100'); setNewPlanFeatures('');
+    setNewPlanName(''); setNewPlanPrice(''); setNewPlanMaxUsers('1'); setNewPlanMaxProfessionals('3'); setNewPlanMaxAppointments('100'); setNewPlanMaxServices('5'); setNewPlanFeatures('');
     setCreatingPlan(false)
     alert('Plano criado!')
     await loadMasterData()
@@ -266,7 +280,7 @@ export default function MasterPage() {
 
   function startEditingPlan(plan: SaasPlan) {
     setEditingPlanId(plan.id);
-    setEditPlanName(plan.name); setEditPlanPrice(String(plan.price)); setEditPlanMaxUsers(String(plan.max_users)); setEditPlanMaxProfessionals(String(plan.max_professionals)); setEditPlanMaxAppointments(String(plan.max_monthly_appointments)); setEditPlanFeatures(plan.features || '')
+    setEditPlanName(plan.name); setEditPlanPrice(String(plan.price)); setEditPlanMaxUsers(String(plan.max_users)); setEditPlanMaxProfessionals(String(plan.max_professionals)); setEditPlanMaxAppointments(String(plan.max_monthly_appointments)); setEditPlanMaxServices(String(plan.max_services || 5)); setEditPlanFeatures(plan.features || '')
   }
 
   async function savePlanEdits() {
@@ -275,6 +289,7 @@ export default function MasterPage() {
     const { error } = await supabase.from('saas_plans').update({
       name: editPlanName.trim(), price: Number(editPlanPrice), max_users: Number(editPlanMaxUsers),
       max_professionals: Number(editPlanMaxProfessionals), max_monthly_appointments: Number(editPlanMaxAppointments),
+      max_services: Number(editPlanMaxServices),
       features: editPlanFeatures.trim()
     }).eq('id', editingPlanId)
     setSavingPlan(false)
@@ -336,9 +351,35 @@ export default function MasterPage() {
   async function handleLogout() { await supabase.auth.signOut(); window.location.href = '/login' }
   function formatCurrency(value: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) }
   function formatDate(value: string | null) { if (!value) return '-'; const date = new Date(value); return new Date(date.getTime() + date.getTimezoneOffset() * 60000).toLocaleDateString('pt-BR') }
-  function getStatusLabel(s: string | null | undefined) { if (s === 'active') return 'Ativa'; if (s === 'trial') return 'Trial'; if (s === 'suspended') return 'Suspensa'; if (s === 'cancelled') return 'Cancelada'; return 'Sem assinatura' }
-  function getStatusClass(s: string | null | undefined) { if (s === 'active') return 'bg-green-500 text-black'; if (s === 'trial') return 'bg-blue-500 text-white'; if (s === 'suspended') return 'bg-yellow-500 text-black'; if (s === 'cancelled') return 'bg-red-500 text-white'; return 'bg-zinc-700 text-zinc-300' }
-  function translateAsaasStatus(s: string) { if (s === 'PENDING') return 'Pendente'; if (s === 'RECEIVED') return 'Paga'; if (s === 'OVERDUE') return 'Vencida'; return s }
+  
+  function getSubscriptionEffectiveStatus(sub: CompanySubscription | null) {
+    if (!sub) return 'none'
+    if (sub.status === 'trial') {
+      const expirou = sub.trial_ends_at ? new Date(sub.trial_ends_at) < new Date() : false
+      return expirou ? 'expired' : 'trial'
+    }
+    return sub.status
+  }
+
+  function getStatusLabel(s: string | null | undefined, sub?: CompanySubscription | null) {
+    const effective = sub ? getSubscriptionEffectiveStatus(sub) : s
+    if (effective === 'active') return 'Ativa'
+    if (effective === 'trial') return 'Trial'
+    if (effective === 'expired') return 'Expirada'
+    if (effective === 'suspended') return 'Suspensa'
+    if (effective === 'cancelled') return 'Cancelada'
+    return 'Sem assinatura'
+  }
+
+  function getStatusClass(s: string | null | undefined, sub?: CompanySubscription | null) {
+    const effective = sub ? getSubscriptionEffectiveStatus(sub) : s
+    if (effective === 'active') return 'bg-green-500 text-black'
+    if (effective === 'trial') return 'bg-blue-500 text-white'
+    if (effective === 'expired') return 'bg-red-500 text-white font-bold'
+    if (effective === 'suspended') return 'bg-yellow-500 text-black'
+    if (effective === 'cancelled') return 'bg-zinc-700 text-white'
+    return 'bg-zinc-700 text-zinc-300'
+  }
 
   if (loading) return <main className="flex min-h-screen items-center justify-center bg-black text-white"><p>Carregando...</p></main>
 
@@ -392,63 +433,91 @@ export default function MasterPage() {
               <input placeholder="Pesquisar..." className="w-full rounded-xl border border-zinc-800 bg-black p-3 mb-6" value={search} onChange={(e) => setSearch(e.target.value)} />
               
               <div className="flex flex-col">
-                {filteredCompanies.map((c) => (
-                  <div key={c.id} className="border-b border-zinc-800 py-6 flex flex-col xl:flex-row gap-6 items-start xl:items-center">
-                    
-                    <div className="w-full xl:w-[200px] flex-shrink-0">
-                      <h3 className="text-base font-bold text-white mb-1">{c.name}</h3>
-                      <p className="text-[10px] text-zinc-500 break-all leading-tight">{c.id}</p>
-                    </div>
-
-                    <div className="w-full xl:w-[150px] space-y-1 text-xs">
-                      <p><span className="text-zinc-400">Usuários:</span> <strong className="text-white">{c.metrics.users}</strong></p>
-                      <p><span className="text-zinc-400">Clientes:</span> <strong className="text-white">{c.metrics.clients}</strong></p>
-                      <p><span className="text-zinc-400">Agendamentos:</span> <strong className="text-white">{c.metrics.appointments}</strong></p>
-                      <p><span className="text-zinc-400">Profissionais:</span> <strong className="text-white">{c.metrics.professionals}</strong></p>
-                      <p><span className="text-zinc-400">Receita:</span> <strong className="text-green-500">{formatCurrency(c.metrics.revenue)}</strong></p>
-                    </div>
-
-                    <div className="flex-1 flex flex-wrap gap-3 items-center">
-                      <select id={`plan-${c.id}`} defaultValue={c.subscription?.plan_id || ''} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[130px]">
-                        <option value="">Plano...</option>
-                        {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                {filteredCompanies.map((c) => {
+                  const statusEfetivo = getSubscriptionEffectiveStatus(c.subscription);
+                  return (
+                    <div key={c.id} className="border-b border-zinc-800 py-6 flex flex-col xl:flex-row gap-6 items-start xl:items-center">
                       
-                      <div className="flex flex-col gap-2">
-                          <select id={`status-${c.id}`} defaultValue={c.subscription?.status || 'trial'} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[130px]">
-                              <option value="trial">Trial</option>
-                              <option value="active">Ativa</option>
-                              <option value="suspended">Suspensa</option>
-                              <option value="cancelled">Cancelada</option>
-                          </select>
-                          <span className={`inline-block px-3 py-1 text-center rounded-full text-xs font-bold w-[130px] ${getStatusClass(c.subscription?.status)}`}>
-                              {getStatusLabel(c.subscription?.status)}
-                          </span>
+                      <div className="w-full xl:w-[200px] flex-shrink-0">
+                        <h3 className="text-base font-bold text-white mb-1">{c.name}</h3>
+                        <p className="text-[10px] text-zinc-500 break-all leading-tight">{c.id}</p>
                       </div>
 
-                      <input type="date" id={`trial-${c.id}`} defaultValue={getDateInputValue(c.subscription?.trial_ends_at)} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[140px]" title="Fim do Trial" />
-                      <input type="date" id={`sub-${c.id}`} defaultValue={getDateInputValue(c.subscription?.subscription_ends_at)} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[140px]" title="Fim da Assinatura" />
-                    </div>
-
-                    <div className="w-full xl:w-[250px] flex flex-col gap-2 flex-shrink-0">
-                      <p className="text-xs text-zinc-500 mb-1">Criada em {formatDate(c.created_at)}</p>
-                      <button onClick={() => openAsaasInvoicesModal(c.id)} className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500">Ver Faturas Asaas</button>
-                      <button onClick={() => {
-                          const pId = (document.getElementById(`plan-${c.id}`) as HTMLSelectElement).value;
-                          const status = (document.getElementById(`status-${c.id}`) as HTMLSelectElement).value;
-                          const trial = (document.getElementById(`trial-${c.id}`) as HTMLInputElement).value;
-                          const sub = (document.getElementById(`sub-${c.id}`) as HTMLInputElement).value;
-                          saveCompanySubscription(c, pId, status, trial, sub);
-                      }} className="w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200">Salvar Alterações</button>
-                      <div className="flex gap-2">
-                          <button onClick={() => updateCompanyStatus(c, 'active')} className="flex-1 rounded-lg bg-[#0f2e1b] border border-transparent px-2 py-2 text-xs font-bold text-[#4ade80] hover:bg-green-900/50 transition-colors">Ativar</button>
-                          <button onClick={() => updateCompanyStatus(c, 'suspended')} className="flex-1 rounded-lg bg-[#3f3114] border border-transparent px-2 py-2 text-xs font-bold text-[#fbbf24] hover:bg-yellow-900/50 transition-colors">Suspender</button>
+                      <div className="w-full xl:w-[150px] space-y-1 text-xs">
+                        <p><span className="text-zinc-400">Usuários:</span> <strong className="text-white">{c.metrics.users}</strong></p>
+                        <p><span className="text-zinc-400">Clientes:</span> <strong className="text-white">{c.metrics.clients}</strong></p>
+                        <p><span className="text-zinc-400">Agendamentos:</span> <strong className="text-white">{c.metrics.appointments}</strong></p>
+                        <p><span className="text-zinc-400">Profissionais:</span> <strong className="text-white">{c.metrics.professionals}</strong></p>
+                        <p><span className="text-zinc-400">Receita:</span> <strong className="text-green-500">{formatCurrency(c.metrics.revenue)}</strong></p>
                       </div>
-                      <button onClick={() => resendInvite(c)} className="w-full rounded-lg bg-[#27272a] px-4 py-2 text-xs font-bold text-white transition hover:bg-zinc-700">Reenviar convite auth</button>
-                    </div>
 
-                  </div>
-                ))}
+                      <div className="flex-1 flex flex-wrap gap-3 items-center">
+                        <select id={`plan-${c.id}`} defaultValue={c.subscription?.plan_id || ''} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[130px]">
+                          <option value="">Plano...</option>
+                          {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        
+                        <div className="flex flex-col gap-2">
+                            <select id={`status-${c.id}`} defaultValue={statusEfetivo === 'expired' ? 'trial' : (c.subscription?.status || 'trial')} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[130px]">
+                                <option value="trial">Trial</option>
+                                <option value="active">Ativa</option>
+                                <option value="suspended">Suspensa</option>
+                                <option value="cancelled">Cancelada</option>
+                            </select>
+                            <span className={`inline-block px-3 py-1 text-center rounded-full text-xs font-bold w-[130px] ${getStatusClass(c.subscription?.status, c.subscription)}`}>
+                                {getStatusLabel(c.subscription?.status, c.subscription)}
+                            </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] text-zinc-500">Início da Assinatura</label>
+                          <input type="date" id={`start-${c.id}`} defaultValue={getDateInputValue(c.subscription?.subscription_starts_at || c.created_at)} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[140px]" />
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] text-zinc-500">Vencimento / Fim</label>
+                          <input type="date" id={`end-${c.id}`} defaultValue={getDateInputValue(c.subscription?.status === 'trial' ? c.subscription?.trial_ends_at : c.subscription?.subscription_ends_at)} className="rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white w-[140px]" />
+                        </div>
+                      </div>
+
+                      <div className="w-full xl:w-[250px] flex flex-col gap-2 flex-shrink-0">
+                        <p className="text-xs text-zinc-500 mb-1">Criada em {formatDate(c.created_at)}</p>
+                        <button onClick={() => openAsaasInvoicesModal(c.id)} className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500">Ver Faturas Asaas</button>
+                        <button onClick={() => {
+                            const pId = (document.getElementById(`plan-${c.id}`) as HTMLSelectElement).value;
+                            const status = (document.getElementById(`status-${c.id}`) as HTMLSelectElement).value;
+                            const start = (document.getElementById(`start-${c.id}`) as HTMLInputElement).value;
+                            const end = (document.getElementById(`end-${c.id}`) as HTMLInputElement).value;
+                            
+                            const trialEndsVal = status === 'trial' ? end : null;
+                            const subEndsVal = status === 'active' ? end : null;
+
+                            setSavingCompanyId(c.id)
+                            supabase.from('company_subscriptions').upsert({
+                              company_id: c.id, 
+                              plan_id: pId, 
+                              status,
+                              subscription_starts_at: start ? `${start}T00:00:00` : null,
+                              trial_ends_at: trialEndsVal ? `${trialEndsVal}T23:59:59` : null,
+                              subscription_ends_at: subEndsVal ? `${subEndsVal}T23:59:59` : null,
+                              blocked_at: status === 'suspended' ? new Date().toISOString() : null,
+                              updated_at: new Date().toISOString(),
+                            }, { onConflict: 'company_id' }).then(({ error }) => {
+                              setSavingCompanyId('')
+                              if (error) alert(`Erro: ${error.message}`)
+                              else loadMasterData()
+                            })
+                        }} className="w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-zinc-200">Salvar Alterações</button>
+                        <div className="flex gap-2">
+                            <button onClick={() => updateCompanyStatus(c, 'active')} className="flex-1 rounded-lg bg-[#0f2e1b] border border-transparent px-2 py-2 text-xs font-bold text-[#4ade80] hover:bg-green-900/50 transition-colors">Ativar</button>
+                            <button onClick={() => updateCompanyStatus(c, 'suspended')} className="flex-1 rounded-lg bg-[#3f3114] border border-transparent px-2 py-2 text-xs font-bold text-[#fbbf24] hover:bg-yellow-900/50 transition-colors">Suspender</button>
+                        </div>
+                        <button onClick={() => resendInvite(c)} className="w-full rounded-lg bg-[#27272a] px-4 py-2 text-xs font-bold text-white transition hover:bg-zinc-700">Reenviar convite auth</button>
+                      </div>
+
+                    </div>
+                  )
+                })}
               </div>
             </section>
           </div>
@@ -466,7 +535,10 @@ export default function MasterPage() {
                   <div><label className="mb-1 block text-xs text-zinc-400">Usuários</label><input type="number" value={newPlanMaxUsers} onChange={(e) => setNewPlanMaxUsers(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
                   <div><label className="mb-1 block text-xs text-zinc-400">Profissionais</label><input type="number" value={newPlanMaxProfessionals} onChange={(e) => setNewPlanMaxProfessionals(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
                 </div>
-                <div><label className="mb-1 block text-xs text-zinc-400">Agendamentos/Mês (0 = Ilimitado)</label><input type="number" value={newPlanMaxAppointments} onChange={(e) => setNewPlanMaxAppointments(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="mb-1 block text-xs text-zinc-400">Agendamentos (0=Ili.)</label><input type="number" value={newPlanMaxAppointments} onChange={(e) => setNewPlanMaxAppointments(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
+                  <div><label className="mb-1 block text-xs text-zinc-400">Serviços (0=Ili.)</label><input type="number" value={newPlanMaxServices} onChange={(e) => setNewPlanMaxServices(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black p-2 text-sm text-white" /></div>
+                </div>
                 <div>
                   <label className="mb-1 block text-xs text-zinc-400 text-amber-500">Serviços Extras (separe por vírgula)</label>
                   <textarea rows={2} placeholder="Ex: Gestão Financeira, Relatórios, Suporte VIP" value={newPlanFeatures} onChange={(e) => setNewPlanFeatures(e.target.value)} className="w-full rounded-lg border border-amber-900/50 bg-black p-2 text-sm text-white outline-none focus:border-amber-500" />
@@ -485,7 +557,10 @@ export default function MasterPage() {
                         <div><label className="text-[10px] text-zinc-500">Usuários</label><input type="number" value={editPlanMaxUsers} onChange={(e) => setEditPlanMaxUsers(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
                         <div><label className="text-[10px] text-zinc-500">Profissionais</label><input type="number" value={editPlanMaxProfessionals} onChange={(e) => setEditPlanMaxProfessionals(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
                       </div>
-                      <div><label className="text-[10px] text-zinc-500">Agendamentos/Mês</label><input type="number" value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><label className="text-[10px] text-zinc-500">Agendamentos</label><input type="number" value={editPlanMaxAppointments} onChange={(e) => setEditPlanMaxAppointments(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
+                        <div><label className="text-[10px] text-zinc-500">Serviços Máx</label><input type="number" value={editPlanMaxServices} onChange={(e) => setEditPlanMaxServices(e.target.value)} className="w-full rounded border border-zinc-700 bg-black p-1 text-xs text-white" /></div>
+                      </div>
                       <div><label className="text-[10px] text-amber-500">Serviços Extras (separe por vírgula)</label><textarea rows={2} value={editPlanFeatures} onChange={(e) => setEditPlanFeatures(e.target.value)} className="w-full rounded border border-amber-900/50 bg-black p-1 text-xs text-white outline-none focus:border-amber-500" /></div>
                       <div className="flex gap-2 pt-2">
                         <button onClick={savePlanEdits} className="flex-1 rounded bg-green-600 px-2 py-1 text-xs font-bold text-white">Salvar</button>
@@ -500,7 +575,7 @@ export default function MasterPage() {
                           <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${p.active ? 'bg-green-500/20 text-green-400' : 'bg-zinc-800 text-zinc-400'}`}>{p.active ? 'Ativo' : 'Inativo'}</span>
                         </div>
                         <span className="text-xl font-bold text-green-400 block mt-1">{formatCurrency(p.price)}</span>
-                        <p className="text-xs text-zinc-400 mt-2">Até {p.max_users} usuários e {p.max_professionals} profissionais</p>
+                        <p className="text-xs text-zinc-400 mt-2">Até {p.max_users} usuários, {p.max_professionals} profissionais e {p.max_services === 0 ? 'Ilimitados' : `${p.max_services} serviços`}</p>
                         {p.features && (
                           <div className="mt-3 p-2 bg-black rounded-lg border border-zinc-800">
                             <span className="text-[10px] text-amber-500 font-bold block mb-1">SERVIÇOS INCLUSOS:</span>

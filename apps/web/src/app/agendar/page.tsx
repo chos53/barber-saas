@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Calendar, Clock, User, CheckCircle2, Scissors, ChevronRight, ChevronLeft } from 'lucide-react'
 
 type Service = {
   id: string
@@ -31,6 +32,7 @@ type ProfessionalService = {
 }
 
 export default function PublicBookingPage() {
+  const [currentStep, setCurrentStep] = useState(1)
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [companyPhone, setCompanyPhone] = useState('')
@@ -60,7 +62,6 @@ export default function PublicBookingPage() {
   const [professionalBlock, setProfessionalBlock] = useState<ProfessionalBlock | null>(null)
 
   const [loading, setLoading] = useState(false)
-
   const [successMessage, setSuccessMessage] = useState('')
   const [successDetails, setSuccessDetails] = useState('')
 
@@ -69,13 +70,10 @@ export default function PublicBookingPage() {
 
   useEffect(() => {
     loadData()
-
     const now = new Date()
     const currentDate = now.toISOString().split('T')[0]
-
     const hours = String(now.getHours()).padStart(2, '0')
     const minutes = String(now.getMinutes()).padStart(2, '0')
-
     setToday(currentDate)
     setCurrentTime(`${hours}:${minutes}`)
   }, [])
@@ -88,13 +86,8 @@ export default function PublicBookingPage() {
     loadOccupiedTimes()
   }, [date, selectedProfessionalId, selectedServiceIds])
 
-  function generateAvailableTimes(
-    opening: string,
-    closing: string,
-    interval: number
-  ) {
+  function generateAvailableTimes(opening: string, closing: string, interval: number) {
     const times: string[] = []
-
     const [openingHour, openingMinute] = opening.split(':').map(Number)
     const [closingHour, closingMinute] = closing.split(':').map(Number)
 
@@ -104,14 +97,8 @@ export default function PublicBookingPage() {
     for (let minutes = start; minutes <= end; minutes += interval) {
       const hour = Math.floor(minutes / 60)
       const minute = minutes % 60
-
-      const formattedTime = `${String(hour).padStart(2, '0')}:${String(
-        minute
-      ).padStart(2, '0')}`
-
-      times.push(formattedTime)
+      times.push(`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`)
     }
-
     setAvailableTimes(times)
   }
 
@@ -121,7 +108,6 @@ export default function PublicBookingPage() {
         ? currentIds.filter((id) => id !== serviceId)
         : [...currentIds, serviceId]
     )
-
     setSelectedProfessionalId('')
     setDate('')
     setTime('')
@@ -129,23 +115,12 @@ export default function PublicBookingPage() {
     setProfessionalBlock(null)
   }
 
-  const selectedServices = services.filter((service) =>
-    selectedServiceIds.includes(service.id)
-  )
-
-  const totalDurationMinutes = selectedServices.reduce(
-    (sum, service) => sum + Number(service.duration_minutes || 0),
-    0
-  )
-
-  const totalPrice = selectedServices.reduce(
-    (sum, service) => sum + Number(service.price || 0),
-    0
-  )
+  const selectedServices = services.filter((service) => selectedServiceIds.includes(service.id))
+  const totalDurationMinutes = selectedServices.reduce((sum, service) => sum + Number(service.duration_minutes || 0), 0)
+  const totalPrice = selectedServices.reduce((sum, service) => sum + Number(service.price || 0), 0)
 
   function hasEnoughTimeForSelectedServices(availableTime: string) {
     if (selectedServiceIds.length === 0) return false
-
     const [hour, minute] = availableTime.split(':').map(Number)
     const startMinutes = hour * 60 + minute
     const endMinutes = startMinutes + totalDurationMinutes
@@ -160,11 +135,7 @@ export default function PublicBookingPage() {
     ).some((minutes) => {
       const currentHour = Math.floor(minutes / 60)
       const currentMinute = minutes % 60
-      const formattedTime = `${String(currentHour).padStart(2, '0')}:${String(
-        currentMinute
-      ).padStart(2, '0')}`
-
-      return occupiedTimes.includes(formattedTime)
+      return occupiedTimes.includes(`${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`)
     })
   }
 
@@ -179,21 +150,13 @@ export default function PublicBookingPage() {
     setOccupiedTimes([])
     setSuccessMessage('')
     setSuccessDetails('')
+    setCurrentStep(1)
   }
 
   async function loadData() {
     const { data: settings } = await supabase
       .from('company_settings')
-      .select(`
-        company_id,
-        company_name,
-        phone,
-        address,
-        logo_url,
-        opening_time,
-        closing_time,
-        interval_minutes
-      `)
+      .select(`company_id, company_name, phone, address, logo_url, opening_time, closing_time, interval_minutes`)
       .limit(1)
       .single()
 
@@ -210,24 +173,14 @@ export default function PublicBookingPage() {
 
     const { data: servicesData } = await supabase
       .from('services')
-      .select(`
-        id,
-        name,
-        price,
-        duration_minutes
-      `)
+      .select(`id, name, price, duration_minutes`)
       .eq('company_id', settings.company_id)
       .eq('active', true)
       .order('name')
 
     const { data: professionalsData } = await supabase
       .from('professionals')
-      .select(`
-        id,
-        name,
-        role,
-        photo_url
-      `)
+      .select(`id, name, role, photo_url`)
       .eq('company_id', settings.company_id)
       .eq('active', true)
       .order('name')
@@ -267,12 +220,7 @@ export default function PublicBookingPage() {
 
     const { data } = await supabase
       .from('appointments')
-      .select(`
-        appointment_time,
-        services (
-          duration_minutes
-        )
-      `)
+      .select(`appointment_time, services ( duration_minutes )`)
       .eq('professional_id', selectedProfessionalId)
       .eq('appointment_date', date)
       .neq('status', 'cancelled')
@@ -283,24 +231,13 @@ export default function PublicBookingPage() {
       const appointmentTime = appointment.appointment_time.slice(0, 5)
       const duration = appointment.services?.duration_minutes || 0
       const totalBlockMinutes = duration + intervalMinutes
-
       const [hour, minute] = appointmentTime.split(':').map(Number)
       const startMinutes = hour * 60 + minute
 
-      for (
-        let current = startMinutes;
-        current < startMinutes + totalBlockMinutes;
-        current += intervalMinutes
-      ) {
+      for (let current = startMinutes; current < startMinutes + totalBlockMinutes; current += intervalMinutes) {
         const currentHour = Math.floor(current / 60)
         const currentMinute = current % 60
-
-        const formattedTime = `${String(currentHour).padStart(
-          2,
-          '0'
-        )}:${String(currentMinute).padStart(2, '0')}`
-
-        blockedTimes.push(formattedTime)
+        blockedTimes.push(`${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`)
       }
     })
 
@@ -308,84 +245,7 @@ export default function PublicBookingPage() {
   }
 
   async function createBooking() {
-    setSuccessMessage('')
-
-    if (selectedServiceIds.length === 0) {
-      alert('Escolha pelo menos um serviço.')
-      return
-    }
-
-    if (!selectedProfessionalId) {
-      alert('Escolha um profissional.')
-      return
-    }
-
-    if (!date) {
-      alert('Escolha uma data.')
-      return
-    }
-
-    if (!time) {
-      alert('Escolha um horário disponível.')
-      return
-    }
-
-    if (!clientName.trim()) {
-      alert('Informe seu nome.')
-      return
-    }
-
-    if (!clientPhone.trim()) {
-      alert('Informe seu telefone.')
-      return
-    }
-
-    if (loading) {
-      return
-    }
-
-    if (date < today) {
-      alert('Não é possível agendar em uma data passada.')
-      return
-    }
-
-    if (date === today && time < currentTime) {
-      alert('Não é possível agendar em um horário que já passou.')
-      return
-    }
-
-    const professionalCanDoAllServices = selectedServiceIds.every((serviceId) =>
-      professionalServices.some(
-        (item) =>
-          item.professional_id === selectedProfessionalId &&
-          item.service_id === serviceId
-      )
-    )
-
-    if (!professionalCanDoAllServices) {
-      alert('Este profissional não realiza todos os serviços selecionados.')
-      return
-    }
-
-    if (!hasEnoughTimeForSelectedServices(time)) {
-      alert('Não existe tempo livre suficiente para todos os serviços neste horário.')
-      return
-    }
-
-    if (professionalBlock) {
-      alert('Este profissional está indisponível nesta data.')
-      return
-    }
-
-    if (occupiedTimes.includes(time)) {
-      alert('Este horário já está ocupado.')
-      return
-    }
-
-    const selectedProfessional = professionals.find(
-      (professional) => professional.id === selectedProfessionalId
-    )
-
+    if (!clientName.trim() || !clientPhone.trim()) return alert('Preencha seu nome e telefone.')
     setLoading(true)
 
     const { data: existingClient } = await supabase
@@ -400,12 +260,7 @@ export default function PublicBookingPage() {
     if (!clientId) {
       const { data: newClient, error: clientError } = await supabase
         .from('clients')
-        .insert({
-          company_id: companyId,
-          name: clientName.trim(),
-          phone: clientPhone.trim(),
-          active: true,
-        })
+        .insert({ company_id: companyId, name: clientName.trim(), phone: clientPhone.trim(), active: true })
         .select('id')
         .single()
 
@@ -414,20 +269,17 @@ export default function PublicBookingPage() {
         alert(clientError?.message || 'Erro ao criar cliente.')
         return
       }
-
       clientId = newClient.id
     }
 
     const [startHour, startMinute] = time.split(':').map(Number)
     const startMinutes = startHour * 60 + startMinute
-
     let accumulatedMinutes = 0
 
     const appointmentsToInsert = selectedServices.map((service) => {
       const serviceStartMinutes = startMinutes + accumulatedMinutes
       const serviceHour = Math.floor(serviceStartMinutes / 60)
       const serviceMinute = serviceStartMinutes % 60
-
       accumulatedMinutes += Number(service.duration_minutes || 0)
 
       return {
@@ -436,403 +288,238 @@ export default function PublicBookingPage() {
         service_id: service.id,
         professional_id: selectedProfessionalId,
         appointment_date: date,
-        appointment_time: `${String(serviceHour).padStart(2, '0')}:${String(
-          serviceMinute
-        ).padStart(2, '0')}`,
+        appointment_time: `${String(serviceHour).padStart(2, '0')}:${String(serviceMinute).padStart(2, '0')}`,
         status: 'scheduled',
         notes: notes.trim(),
       }
     })
 
-    const { error: appointmentError } = await supabase
-      .from('appointments')
-      .insert(appointmentsToInsert)
-
+    const { error: appointmentError } = await supabase.from('appointments').insert(appointmentsToInsert)
     setLoading(false)
 
-    if (appointmentError) {
-      alert(appointmentError.message)
-      return
-    }
+    if (appointmentError) return alert(appointmentError.message)
 
+    const selectedProfessional = professionals.find(p => p.id === selectedProfessionalId)
     setSuccessMessage('Agendamento realizado com sucesso!')
-
-    setSuccessDetails(
-      `${selectedServices.map((service) => service.name).join(', ')} com ${selectedProfessional?.name} em ${date} às ${time}`
-    )
-
-    setSelectedServiceIds([])
-    setSelectedProfessionalId('')
-    setDate('')
-    setTime('')
-    setClientName('')
-    setClientPhone('')
-    setNotes('')
-    setOccupiedTimes([])
+    setSuccessDetails(`${selectedServices.map((s) => s.name).join(', ')} com ${selectedProfessional?.name} em ${date.split('-').reverse().join('/')} às ${time}`)
   }
 
   const filteredProfessionals = selectedServiceIds.length > 0
-    ? professionals.filter((professional) =>
-        selectedServiceIds.every((serviceId) =>
-          professionalServices.some(
-            (item) =>
-              item.professional_id === professional.id &&
-              item.service_id === serviceId
-          )
-        )
-      )
+    ? professionals.filter((p) => selectedServiceIds.every((id) => professionalServices.some((ps) => ps.professional_id === p.id && ps.service_id === id)))
     : []
 
-  const canSubmit =
-    selectedServiceIds.length > 0 &&
-    selectedProfessionalId &&
-    date &&
-    time &&
-    clientName.trim() &&
-    clientPhone.trim()
+  const canSubmit = selectedServiceIds.length > 0 && selectedProfessionalId && date && time && clientName.trim() && clientPhone.trim()
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 p-6 text-white">
-      <div className="mx-auto max-w-3xl">
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-8 text-center shadow-2xl">
+    <main className="min-h-screen bg-black text-white pb-24 font-sans selection:bg-zinc-800 selection:text-white">
+      <div className="mx-auto max-w-xl px-4 pt-6">
+        
+        {/* CABEÇALHO COMPACTO ESTILO APP */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 text-center backdrop-blur-sm shadow-xl">
           {companyLogo && (
-            <img
-              src={companyLogo}
-              alt={companyName}
-              className="mx-auto mb-5 h-28 w-28 rounded-3xl object-cover ring-4 ring-zinc-800"
-            />
+            <img src={companyLogo} alt={companyName} className="mx-auto mb-3 h-16 w-16 rounded-2xl object-cover ring-2 ring-zinc-800" />
           )}
-
-          <p className="text-sm font-medium uppercase tracking-[0.3em] text-zinc-500">
-            Agendamento online
-          </p>
-
-          <h1 className="mt-3 text-4xl font-bold">
-            Agende seu horário
-          </h1>
-
-          <p className="mt-3 text-lg text-zinc-400">
-            {companyName}
-          </p>
+          <h1 className="text-xl font-bold tracking-tight text-white">{companyName}</h1>
+          <p className="text-xs text-zinc-500 mt-0.5">{companyAddress || 'Agendamento Prático e Rápido'}</p>
         </div>
 
+        {/* INDICADOR DE ETAPAS */}
+        {!successMessage && (
+          <div className="mt-6 flex justify-between items-center bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 text-xs text-zinc-400">
+            <span className={currentStep === 1 ? 'text-white font-bold' : ''}>1. Serviços</span>
+            <ChevronRight className="h-3 w-3 text-zinc-600" />
+            <span className={currentStep === 2 ? 'text-white font-bold' : selectedProfessionalId ? 'text-zinc-300' : ''}>2. Profissional</span>
+            <ChevronRight className="h-3 w-3 text-zinc-600" />
+            <span className={currentStep === 3 ? 'text-white font-bold' : date && time ? 'text-zinc-300' : ''}>3. Horário</span>
+            <ChevronRight className="h-3 w-3 text-zinc-600" />
+            <span className={currentStep === 4 ? 'text-white font-bold' : ''}>4. Confirmação</span>
+          </div>
+        )}
+
         {successMessage ? (
-          <div className="mt-6 rounded-3xl border border-green-800 bg-green-950 p-8 text-center shadow-2xl">
-            <p className="text-3xl font-bold text-green-300">
-              {successMessage}
-            </p>
-
-            <p className="mt-4 text-green-200">
-              {successDetails}
-            </p>
-
-            <button
-              onClick={resetBooking}
-              className="mt-6 w-full rounded-xl bg-white p-4 font-bold text-black"
-            >
+          <div className="mt-6 rounded-2xl border border-emerald-950 bg-emerald-950/20 p-8 text-center shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <p className="text-2xl font-bold text-white mt-4">{successMessage}</p>
+            <p className="mt-2 text-sm text-zinc-400 leading-relaxed max-w-sm mx-auto">{successDetails}</p>
+            <button onClick={resetBooking} className="mt-6 w-full rounded-xl bg-white p-3.5 text-sm font-bold text-black transition active:scale-95">
               Novo agendamento
             </button>
           </div>
         ) : (
-          <>
-            <div className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-xl">
-              <h2 className="text-2xl font-bold">
-                Escolha um serviço
-              </h2>
-
-              <div className="mt-6 space-y-3">
-                {services.map((service) => {
-                  const isSelected = selectedServiceIds.includes(service.id)
-
-                  return (
-                  <button
-                    key={service.id}
-                    onClick={() => toggleService(service.id)}
-                    className={`w-full rounded-2xl border p-5 text-left transition ${
-                      isSelected
-                        ? 'border-white bg-zinc-700'
-                        : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-lg font-bold">
-                          {service.name}
-                        </p>
-
-                        <p className="text-sm text-zinc-400">
-                          {service.duration_minutes} min
-                        </p>
-                      </div>
-
-                      <strong>
-                        R$ {Number(service.price).toFixed(2)}
-                      </strong>
-                    </div>
-                  </button>
-                  )
-                })}
-              </div>
-
-              {selectedServices.length > 0 && (
-                <div className="mt-6 rounded-2xl border border-green-900 bg-green-950/30 p-5">
-                  <p className="font-bold text-green-300">
-                    Serviços selecionados: {selectedServices.length}
-                  </p>
-
-                  <p className="mt-2 text-sm text-green-100">
-                    Duração total: {totalDurationMinutes} min · Valor total: R${' '}
-                    {totalPrice.toFixed(2)}
-                  </p>
+          <div className="mt-4">
+            
+            {/* PASSO 1: SELEÇÃO DE SERVIÇOS */}
+            {currentStep === 1 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-sm text-zinc-400 font-medium pl-1">
+                  <Scissors className="h-4 w-4" /> <h2>Selecione os serviços desejados:</h2>
                 </div>
-              )}
-            </div>
-
-            <div className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-xl">
-              <h2 className="text-2xl font-bold">
-                Escolha um profissional
-              </h2>
-
-              {selectedServiceIds.length === 0 && (
-                <p className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
-                  Escolha primeiro um serviço para ver os profissionais compatíveis.
-                </p>
-              )}
-
-              {selectedServiceIds.length > 0 && filteredProfessionals.length === 0 && (
-                <p className="mt-4 rounded-2xl border border-red-900 bg-red-950 p-4 text-sm text-red-300">
-                  Nenhum profissional disponível para todos os serviços selecionados.
-                </p>
-              )}
-
-              <div className="mt-6 space-y-3">
-                {filteredProfessionals.map((professional) => (
-                  <button
-                    key={professional.id}
-                    onClick={() => {
-                      setSelectedProfessionalId(professional.id)
-                      setTime('')
-                    }}
-                    className={`w-full rounded-2xl border p-5 text-left transition ${
-                      selectedProfessionalId === professional.id
-                        ? 'border-white bg-zinc-700'
-                        : 'border-zinc-800 bg-zinc-800 hover:bg-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      {professional.photo_url ? (
-                        <img
-                          src={professional.photo_url}
-                          alt={professional.name}
-                          className="h-20 w-20 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-700 text-2xl font-bold">
-                          {professional.name.charAt(0)}
-                        </div>
-                      )}
-
-                      <div>
-                        <p className="text-lg font-bold">
-                          {professional.name}
-                        </p>
-
-                        <p className="text-zinc-400">
-                          {professional.role}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-xl">
-              <input
-                type="date"
-                min={today}
-                className="rounded-xl bg-zinc-800 p-4"
-                value={date}
-                onChange={(e) => {
-                  setDate(e.target.value)
-                  setTime('')
-                }}
-              />
-
-              <div>
-                <p className="mb-3 text-sm text-zinc-400">
-                  Escolha um horário
-                </p>
-
-                {professionalBlock && (
-                  <div className="mb-4 rounded-2xl border border-orange-800 bg-orange-950 p-4 text-orange-300">
-                    <strong>Profissional indisponível</strong>
-                    <p className="mt-2">
-                      {professionalBlock.reason || professionalBlock.block_type}
-                    </p>
-                    <p>
-                      {professionalBlock.start_date} até {professionalBlock.end_date}
-                    </p>
-                  </div>
-                )}
-
-                {availableTimes.filter((availableTime) => {
-                  const isOccupied = occupiedTimes.includes(availableTime)
-                  const isPastTime =
-                    date === today && availableTime < currentTime
-                  const hasEnoughTime = hasEnoughTimeForSelectedServices(availableTime)
-
-                  return !isOccupied && !isPastTime && hasEnoughTime
-                }).length === 0 &&
-                  date &&
-                  selectedProfessionalId && (
-                    <div className="mb-4 rounded-2xl border border-red-900 bg-red-950 p-4 text-sm text-red-300">
-                      Não existem horários disponíveis para esta data.
-                    </div>
-                  )}
-
-                <div className="grid grid-cols-3 gap-3 md:grid-cols-5">
-                  {availableTimes.map((availableTime) => {
-                    const isOccupied = occupiedTimes.includes(availableTime)
-
-                    const isPastTime =
-                      date === today && availableTime < currentTime
-
-                    const hasEnoughTime = hasEnoughTimeForSelectedServices(availableTime)
-                    const isSelected = time === availableTime
-
+                <div className="space-y-2.5">
+                  {services.map((service) => {
+                    const isSelected = selectedServiceIds.includes(service.id)
                     return (
                       <button
-                        key={availableTime}
-                        type="button"
-                        disabled={isOccupied || isPastTime || !hasEnoughTime}
-                        onClick={() => setTime(availableTime)}
-                        className={`relative overflow-hidden rounded-2xl border p-3 text-sm font-bold transition-all duration-200 ${
-                          isOccupied
-                            ? 'cursor-not-allowed border-red-800 bg-red-950 text-red-300 opacity-70'
-                            : isPastTime
-                              ? 'cursor-not-allowed border-zinc-900 bg-zinc-950 text-zinc-600 opacity-50'
-                              : !hasEnoughTime
-                                ? 'cursor-not-allowed border-orange-900 bg-orange-950 text-orange-300 opacity-60'
-                                : isSelected
-                                ? 'scale-105 border-white bg-white text-black shadow-lg shadow-white/20'
-                                : 'border-zinc-700 bg-zinc-800 hover:scale-105 hover:border-white hover:bg-zinc-700'
+                        key={service.id}
+                        onClick={() => toggleService(service.id)}
+                        className={`w-full rounded-xl border p-4 text-left transition-all duration-200 ${
+                          isSelected ? 'border-white bg-zinc-900 shadow-md ring-1 ring-white/10' : 'border-zinc-800/80 bg-zinc-900/40 hover:border-zinc-700'
                         }`}
                       >
-                        <div className="flex flex-col items-center justify-center">
-                          <span>{availableTime}</span>
-
-                          {isOccupied && (
-                            <span className="mt-1 text-[10px] uppercase tracking-wide text-red-400">
-                              Ocupado
-                            </span>
-                          )}
-
-                          {isPastTime && (
-                            <span className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">
-                              Encerrado
-                            </span>
-                          )}
-
-                          {!isOccupied && !isPastTime && !hasEnoughTime && (
-                            <span className="mt-1 text-[10px] uppercase tracking-wide text-orange-400">
-                              Não cabe
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-sm text-white">{service.name}</p>
+                            <p className="text-xs text-zinc-500 mt-1">{service.duration_minutes} min</p>
+                          </div>
+                          <strong className="text-sm font-bold text-zinc-200">R$ {Number(service.price).toFixed(2)}</strong>
                         </div>
                       </button>
                     )
                   })}
                 </div>
+                {selectedServiceIds.length > 0 && (
+                  <button onClick={() => setCurrentStep(2)} className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-white p-3.5 text-sm font-bold text-black transition active:scale-95">
+                    Avançar para Profissional <ChevronRight className="h-4 w-4" />
+                  </button>
+                )}
               </div>
+            )}
 
-              <input
-                placeholder="Seu nome"
-                className="rounded-xl bg-zinc-800 p-4"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-              />
+            {/* PASSO 2: SELEÇÃO DE PROFISSIONAL */}
+            {currentStep === 2 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-sm text-zinc-400 font-medium pl-1">
+                  <User className="h-4 w-4" /> <h2>Com quem deseja agendar?</h2>
+                </div>
+                <div className="space-y-2.5">
+                  {filteredProfessionals.map((professional) => {
+                    const isSelected = selectedProfessionalId === professional.id
+                    return (
+                      <button
+                        key={professional.id}
+                        onClick={() => { setSelectedProfessionalId(professional.id); setTime('') }}
+                        className={`w-full rounded-xl border p-4 text-left transition-all duration-200 ${
+                          isSelected ? 'border-white bg-zinc-900 shadow-md ring-1 ring-white/10' : 'border-zinc-800/80 bg-zinc-900/40 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          {professional.photo_url ? (
+                            <img src={professional.photo_url} alt={professional.name} className="h-12 w-12 rounded-full object-cover ring-1 ring-zinc-700" />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-sm font-bold text-zinc-400">{professional.name.charAt(0)}</div>
+                          )}
+                          <div>
+                            <p className="font-semibold text-sm text-white">{professional.name}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">{professional.role || 'Especialista'}</p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2.5 mt-4">
+                  <button onClick={() => setCurrentStep(1)} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3.5 text-sm font-bold text-white transition hover:bg-zinc-800"><ChevronLeft className="h-4 w-4" /> Voltar</button>
+                  {selectedProfessionalId && (
+                    <button onClick={() => setCurrentStep(3)} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-white p-3.5 text-sm font-bold text-black transition active:scale-95">Avançar para Horário <ChevronRight className="h-4 w-4" /></button>
+                  )}
+                </div>
+              </div>
+            )}
 
-              <input
-                placeholder="Seu telefone"
-                className="rounded-xl bg-zinc-800 p-4"
-                value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
-              />
+            {/* PASSO 3: DATA E HORÁRIO */}
+            {currentStep === 3 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-sm text-zinc-400 font-medium pl-1">
+                  <Calendar className="h-4 w-4" /> <h2>Escolha o melhor dia e horário:</h2>
+                </div>
+                <input type="date" min={today} className="w-full rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 text-sm text-white outline-none focus:border-zinc-600" value={date} onChange={(e) => { setDate(e.target.value); setTime('') }} />
+                
+                {date && (
+                  <div className="mt-4">
+                    <p className="mb-3 text-xs text-zinc-500 font-medium pl-1 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> Horários livres para o dia selecionado:</p>
+                    
+                    {professionalBlock && (
+                      <div className="rounded-xl border border-amber-950 bg-amber-950/20 p-4 text-xs text-amber-400 mb-4">{professionalBlock.reason || 'Profissional indisponível nesta data.'}</div>
+                    )}
 
-              <textarea
-                placeholder="Observações do agendamento (opcional)"
-                className="min-h-[120px] rounded-xl bg-zinc-800 p-4"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
+                    {availableTimes.filter(t => !occupiedTimes.includes(t) && !(date === today && t < currentTime) && hasEnoughTimeForSelectedServices(t)).length === 0 && (
+                      <div className="rounded-xl border border-red-950 bg-red-950/20 p-4 text-xs text-red-400 mb-4">Nenhum horário vago para este dia. Experimente outra data!</div>
+                    )}
 
-              {selectedServiceIds.length > 0 &&
-                selectedProfessionalId &&
-                date &&
-                time && (
-                  <div className="rounded-2xl border border-zinc-700 bg-zinc-800 p-5">
-                    <p className="text-lg font-bold">
-                      Resumo do agendamento
-                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {availableTimes.map((availableTime) => {
+                        const isOccupied = occupiedTimes.includes(availableTime)
+                        const isPastTime = date === today && availableTime < currentTime
+                        const hasEnoughTime = hasEnoughTimeForSelectedServices(availableTime)
+                        const isSelected = time === availableTime
 
-                    <div className="mt-4 space-y-2 text-zinc-300">
-                      <p>
-                        <strong>Serviços:</strong>{' '}
-                        {selectedServices.map((service) => service.name).join(', ')}
-                      </p>
-
-                      <p>
-                        <strong>Profissional:</strong>{' '}
-                        {
-                          professionals.find(
-                            (professional) =>
-                              professional.id === selectedProfessionalId
-                          )?.name
-                        }
-                      </p>
-
-                      <p>
-                        <strong>Data:</strong> {date}
-                      </p>
-
-                      <p>
-                        <strong>Horário:</strong> {time}
-                      </p>
-
-                      <p>
-                        <strong>Duração total:</strong> {totalDurationMinutes} min
-                      </p>
-
-                      <p>
-                        <strong>Valor total:</strong> R$ {totalPrice.toFixed(2)}
-                      </p>
-
-                      {notes.trim() && (
-                        <p>
-                          <strong>Observações:</strong> {notes}
-                        </p>
-                      )}
+                        return (
+                          <button
+                            key={availableTime}
+                            type="button"
+                            disabled={isOccupied || isPastTime || !hasEnoughTime}
+                            onClick={() => setTime(availableTime)}
+                            className={`rounded-xl border p-3 text-xs font-bold transition-all ${
+                              isOccupied ? 'hidden' : isPastTime ? 'hidden' : !hasEnoughTime ? 'hidden' : isSelected ? 'border-white bg-white text-black shadow-lg shadow-white/10' : 'border-zinc-800/80 bg-zinc-900/30 hover:border-zinc-600'
+                            }`}
+                          >
+                            {availableTime}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
+                <div className="flex gap-2.5 mt-4">
+                  <button onClick={() => setCurrentStep(2)} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3.5 text-sm font-bold text-white transition hover:bg-zinc-800"><ChevronLeft className="h-4 w-4" /> Voltar</button>
+                  {date && time && (
+                    <button onClick={() => setCurrentStep(4)} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-white p-3.5 text-sm font-bold text-black transition active:scale-95">Identificação <ChevronRight className="h-4 w-4" /></button>
+                  )}
+                </div>
+              </div>
+            )}
 
-              <button
-                onClick={createBooking}
-                disabled={loading}
-                className={`rounded-xl p-4 font-bold transition ${
-                  loading
-                    ? 'cursor-not-allowed bg-zinc-700 text-zinc-400'
-                    : canSubmit
-                      ? 'bg-white text-black hover:opacity-90'
-                      : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-                }`}
-              >
-                {loading ? 'Agendando...' : 'Confirmar agendamento'}
-              </button>
-            </div>
-          </>
+            {/* PASSO 4: IDENTIFICAÇÃO E REVISÃO FINAL */}
+            {currentStep === 4 && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-4 space-y-3 text-xs">
+                  <h3 className="font-bold text-sm border-b border-zinc-800 pb-2 text-white">Resumo Final do Agendamento</h3>
+                  <p className="text-zinc-400"><span className="text-zinc-500 font-medium">Serviços:</span> {selectedServices.map(s => s.name).join(', ')}</p>
+                  <p className="text-zinc-400"><span className="text-zinc-500 font-medium">Profissional:</span> {professionals.find(p => p.id === selectedProfessionalId)?.name}</p>
+                  <p className="text-zinc-400"><span className="text-zinc-500 font-medium">Data e Hora:</span> {date.split('-').reverse().join('/')} às {time}</p>
+                  <p className="text-zinc-400"><span className="text-zinc-500 font-medium">Preço Total:</span> <span className="font-bold text-emerald-400">R$ {totalPrice.toFixed(2)}</span> ({totalDurationMinutes} min)</p>
+                </div>
+
+                <div className="space-y-2.5 mt-2">
+                  <input placeholder="Digite seu nome completo" className="w-full rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 text-sm text-white outline-none focus:border-zinc-600" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+                  <input placeholder="Seu WhatsApp com DDD" className="w-full rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 text-sm text-white outline-none focus:border-zinc-600" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
+                  <textarea placeholder="Alguma observação ou aviso importante? (Opcional)" className="w-full min-h-[80px] rounded-xl border border-zinc-800 bg-zinc-900/50 p-3.5 text-sm text-white outline-none focus:border-zinc-600 resize-none" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                </div>
+
+                <div className="flex gap-2.5 mt-4">
+                  <button onClick={() => setCurrentStep(3)} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3.5 text-sm font-bold text-white transition hover:bg-zinc-800"><ChevronLeft className="h-4 w-4" /> Voltar</button>
+                  <button onClick={createBooking} disabled={loading || !canSubmit} className="flex-1 rounded-xl bg-emerald-500 p-3.5 text-sm font-bold text-black transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+                    {loading ? 'Confirmando...' : 'Confirmar Agendamento'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
         )}
+
+        {/* BOTTOM FLOATING SUMMARY BAR (APENAS MOBILE ENQUANTO NÃO SUCESSO) */}
+        {!successMessage && selectedServiceIds.length > 0 && (
+          <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-zinc-950/80 p-4 backdrop-blur-md flex items-center justify-between px-6 z-40 max-w-xl mx-auto rounded-t-2xl">
+            <div>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Resumo parcial</p>
+              <p className="text-sm font-bold text-white mt-0.5">{selectedServiceIds.length} selecionado(s) · <span className="text-emerald-400">R$ {totalPrice.toFixed(2)}</span></p>
+            </div>
+            <div className="text-xs text-zinc-500 font-medium">Etapa {currentStep}/4</div>
+          </div>
+        )}
+
       </div>
     </main>
   )
