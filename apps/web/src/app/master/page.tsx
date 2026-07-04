@@ -15,6 +15,24 @@ type AsaasInvoice = { id: string; dueDate: string; value: number; status: string
 
 const masterEmails = ['caheolsa@yahoo.com.br']
 
+async function getMasterAuthHeaders(includeJsonContentType = false) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  const headers: Record<string, string> = {}
+
+  if (includeJsonContentType) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`
+  }
+
+  return headers
+}
+
 export default function MasterPage() {
   const [loading, setLoading] = useState(true)
   const [companies, setCompanies] = useState<CompanyRow[]>([])
@@ -215,7 +233,10 @@ export default function MasterPage() {
       setLoadingInvoices(true)
       setViewingInvoicesCompany('Buscando...')
       setCompanyInvoices([])
-      const response = await fetch(`/api/master/company-invoices?companyId=${companyId}`)
+      const response = await fetch(`/api/master/company-invoices?companyId=${companyId}`, {
+        credentials: 'include',
+        headers: await getMasterAuthHeaders(),
+      })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Erro.')
       setViewingInvoicesCompany(data.companyName)
@@ -236,13 +257,11 @@ export default function MasterPage() {
 
     setCreatingCompany(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return alert('Sessão master não encontrada.')
-
       const response = await fetch('/api/master/create-company', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName, ownerEmail, planId: newCompanyPlanId, trialDays, masterUserId: user.id }),
+        credentials: 'include',
+        headers: await getMasterAuthHeaders(true),
+        body: JSON.stringify({ companyName, ownerEmail, planId: newCompanyPlanId, trialDays }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)

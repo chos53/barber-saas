@@ -1,76 +1,41 @@
-// app/api/webhooks/asaas/route.ts
+import { NextResponse } from "next/server"
+import { supabase } from "@/lib/supabase"
 
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// Inicializa o cliente do Supabase com a Service Role para contornar o RLS de forma segura no servidor
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json()
+    // 1. Validar o Token do Webhook vindo do Asaas
+    const asaasToken = request.headers.get("asaas-access-token")
+    const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET
+
+    if (!asaasToken || asaasToken !== webhookSecret) {
+      return NextResponse.json({ error: "Token de assinatura do webhook inválido." }, { status: 401 })
+    }
+
+    // 2. Capturar o corpo da requisição de forma segura
+    const body = await request.json()
     const { event, payment } = body
 
-    if (!payment) {
-      return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
-    }
+    // 3. Processar os eventos de pagamento com segurança
+    if (event === "PAYMENT_RECEIVED") {
+      const companyId = payment.externalReference // Garantir que envias o ID da empresa no externalReference do Asaas
 
-    const asaasSubscriptionId = payment.subscription // ID da assinatura no Asaas (sub_xxxx)
-    const asaasCustomerId = payment.customer // ID do cliente no Asaas (cus_xxxx)
-
-    console.log(`[Webhook Asaas] Evento recebido: ${event} para o customer ${asaasCustomerId}`)
-
-    // 1. Evento de Pagamento Recebido (Sucesso na cobrança)
-    if (event === 'PAYMENT_RECEIVED') {
-      const dueDate = new Date(payment.dueDate)
-      // Calcula a nova data de expiração (vencimento da fatura + 30 dias de ciclo)
-      const nextExpiration = new Date(dueDate)
-      nextExpiration.setDate(nextExpiration.getDate() + 30)
-
-      const { error } = await supabaseAdmin
-        .from('company_subscriptions')
-        .update({
-          status: 'active',
-          subscription_ends_at: nextExpiration.toISOString(),
-          blocked_at: null,
-          updated_at: new Date().toISOString()
+      // Atualizar a assinatura da empresa no banco de dados
+      const { error } = await supabase
+        .from("companies")
+        .update({ 
+          plan_status: "active", 
+          updated_at: new Date().toISOString() 
         })
-        .eq('asaas_subscription_id', asaasSubscriptionId)
+        .eq("id", companyId)
 
       if (error) {
-        console.error('[Webhook Asaas] Erro ao ativar assinatura via webhook:', error.message)
-        return NextResponse.json({ error: 'Erro interno ao atualizar banco' }, { status: 500 })
+        return NextResponse.json({ error: "Erro ao atualizar o plano da empresa." }, { status: 500 })
       }
-
-      console.log(`[Webhook Asaas] Assinatura ${asaasSubscriptionId} renovada e ativada com sucesso.`)
     }
 
-    // 2. Evento de Pagamento Vencido / Atrasado (Inadimplência)
-    if (event === 'PAYMENT_OVERDUE') {
-      const { error } = await supabaseAdmin
-        .from('company_subscriptions')
-        .update({
-          status: 'suspended',
-          blocked_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('asaas_subscription_id', asaasSubscriptionId)
-
-      if (error) {
-        console.error('[Webhook Asaas] Erro ao suspender assinatura via webhook:', error.message)
-        return NextResponse.json({ error: 'Erro interno ao suspender licença' }, { status: 500 })
-      }
-
-      console.log(`[Webhook Asaas] Assinatura ${asaasSubscriptionId} suspensa por falta de pagamento.`)
-    }
-
-    // Retorna sucesso para o Asaas parar de reenviar o mesmo evento
     return NextResponse.json({ received: true }, { status: 200 })
-  } catch (err: any) {
-    console.error('[Webhook Asaas] Falha crítica no processamento:', err.message)
-    return NextResponse.json({ error: 'Erro crítico no webhook' }, { status: 500 })
+
+  } catch (error) {
+    return NextResponse.json({ error: "Falha ao processar o webhook." }, { status: 500 })
   }
 }
