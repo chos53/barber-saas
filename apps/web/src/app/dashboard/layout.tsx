@@ -4,6 +4,19 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { 
+  Home, 
+  Calendar, 
+  Users, 
+  Scissors, 
+  DollarSign, 
+  Settings,
+  BarChart3,
+  ShieldAlert,
+  FileSpreadsheet,
+  Package,
+  LogOut
+} from 'lucide-react'
 
 type UserRole =
   | 'owner'
@@ -17,6 +30,7 @@ type MenuItem = {
   label: string
   href: string
   roles: UserRole[]
+  icon: any // Adicionado para suportar o componente do ícone
 }
 
 const userRoleOptions: { value: UserRole; label: string }[] = [
@@ -44,56 +58,67 @@ const menuItems: MenuItem[] = [
     label: 'Dashboard',
     href: '/dashboard',
     roles: allRoles,
+    icon: Home,
   },
   {
     label: 'Agenda',
     href: '/dashboard/agenda',
     roles: ['owner', 'administrator', 'manager', 'reception', 'barber'],
+    icon: Calendar,
   },
   {
     label: 'Clientes',
     href: '/dashboard/clientes',
     roles: ['owner', 'administrator', 'manager', 'reception'],
+    icon: Users,
   },
   {
     label: 'Serviços',
     href: '/dashboard/servicos',
     roles: ['owner', 'administrator', 'manager'],
+    icon: Scissors,
   },
   {
     label: 'Profissionais',
     href: '/dashboard/profissionais',
     roles: ['owner', 'administrator', 'manager'],
+    icon: Users,
   },
   {
     label: 'Financeiro',
     href: '/dashboard/financeiro',
     roles: ['owner', 'administrator', 'manager', 'financial'],
+    icon: DollarSign,
   },
   {
     label: 'Relatórios',
     href: '/dashboard/relatorios',
     roles: ['owner', 'administrator', 'manager', 'financial'],
+    icon: BarChart3,
   },
   {
     label: 'Auditoria',
     href: '/dashboard/auditoria',
     roles: ['owner', 'administrator', 'manager'],
+    icon: ShieldAlert,
   },
   {
     label: 'Comandas',
     href: '/dashboard/comandas',
     roles: ['owner', 'administrator', 'manager', 'reception', 'barber'],
+    icon: FileSpreadsheet,
   },
   {
     label: 'Produtos',
     href: '/dashboard/produtos',
     roles: ['owner', 'administrator', 'manager'],
+    icon: Package,
   },
   {
     label: 'Configurações',
     href: '/dashboard/configuracoes',
     roles: ['owner', 'administrator'],
+    icon: Settings,
   },
 ]
 
@@ -364,17 +389,19 @@ export default function DashboardLayout({
         <nav className="mt-10 space-y-2">
           {allowedMenuItems.map((item) => {
             const isActive = pathname === item.href
+            const Icon = item.icon
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`block rounded-xl p-3 transition ${
+                className={`flex items-center gap-3 rounded-xl p-3 text-sm font-medium transition ${
                   isActive
                     ? 'bg-white font-bold text-black'
                     : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
                 }`}
               >
+                <Icon className={`h-4 w-4 ${isActive ? 'text-black' : 'text-zinc-400'}`} />
                 {item.label}
               </Link>
             )
@@ -383,8 +410,9 @@ export default function DashboardLayout({
 
         <button
           onClick={handleLogout}
-          className="mt-auto rounded-xl bg-white p-3 font-bold text-black transition hover:bg-zinc-200"
+          className="mt-auto flex items-center justify-center gap-2 rounded-xl bg-white p-3 font-bold text-black transition hover:bg-zinc-200"
         >
+          <LogOut className="h-4 w-4" />
           Sair
         </button>
       </aside>
