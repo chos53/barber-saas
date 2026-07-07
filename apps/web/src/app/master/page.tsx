@@ -76,11 +76,12 @@ export default function MasterPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(false)
 
   const heroImageRef = useRef<HTMLInputElement>(null)
-  const [hero, setHero] = useState({ title: '', subtitle: '', image: null as File | null })
+  const [hero, setHero] = useState({ title: '', subtitle: '', hero_image_url: '' })
   const [cta, setCta] = useState({ text: '', link: '' })
-  const [benefits, setBenefits] = useState([{ title: '', description: '' }])
-  const [testimonials, setTestimonials] = useState([{ name: '', role: '', text: '', photo: null as File | null }])
+  const [benefits, setBenefits] = useState<{ title: string; description: string; image_url?: string }[]>([{ title: '', description: '', image_url: '' }])
+  const [testimonials, setTestimonials] = useState<{ name: string; role: string; text: string; image_url?: string }[]>([{ name: '', role: '', text: '', image_url: '' }])
   const [savingLanding, setSavingLanding] = useState(false)
+  const [uploading, setUploading] = useState<string | null>(null)
 
   useEffect(() => {
     loadMasterData()
@@ -113,18 +114,61 @@ export default function MasterPage() {
   const totalClients = useMemo(() => companies.reduce((sum, c) => sum + (c.metrics?.clients || 0), 0), [companies])
   const totalAppointments = useMemo(() => companies.reduce((sum, c) => sum + (c.metrics?.appointments || 0), 0), [companies])
 
-  const addBenefit = () => setBenefits([...benefits, { title: '', description: '' }])
+  const addBenefit = () => setBenefits([...benefits, { title: '', description: '', image_url: '' }])
   const removeBenefit = (index: number) => setBenefits(benefits.filter((_, i) => i !== index))
-  const addTestimonial = () => setTestimonials([...testimonials, { name: '', role: '', text: '', photo: null }])
+  const addTestimonial = () => setTestimonials([...testimonials, { name: '', role: '', text: '', image_url: '' }])
   const removeTestimonial = (index: number) => setTestimonials(testimonials.filter((_, i) => i !== index))
+
+  async function handleImageUpload(file: File, type: 'benefit' | 'testimonial' | 'hero', index: number = 0) {
+    if (!file) return
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${type}-${index}-${Date.now()}.${fileExt}`
+    const filePath = `${fileName}`
+
+    setUploading(`${type}-${index}`)
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('landing-images')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('landing-images')
+        .getPublicUrl(filePath)
+
+      if (type === 'hero') {
+        setHero(prev => ({ ...prev, hero_image_url: publicUrl }))
+      } else if (type === 'benefit') {
+        const newB = [...benefits]
+        newB[index].image_url = publicUrl
+        setBenefits(newB)
+      } else {
+        const newT = [...testimonials]
+        newT[index].image_url = publicUrl
+        setTestimonials(newT)
+      }
+    } catch (err: any) {
+      alert(`Erro no upload: ${err.message}`)
+    } finally {
+      setUploading(null)
+    }
+  }
 
   async function handleSaveLandingPage() {
     setSavingLanding(true)
     try {
-      const cleanTestimonials = testimonials.map(t => ({ name: t.name, role: t.role, text: t.text }))
+      const cleanTestimonials = testimonials.map(t => ({ name: t.name, role: t.role, text: t.text, image_url: t.image_url || '' }))
       const { error } = await supabase.from('landing_settings').upsert({
-        id: 'default', hero_title: hero.title, hero_subtitle: hero.subtitle, cta_text: cta.text,
-        cta_link: cta.link, benefits: benefits, testimonials: cleanTestimonials, updated_at: new Date().toISOString()
+        id: 'default', 
+        hero_title: hero.title, 
+        hero_subtitle: hero.subtitle, 
+        hero_image_url: hero.hero_image_url || '',
+        cta_text: cta.text,
+        cta_link: cta.link, 
+        benefits: benefits, 
+        testimonials: cleanTestimonials, 
+        updated_at: new Date().toISOString()
       })
       if (error) throw error
       alert('Configurações da Landing Page salvas com sucesso!')
@@ -163,7 +207,11 @@ export default function MasterPage() {
       if (subscriptionsResult.error) throw subscriptionsResult.error
 
       if (landingResult.data) {
-        setHero({ title: landingResult.data.hero_title || '', subtitle: landingResult.data.hero_subtitle || '', image: null })
+        setHero({ 
+          title: landingResult.data.hero_title || '', 
+          subtitle: landingResult.data.hero_subtitle || '', 
+          hero_image_url: landingResult.data.hero_image_url || '' 
+        })
         setCta({ text: landingResult.data.cta_text || '', link: landingResult.data.cta_link || '' })
         if (landingResult.data.benefits?.length) setBenefits(landingResult.data.benefits)
         if (landingResult.data.testimonials?.length) setTestimonials(landingResult.data.testimonials)
@@ -314,7 +362,7 @@ export default function MasterPage() {
     setSavingPlan(false)
     if (error) return alert(`Erro: ${error.message}`)
     setEditingPlanId(null)
-    alert('Plano atualizado!')
+    alert('Plano updated!')
     await loadMasterData()
   }
 
@@ -639,9 +687,40 @@ export default function MasterPage() {
                   <button onClick={handleSaveLandingPage} disabled={savingLanding} className="px-4 py-2 bg-amber-500 text-black font-bold text-xs rounded-lg">{savingLanding ? 'Salvando...' : 'Publicar Alterações'}</button>
                 </div>
               </div>
+              
               <div className="space-y-4">
                 <input placeholder="Título Principal" value={hero.title} onChange={(e) => setHero({ ...hero, title: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
                 <textarea rows={3} placeholder="Subtítulo" value={hero.subtitle} onChange={(e) => setHero({ ...hero, subtitle: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
+                
+                {/* NOVO BOTÃO DE UPLOAD DA IMAGEM DO HERO (DASHBOARD PRINCIPAL) */}
+                <div className="space-y-1 bg-black/30 p-4 rounded-xl border border-zinc-800">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] text-zinc-500 uppercase font-bold">Imagem Principal do Dashboard (Hero)</label>
+                    <span className="text-[9px] text-blue-400 font-medium">Formatos: PNG, JPG</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex h-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition cursor-pointer select-none">
+                      {uploading === 'hero-0' ? 'Enviando...' : 'Upload Imagem Principal'}
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleImageUpload(file, 'hero', 0)
+                        }} 
+                      />
+                    </label>
+                    {hero.hero_image_url && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-green-400 truncate">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                        Imagem Principal Vinculada
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-zinc-600 italic">Recomendado: Print horizontal retangular do sistema (Proporção 16:9).</p>
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-4">
                   <input placeholder="Botão Call to Action" value={cta.text} onChange={(e) => setCta({ ...cta, text: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
                   <input placeholder="Link (ex: /register)" value={cta.link} onChange={(e) => setCta({ ...cta, link: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
@@ -649,35 +728,113 @@ export default function MasterPage() {
               </div>
             </section>
 
+            {/* SEÇÃO BENEFÍCIOS REESTRUTURADA COM UPLOAD STORAGE */}
             <section className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
               <h2 className="text-xl font-bold text-white mb-4">Benefícios</h2>
-              {benefits.map((b, i) => (
-                <div key={i} className="flex gap-4 mb-3 items-center">
-                  <div className="flex-1 space-y-2">
-                    <input placeholder="Título" value={b.title} onChange={(e) => { const nb = [...benefits]; nb[i].title = e.target.value; setBenefits(nb) }} className="w-full p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
-                    <textarea placeholder="Descrição" value={b.description} onChange={(e) => { const nb = [...benefits]; nb[i].description = e.target.value; setBenefits(nb) }} className="w-full p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+              {benefits.map((b, index) => (
+                <div key={index} className="flex gap-4 items-start border-b border-zinc-900 pb-5 last:border-0 last:pb-0">
+                  <div className="flex-1 grid md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-500 uppercase font-bold">Título do Benefício</label>
+                      <input 
+                        placeholder="Ex: Dashboard Completo" 
+                        value={b.title} 
+                        onChange={(e) => { const newB = [...benefits]; newB[index].title = e.target.value; setBenefits(newB) }} 
+                        className="w-full p-2.5 bg-black border border-zinc-800 rounded-xl text-xs text-white outline-none" 
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-500 uppercase font-bold">Descrição</label>
+                      <input 
+                        placeholder="Ex: Essa tela mostra faturamento, metas do proprietário..." 
+                        value={b.description} 
+                        onChange={(e) => { const newB = [...benefits]; newB[index].description = e.target.value; setBenefits(newB) }} 
+                        className="w-full p-2.5 bg-black border border-zinc-800 rounded-xl text-xs text-white outline-none" 
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] text-zinc-500 uppercase font-bold">Imagem do Benefício</label>
+                        <span className="text-[9px] text-blue-400 font-medium">PNG, JPG (1080x1080)</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="flex h-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition cursor-pointer select-none">
+                          {uploading === `benefit-${index}` ? 'Enviando...' : 'Upload Imagem'}
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) handleImageUpload(file, 'benefit', index)
+                            }} 
+                          />
+                        </label>
+                        {b.image_url && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-green-400 truncate max-w-[140px]" title={b.image_url}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                            Vinculada
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[9px] text-zinc-600 italic">Ideal: Print quadrado (Ex: 1080x1080px).</p>
+                    </div>
                   </div>
-                  <button onClick={() => removeBenefit(i)} className="text-red-400 p-2"><Trash2 className="h-5 w-5" /></button>
+
+                  <button 
+                    onClick={() => removeBenefit(index)} 
+                    className="text-red-500 hover:bg-zinc-900 p-2 rounded-xl mt-5 transition"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
-              <button onClick={addBenefit} className="w-full py-2 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm">Adicionar Benefício</button>
+              <button onClick={addBenefit} className="w-full py-2.5 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm mt-4 flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" /> Adicionar Benefício
+              </button>
             </section>
 
+            {/* SEÇÃO DEPOIMENTOS REESTRUTURADA COM UPLOAD STORAGE */}
             <section className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
               <h2 className="text-xl font-bold text-white mb-4">Depoimentos</h2>
               {testimonials.map((t, i) => (
-                <div key={i} className="flex gap-4 mb-3 items-center">
-                  <div className="flex-1 space-y-2">
-                    <div className="flex gap-2">
-                      <input placeholder="Nome" value={t.name} onChange={(e) => { const nt = [...testimonials]; nt[i].name = e.target.value; setTestimonials(nt) }} className="w-1/2 p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
-                      <input placeholder="Cargo" value={t.role} onChange={(e) => { const nt = [...testimonials]; nt[i].role = e.target.value; setTestimonials(nt) }} className="w-1/2 p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+                <div key={i} className="flex gap-4 mb-4 items-start border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
+                  <div className="flex-1 space-y-3">
+                    <div className="grid md:grid-cols-3 gap-3">
+                      <input placeholder="Nome" value={t.name} onChange={(e) => { const nt = [...testimonials]; nt[i].name = e.target.value; setTestimonials(nt) }} className="p-2.5 bg-black border border-zinc-800 rounded-xl text-sm text-white outline-none" />
+                      <input placeholder="Cargo" value={t.role} onChange={(e) => { const nt = [...testimonials]; nt[i].role = e.target.value; setTestimonials(nt) }} className="p-2.5 bg-black border border-zinc-800 rounded-xl text-sm text-white outline-none" />
+                      
+                      <div className="flex items-center gap-3">
+                        <label className="flex h-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-400 hover:bg-zinc-800 transition cursor-pointer select-none w-full">
+                          {uploading === `testimonial-${i}` ? 'Enviando...' : 'Upload Avatar'}
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) handleImageUpload(file, 'testimonial', i)
+                            }} 
+                          />
+                        </label>
+                        {t.image_url && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-green-400 truncate max-w-[100px]" title={t.image_url}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                            OK
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <textarea placeholder="Depoimento" value={t.text} onChange={(e) => { const nt = [...testimonials]; nt[i].text = e.target.value; setTestimonials(nt) }} className="w-full p-2 bg-black border border-zinc-800 rounded-lg text-sm" />
+                    <textarea placeholder="Depoimento" rows={2} value={t.text} onChange={(e) => { const nt = [...testimonials]; nt[i].text = e.target.value; setTestimonials(nt) }} className="w-full p-2.5 bg-black border border-zinc-800 rounded-xl text-sm text-zinc-300 outline-none" />
                   </div>
-                  <button onClick={() => removeTestimonial(i)} className="text-red-400 p-2"><Trash2 className="h-5 w-5" /></button>
+                  <button onClick={() => removeTestimonial(i)} className="text-red-400 p-2 mt-2 hover:bg-zinc-800 rounded-xl transition"><Trash2 className="h-5 w-5" /></button>
                 </div>
               ))}
-              <button onClick={addTestimonial} className="w-full py-2 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm">Adicionar Depoimento</button>
+              <button onClick={addTestimonial} className="w-full py-2.5 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" /> Adicionar Depoimento
+              </button>
             </section>
           </div>
         )}

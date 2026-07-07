@@ -1082,12 +1082,9 @@ export default function FinanceiroPage() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => {
-              loadTransactions()
-              loadMonthlyTransactions()
-              loadCashRegister()
-              loadCashHistory()
-              loadDailyClosings()
+              window.location.reload()
             }}
+       
             className="rounded-xl bg-white px-5 py-3 font-bold text-black"
           >
             Atualizar dados
@@ -1429,7 +1426,7 @@ export default function FinanceiroPage() {
               <p className="mt-3 text-sm text-zinc-500">Exibindo {filteredTransactions.length} de {transactions.length} movimentações.</p>
             </div>
 
-            <div className="rounded-2xl bg-zinc-900 p-6">
+            <div className="rounded-2xl bg-zinc-900 p-6">atualizar
               <label className="text-sm text-zinc-400">Forma de pagamento</label>
               <select className="mt-2 w-full rounded-lg bg-zinc-800 p-3" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as PaymentFilter)}>
                 <option value="all">Todas</option>
