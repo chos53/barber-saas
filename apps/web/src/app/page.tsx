@@ -89,8 +89,11 @@ export default async function LandingPage() {
           </div>
           
           {/* CONTAINER DA IMAGEM DO DASHBOARD PRINCIPAL (HERO) */}
-          <div className="relative mt-20 max-w-5xl mx-auto rounded-xl border border-zinc-800 bg-zinc-900/50 p-2 md:p-4 shadow-2xl backdrop-blur-sm">
-            <div className="aspect-video bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-center overflow-hidden relative">
+          {/* CONTAINER DA IMAGEM DO DASHBOARD PRINCIPAL (HERO) */}
+
+          <div className="relative mt-20 max-w-5xl mx-auto rounded-xl border border-amber-500/30 bg-zinc-900/50 p-2 md:p-4 shadow-[0_0_50px_rgba(242,202,80,0.05)] backdrop-blur-sm">
+            <div className="aspect-video bg-zinc-950 rounded-lg border border-amber-500/20 flex items-center justify-center overflow-hidden relative">
+       
               {settings.hero_image_url ? (
                 <Image 
                   src={settings.hero_image_url} 
@@ -109,7 +112,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* SEÇÃO DE BENEFÍCIOS ADAPTADA (ESTRUTURA EM DUAS COLUNAS CONFORME O GUIA) */}
+        {/* SEÇÃO DE BENEFÍCIOS */}
         <section id="funcionalidades" className="py-24 bg-zinc-950 border-t border-zinc-900">
           <div className="container mx-auto px-4">
             <div className="text-center mb-20">
@@ -123,7 +126,7 @@ export default async function LandingPage() {
                 return (
                   <div key={i} className={`flex flex-col md:flex-row gap-12 md:gap-20 items-center justify-between ${isEven ? '' : 'md:flex-row-reverse'}`}>
                     
-                    {/* Bloco de Texto (Título e Descrição) */}
+                    {/* Bloco de Texto */}
                     <div className="flex-1 space-y-6">
                       <div className="bg-amber-500/10 border border-amber-500/20 w-12 h-12 rounded-xl flex items-center justify-center">
                         {i === 0 ? <Calendar className="h-6 w-6 text-amber-500" /> : i === 1 ? <DollarSign className="h-6 w-6 text-amber-500" /> : <Users className="h-6 w-6 text-amber-500" />}
@@ -132,8 +135,9 @@ export default async function LandingPage() {
                       <p className="text-zinc-400 text-lg leading-relaxed">{benefit.description}</p>
                     </div>
 
-                    {/* Bloco da Imagem Quadrada Real do Sistema */}
-                    <div className="flex-1 w-full aspect-square bg-zinc-900 rounded-3xl border border-zinc-800 overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.5)] group hover:border-amber-500/30 transition-colors">
+                    {/* Bloco da Imagem */}
+                    <div className="flex-1 w-full aspect-square bg-zinc-900 rounded-3xl border border-amber-500/30 overflow-hidden relative shadow-[0_0_30px_rgba(242,202,80,0.05)] group hover:border-amber-500/60 transition-colors">
+               
                       {benefit.image_url ? (
                         <Image 
                           src={benefit.image_url} 
@@ -148,7 +152,6 @@ export default async function LandingPage() {
                         </div>
                       )}
                     </div>
-
                   </div>
                 );
               })}
@@ -156,13 +159,18 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* SEÇÃO DEPOIMENTOS ATUALIZADA COM IMAGENS REALISTAS */}
+        {/* SEÇÃO DEPOIMENTOS */}
         <section id="depoimentos" className="py-24 bg-zinc-900/30 border-y border-zinc-900">
           <div className="container mx-auto px-4">
             <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-16">Provado e aprovado por especialistas</h2>
             <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
               {displayTestimonials.map((depoimento: any, i: number) => (
-                <div key={i} className="bg-zinc-950 border border-zinc-800 p-8 rounded-2xl flex flex-col justify-between relative">
+                <div 
+                  key={i}
+                  className="bg-zinc-950 border border-amber-500/30 p-8 rounded-2xl flex flex-col justify-between relative shadow-[0_0_30px_rgba(242,202,80,0.02)] transition-colors hover:border-amber-500/50"
+                >
+   
+   
                   <div>
                     <div className="flex gap-1 mb-4">{[1,2,3,4,5].map(star => <Star key={star} className="h-4 w-4 fill-amber-500 text-amber-500" />)}</div>
                     <p className="text-zinc-300 mb-6 italic leading-relaxed">"{depoimento.text}"</p>
@@ -201,7 +209,8 @@ export default async function LandingPage() {
                 plans.map((plan, index) => {
                   const isPopular = index === 1; 
                   return (
-                    <div key={plan.id} className={`w-full md:w-[350px] flex flex-col p-8 rounded-3xl relative ${isPopular ? 'bg-zinc-900 border-2 border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.15)] transform md:-translate-y-4' : 'bg-zinc-900/40 border border-zinc-800'}`}>
+                    <div key={plan.id} className={`w-full md:w-[350px] flex flex-col p-8 rounded-3xl relative ${isPopular ? 'bg-zinc-900 border border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.2)] transform md:-translate-y-4' : 'bg-zinc-900/40 border border-zinc-800'}`}>
+               
                       {isPopular && (
                         <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2"><span className="bg-amber-500 text-black text-xs font-bold uppercase tracking-wider py-1.5 px-4 rounded-full">Mais Escolhido</span></div>
                       )}
