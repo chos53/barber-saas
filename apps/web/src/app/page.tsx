@@ -1,3 +1,4 @@
+import CookieBanner from "@/components/CookieBanner";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Calendar, DollarSign, BarChart3, Check, Star, Users, Sparkles } from "lucide-react";
@@ -264,6 +265,7 @@ export default async function LandingPage() {
           <div className="mt-8 pt-8 border-t border-zinc-900 text-center"><p>© {new Date().getFullYear()} Salonix App. Todos os direitos reservados.</p></div>
         </div>
       </footer>
+      <CookieBanner />
     </div>
   );
 }
