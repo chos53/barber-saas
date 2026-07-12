@@ -80,6 +80,10 @@ export default function MasterPage() {
   const [cta, setCta] = useState({ text: '', link: '' })
   const [benefits, setBenefits] = useState<{ title: string; description: string; image_url?: string }[]>([{ title: '', description: '', image_url: '' }])
   const [testimonials, setTestimonials] = useState<{ name: string; role: string; text: string; image_url?: string }[]>([{ name: '', role: '', text: '', image_url: '' }])
+  
+  // NOVO ESTADO: Redes Sociais
+  const [socialLinks, setSocialLinks] = useState<{ link_url: string; image_url?: string }[]>([{ link_url: '', image_url: '' }])
+  
   const [savingLanding, setSavingLanding] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
 
@@ -118,8 +122,12 @@ export default function MasterPage() {
   const removeBenefit = (index: number) => setBenefits(benefits.filter((_, i) => i !== index))
   const addTestimonial = () => setTestimonials([...testimonials, { name: '', role: '', text: '', image_url: '' }])
   const removeTestimonial = (index: number) => setTestimonials(testimonials.filter((_, i) => i !== index))
+  
+  // NOVOS HANDLERS: Redes Sociais
+  const addSocialLink = () => setSocialLinks([...socialLinks, { link_url: '', image_url: '' }])
+  const removeSocialLink = (index: number) => setSocialLinks(socialLinks.filter((_, i) => i !== index))
 
-  async function handleImageUpload(file: File, type: 'benefit' | 'testimonial' | 'hero', index: number = 0) {
+  async function handleImageUpload(file: File, type: 'benefit' | 'testimonial' | 'hero' | 'social', index: number = 0) {
     if (!file) return
     const fileExt = file.name.split('.').pop()
     const fileName = `${type}-${index}-${Date.now()}.${fileExt}`
@@ -143,10 +151,14 @@ export default function MasterPage() {
         const newB = [...benefits]
         newB[index].image_url = publicUrl
         setBenefits(newB)
-      } else {
+      } else if (type === 'testimonial') {
         const newT = [...testimonials]
         newT[index].image_url = publicUrl
         setTestimonials(newT)
+      } else if (type === 'social') {
+        const newS = [...socialLinks]
+        newS[index].image_url = publicUrl
+        setSocialLinks(newS)
       }
     } catch (err: any) {
       alert(`Erro no upload: ${err.message}`)
@@ -168,6 +180,7 @@ export default function MasterPage() {
         cta_link: cta.link, 
         benefits: benefits, 
         testimonials: cleanTestimonials, 
+        social_links: socialLinks, // INSERINDO AS REDES SOCIAIS NA TABELA
         updated_at: new Date().toISOString()
       })
       if (error) throw error
@@ -215,6 +228,7 @@ export default function MasterPage() {
         setCta({ text: landingResult.data.cta_text || '', link: landingResult.data.cta_link || '' })
         if (landingResult.data.benefits?.length) setBenefits(landingResult.data.benefits)
         if (landingResult.data.testimonials?.length) setTestimonials(landingResult.data.testimonials)
+        if (landingResult.data.social_links?.length) setSocialLinks(landingResult.data.social_links)
       }
 
       const loadedCompanies = (companiesResult.data || []) as unknown as Company[]
@@ -692,7 +706,6 @@ export default function MasterPage() {
                 <input placeholder="Título Principal" value={hero.title} onChange={(e) => setHero({ ...hero, title: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
                 <textarea rows={3} placeholder="Subtítulo" value={hero.subtitle} onChange={(e) => setHero({ ...hero, subtitle: e.target.value })} className="w-full p-3 bg-black border border-zinc-800 rounded-xl" />
                 
-                {/* NOVO BOTÃO DE UPLOAD DA IMAGEM DO HERO (DASHBOARD PRINCIPAL) */}
                 <div className="space-y-1 bg-black/30 p-4 rounded-xl border border-zinc-800">
                   <div className="flex justify-between items-center">
                     <label className="text-[10px] text-zinc-500 uppercase font-bold">Imagem Principal do Dashboard (Hero)</label>
@@ -836,6 +849,49 @@ export default function MasterPage() {
                 <Plus className="h-4 w-4" /> Adicionar Depoimento
               </button>
             </section>
+
+            {/* SEÇÃO REDES SOCIAIS (NOVA) */}
+            <section className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+              <h2 className="text-xl font-bold text-white mb-4">Redes Sociais (Rodapé)</h2>
+              {socialLinks.map((social, i) => (
+                <div key={i} className="flex gap-4 mb-4 items-start border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
+                  <div className="flex-1 grid md:grid-cols-2 gap-3">
+                    <input 
+                      placeholder="URL do Link (ex: https://instagram.com/salonix)" 
+                      value={social.link_url} 
+                      onChange={(e) => { const newS = [...socialLinks]; newS[i].link_url = e.target.value; setSocialLinks(newS) }} 
+                      className="p-2.5 bg-black border border-zinc-800 rounded-xl text-sm text-white outline-none" 
+                    />
+                    
+                    <div className="flex items-center gap-3">
+                      <label className="flex h-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-xs font-medium text-zinc-400 hover:bg-zinc-800 transition cursor-pointer select-none w-full">
+                        {uploading === `social-${i}` ? 'Enviando...' : 'Upload Ícone'}
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleImageUpload(file, 'social', i)
+                          }} 
+                        />
+                      </label>
+                      {social.image_url && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-green-400 truncate max-w-[100px]" title={social.image_url}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                          OK
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button onClick={() => removeSocialLink(i)} className="text-red-400 p-2 hover:bg-zinc-800 rounded-xl transition"><Trash2 className="h-5 w-5" /></button>
+                </div>
+              ))}
+              <button onClick={addSocialLink} className="w-full py-2.5 border border-dashed border-zinc-700 text-zinc-400 rounded-lg text-sm flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" /> Adicionar Rede Social
+              </button>
+            </section>
+
           </div>
         )}
       </div>
