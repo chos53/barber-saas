@@ -3,6 +3,7 @@ import CookieBanner from "@/components/CookieBanner";
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowRight, Calendar, DollarSign, BarChart3, Check, Star, Users, Sparkles } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 
@@ -68,7 +69,7 @@ export default function LandingPage() {
     hero_image_url: '',
     benefits: [],
     testimonials: [],
-    social_links: [] // Nova lista dinâmica vinda da tabela 'landing_settings'
+    social_links: []
   });
 
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function LandingPage() {
           hero_image_url: settingsData.hero_image_url || '',
           benefits: settingsData.benefits || [],
           testimonials: settingsData.testimonials || [],
-          social_links: settingsData.social_links || [] // Mapeia os links criados no master
+          social_links: settingsData.social_links || []
         });
       }
     }
@@ -157,6 +158,8 @@ export default function LandingPage() {
               <Link href={settings.cta_link} className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-black px-8 py-4 rounded-full text-lg font-bold hover:scale-105 transition-transform shadow-[0_0_20px_rgba(245,158,11,0.4)]">
                 {settings.cta_text} <ArrowRight className="h-5 w-5" />
               </Link>
+              {/* Botão de Demonstração Adicionado Aqui */}
+              <BotaoDemo />
             </div>
           </div>
 
@@ -346,13 +349,10 @@ export default function LandingPage() {
                 &copy; {new Date().getFullYear()} Salonix. Todos os direitos reservados.
               </p>
               
-              {/* Bloco de Redes Sociais - Otimizado para ícones maiores */}
+              {/* Bloco de Redes Sociais */}
               {settings.social_links && settings.social_links.length > 0 && (
-
                 <div className="flex gap-4 mt-6">
-
                   {settings.social_links.map((social: any, idx: number) => (
-
                     <a 
                       key={idx}
                       href={social.link_url}
@@ -372,16 +372,10 @@ export default function LandingPage() {
                       ) : (
                         <span className="text-[9px] text-zinc-600">Link</span>
                       )}
-                
                     </a>
-
                   ))}
-
                 </div>
-
               )}
-        
-        
             </div>
 
             {/* Coluna 2: Navegação Interna */}
@@ -418,5 +412,35 @@ export default function LandingPage() {
  
       <CookieBanner />
     </div>
+  );
+}
+
+// Componente do Botão de Demonstração
+function BotaoDemo() {
+  const router = useRouter();
+
+  const handleDemoLogin = async () => {
+    // ⚠️ ATENÇÃO: A senha aqui precisa estar ENTRE ASPAS SIMPLES e ser exatamente a de 6 dígitos que você usou na imagem
+    const { error } = await supabase.auth.signInWithPassword({
+      email: 'ugugsun-02@yahoo.com', 
+      password: '123456' // Exemplo: '123456'
+    });
+
+    if (error) {
+      // Mudamos o alert para ele te mostrar EXATAMENTE qual é a reclamação do Supabase
+      alert("Erro detalhado do Supabase: " + error.message);
+      console.error(error);
+    } else {
+      router.push('/dashboard'); 
+    }
+  };
+
+  return (
+    <button 
+      onClick={handleDemoLogin}
+      className="inline-flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-8 py-4 rounded-full text-lg transition-all border border-zinc-600 shadow-lg"
+    >
+      Ver Sistema na Prática
+    </button>
   );
 }
