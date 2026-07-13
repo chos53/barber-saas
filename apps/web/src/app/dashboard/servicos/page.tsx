@@ -12,6 +12,7 @@ type Service = {
 }
 
 export default function ServicesPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [services, setServices] = useState<Service[]>([])
   const [search, setSearch] = useState('')
 
@@ -24,6 +25,11 @@ export default function ServicesPage() {
   const [editName, setEditName] = useState('')
   const [editDuration, setEditDuration] = useState('30')
   const [editPrice, setEditPrice] = useState('0')
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     loadData()
@@ -47,6 +53,11 @@ export default function ServicesPage() {
       return
     }
 
+    // VERIFICA SE É O USUÁRIO DA DEMO
+    if (user.email === 'ugugsun-02@yahoo.com') {
+      setIsDemoUser(true)
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('company_id')
@@ -67,6 +78,8 @@ export default function ServicesPage() {
   }
 
   async function createService() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!name.trim()) {
       alert('Digite o nome do serviço.')
       return
@@ -162,6 +175,8 @@ export default function ServicesPage() {
   }
 
   async function updateService(serviceId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!editName.trim()) {
       alert('Digite o nome do serviço.')
       return
@@ -189,6 +204,8 @@ export default function ServicesPage() {
     serviceId: string,
     active: boolean
   ) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const { error } = await supabase
       .from('services')
       .update({

@@ -80,6 +80,7 @@ type CompanyData = {
 }
 
 export default function FinanceiroPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [companyId, setCompanyId] = useState('')
   const [companyData, setCompanyData] = useState<CompanyData | null>(null)
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
@@ -128,6 +129,11 @@ export default function FinanceiroPage() {
   const [reopeningClosingId, setReopeningClosingId] = useState('')
 
   const [activeTab, setActiveTab] = useState<'summary' | 'cash' | 'movements' | 'plans'>('summary')
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     const now = new Date()
@@ -215,6 +221,11 @@ export default function FinanceiroPage() {
       return null
     }
 
+    // VERIFICA SE É O USUÁRIO DA DEMO
+    if (user.email === 'ugugsun-02@yahoo.com') {
+      setIsDemoUser(true)
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('company_id')
@@ -242,7 +253,7 @@ export default function FinanceiroPage() {
   async function loadAvailablePlans() {
     setLoadingPlans(true)
     const { data, error } = await supabase
-      .from('saas_plans') // <-- Mudei de 'plans' para 'saas_plans' aqui!
+      .from('saas_plans')
       .select('*')
       .eq('active', true)
       .order('price', { ascending: true })
@@ -322,6 +333,8 @@ export default function FinanceiroPage() {
   }
 
   async function createExpense() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada. Atualize a página e tente novamente.')
       return
@@ -395,6 +408,8 @@ export default function FinanceiroPage() {
   }
 
   async function cancelTransaction(transactionId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const transaction = transactions.find((item) => item.id === transactionId)
     if (!transaction) {
       alert('Movimentação não encontrada.')
@@ -474,6 +489,8 @@ export default function FinanceiroPage() {
   }
 
   async function saveCashMovement() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId || !cashSession) {
       alert('Abra o caixa antes de registrar sangria ou reforço.')
       return
@@ -565,6 +582,8 @@ export default function FinanceiroPage() {
   }
 
   async function closeFinancialDay() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return
@@ -684,6 +703,8 @@ export default function FinanceiroPage() {
   }
 
   async function reopenFinancialClosing(closingId: string, closingDate: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return
@@ -720,6 +741,8 @@ export default function FinanceiroPage() {
   }
 
   async function openCashRegister() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return
@@ -758,6 +781,8 @@ export default function FinanceiroPage() {
   }
 
   async function closeCashRegister() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!cashSession) return
 
     if (!closingAmount || Number(closingAmount) < 0) {
@@ -1426,7 +1451,7 @@ export default function FinanceiroPage() {
               <p className="mt-3 text-sm text-zinc-500">Exibindo {filteredTransactions.length} de {transactions.length} movimentações.</p>
             </div>
 
-            <div className="rounded-2xl bg-zinc-900 p-6">atualizar
+            <div className="rounded-2xl bg-zinc-900 p-6">
               <label className="text-sm text-zinc-400">Forma de pagamento</label>
               <select className="mt-2 w-full rounded-lg bg-zinc-800 p-3" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as PaymentFilter)}>
                 <option value="all">Todas</option>
@@ -1571,6 +1596,8 @@ export default function FinanceiroPage() {
                     type="button"
                     disabled={isCurrentPlan}
                     onClick={async () => {
+                      if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO PARA O CHECKOUT
+                      
                       try {
                         const response = await fetch('/api/checkout/asaas', {
                           method: 'POST',

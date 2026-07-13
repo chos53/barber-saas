@@ -80,6 +80,8 @@ const defaultLoyaltySettings: LoyaltySettings = {
 }
 
 export default function ClientsPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
+  
   const [clients, setClients] = useState<Client[]>([])
   const [crmByClient, setCrmByClient] = useState<Record<string, ClientCrmStats>>({})
   const [loyaltyByClient, setLoyaltyByClient] = useState<Record<string, LoyaltyStats>>({})
@@ -104,6 +106,11 @@ export default function ClientsPage() {
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editBirthDate, setEditBirthDate] = useState('')
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     loadData()
@@ -262,6 +269,11 @@ export default function ClientsPage() {
     if (!user) {
       window.location.href = '/login'
       return
+    }
+
+    // VERIFICA SE É O USUÁRIO DA DEMO
+    if (user.email === 'ugugsun-02@yahoo.com') {
+      setIsDemoUser(true)
     }
 
     const { data: profile } = await supabase
@@ -532,6 +544,8 @@ export default function ClientsPage() {
   }
 
   async function createClient() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!name.trim()) {
       alert('Digite o nome do cliente.')
       return
@@ -593,6 +607,8 @@ export default function ClientsPage() {
   }
 
   async function updateClient(clientId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!editName.trim()) {
       alert('Digite o nome do cliente.')
       return
@@ -639,6 +655,8 @@ export default function ClientsPage() {
     clientId: string,
     active: boolean
   ) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const client = clients.find((item) => item.id === clientId)
     const nextActive = !active
 
@@ -704,6 +722,8 @@ export default function ClientsPage() {
   }
 
   async function redeemReward(client: Client) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const stats = getLoyaltyStats(client.id)
 
     if (stats.rewardsAvailable <= 0) {
@@ -1018,6 +1038,8 @@ export default function ClientsPage() {
   }
 
   async function saveLoyaltySettings() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return

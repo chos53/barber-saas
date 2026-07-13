@@ -132,6 +132,7 @@ type DashboardSettings = {
 }
 
 export default function DashboardPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('Barber SaaS')
   const [loading, setLoading] = useState(true)
@@ -178,6 +179,11 @@ export default function DashboardPage() {
   const [monthlyGoalValue, setMonthlyGoalValue] = useState('')
   const [monthlyClientsGoalValue, setMonthlyClientsGoalValue] = useState('')
   const [savingGoals, setSavingGoals] = useState(false)
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     const now = new Date()
@@ -512,6 +518,8 @@ export default function DashboardPage() {
   }
 
   async function saveDashboardGoals() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return
@@ -703,6 +711,13 @@ export default function DashboardPage() {
     }
 
     setCompanyId(profile.company_id)
+
+    // VALIDAÇÃO MULTI-TENANT DA TRAVA DE DEMO
+    if (profile.company_id === '9c6fbe16-858c-492c-8a13-0b6d7a36008a') {
+      setIsDemoUser(true)
+    } else {
+      setIsDemoUser(false)
+    }
 
     const { data: settings } = await supabase
       .from('company_settings')

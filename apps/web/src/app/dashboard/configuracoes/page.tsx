@@ -49,6 +49,7 @@ function getRoleLabel(role: string | null | undefined) {
 }
 
 export default function SettingsPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [phone, setPhone] = useState('')
@@ -70,6 +71,11 @@ export default function SettingsPage() {
     useState<UserAccessRole>('barber')
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([])
   const [savingRoleUserId, setSavingRoleUserId] = useState('')
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     loadSettings()
@@ -96,6 +102,13 @@ export default function SettingsPage() {
     setCompanyId(profile.company_id)
     setCurrentUserId(user.id)
     setCurrentUserRole(normalizeUserAccessRole(profile.role))
+
+    // VALIDAÇÃO MULTI-TENANT DA TRAVA DE DEMO
+    if (profile.company_id === '9c6fbe16-858c-492c-8a13-0b6d7a36008a') {
+      setIsDemoUser(true)
+    } else {
+      setIsDemoUser(false)
+    }
 
     await loadTeamUsers(profile.company_id)
 
@@ -136,6 +149,8 @@ export default function SettingsPage() {
   }
 
   async function updateTeamUserRole(userId: string, nextRole: UserAccessRole) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return
@@ -180,7 +195,7 @@ export default function SettingsPage() {
 
     await loadTeamUsers(companyId)
 
-    alert('Permissão atualizada com sucesso.')
+    alert('Permissão actualizada com sucesso.')
   }
 
   async function uploadLogo() {
@@ -206,6 +221,8 @@ export default function SettingsPage() {
   }
 
   async function saveSettings() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) return
 
     setSaving(true)

@@ -121,6 +121,7 @@ function getUserAccessRoleLabel(role: UserAccessRole | null | undefined) {
 }
 
 export default function ProfessionalsPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [professionals, setProfessionals] = useState<Professional[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [search, setSearch] = useState('')
@@ -170,6 +171,11 @@ export default function ProfessionalsPage() {
   const [selectedSpecialtyServiceIds, setSelectedSpecialtyServiceIds] =
     useState<string[]>([])
   const [savingSpecialties, setSavingSpecialties] = useState(false)
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     loadData()
@@ -369,6 +375,11 @@ export default function ProfessionalsPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/login'; return }
 
+    // VERIFICA SE É O USUÁRIO DA DEMO
+    if (user.email === 'ugugsun-02@yahoo.com') {
+      setIsDemoUser(true)
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('company_id')
@@ -494,6 +505,7 @@ export default function ProfessionalsPage() {
   }
 
   async function uploadPhoto() {
+    if (isDemoUser) { demoAlert(); return '' } // TRAVA DA DEMO
     if (!photoFile) return ''
     const fileExt = photoFile.name.split('.').pop()
     const fileName = `${uuidv4()}.${fileExt}`
@@ -504,6 +516,8 @@ export default function ProfessionalsPage() {
   }
 
   async function createProfessional() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!name.trim()) { alert('Digite o nome do profissional.'); return }
     if (!companyId) { alert('Erro: Empresa não identificada.'); return }
 
@@ -588,6 +602,8 @@ export default function ProfessionalsPage() {
   }
 
   async function updateProfessional(professionalId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!editName.trim()) { alert('Digite o nome do profissional.'); return }
     let photoUrl = photoPreview
     if (photoFile) { photoUrl = await uploadPhoto() }
@@ -638,6 +654,8 @@ export default function ProfessionalsPage() {
   }
 
   async function updateProfessionalAccessRole(professional: Professional) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!professional.email) { alert('Este profissional não possui e-mail vinculado.'); return }
     setSavingPermissionId(professional.id)
     const updated = await updateProfilePermissionByEmail(professional.email, normalizeUserAccessRole(professional.user_access_role || 'barber'))
@@ -646,12 +664,16 @@ export default function ProfessionalsPage() {
   }
 
   async function toggleProfessionalActive(professionalId: string, active: boolean) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const { error } = await supabase.from('professionals').update({ active: !active }).eq('id', professionalId)
     if (error) { alert(error.message); return }
     loadData()
   }
 
   async function releaseCommission(professional: Professional) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) { alert('Empresa não identificada.'); return }
     if (!professional.monthly_commission || professional.monthly_commission <= 0) { alert('Este profissional não possui comissão para liberar no mês.'); return }
     const confirmRelease = window.confirm(`Liberar comissão de ${professional.name} para pagamento?`)
@@ -670,6 +692,8 @@ export default function ProfessionalsPage() {
   }
 
   async function markCommissionAsPaid(professional: Professional) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) { alert('Empresa não identificada.'); return }
     if (!professional.monthly_commission || professional.monthly_commission <= 0) { alert('Este profissional não possui comissão para pagar no mês.'); return }
     const confirmPayment = window.confirm(`Marcar comissão de ${professional.name} como paga?`)
@@ -688,6 +712,8 @@ export default function ProfessionalsPage() {
   }
 
   async function reopenCommissionPayment(professional: Professional) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) { alert('Empresa não identificada.'); return }
     const confirmReopen = window.confirm(`Reabrir pagamento da comissão de ${professional.name}?`)
     if (!confirmReopen) return
@@ -717,6 +743,8 @@ export default function ProfessionalsPage() {
   }
 
   async function saveProfessionalSpecialties() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId || !specialtyProfessional) { alert('Empresa ou profissional não identificado.'); return }
     setSavingSpecialties(true)
 
@@ -748,6 +776,8 @@ export default function ProfessionalsPage() {
   }
 
   async function saveProfessionalBlock() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId || !blockProfessional) { alert('Empresa ou profissional não identificado.'); return }
     if (!blockStartDate || !blockEndDate) { alert('Informe a data inicial e final do bloqueio.'); return }
     if (blockStartDate > blockEndDate) { alert('A data inicial não pode ser maior que a data final.'); return }
@@ -783,6 +813,8 @@ export default function ProfessionalsPage() {
   }
 
   async function deleteProfessionalBlock(blockId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const confirmDelete = window.confirm('Remover este bloqueio?')
     if (!confirmDelete) return
     setDeletingBlockId(blockId)
@@ -817,6 +849,8 @@ export default function ProfessionalsPage() {
   }
 
   async function saveProfessionalAvailability() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId || !availabilityProfessional) { alert('Empresa ou profissional não identificado.'); return }
     const invalidPause = availabilityRows.find((row) => row.available && row.pause_start_time && row.pause_end_time && row.pause_start_time >= row.pause_end_time)
 

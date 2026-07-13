@@ -32,6 +32,7 @@ type StockMovement = {
 }
 
 export default function ProdutosPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [companyId, setCompanyId] = useState('')
   const [userId, setUserId] = useState('')
   const [products, setProducts] = useState<Product[]>([])
@@ -61,6 +62,11 @@ export default function ProdutosPage() {
   const [movementQuantities, setMovementQuantities] = useState<Record<string, string>>({})
   const [movementReasons, setMovementReasons] = useState<Record<string, string>>({})
   const [savingMovement, setSavingMovement] = useState<Record<string, boolean>>({})
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     loadData()
@@ -256,6 +262,13 @@ export default function ProdutosPage() {
 
     setCompanyId(profile.company_id)
 
+    // CORREÇÃO CRÍTICA: A trava agora verifica estritamente se o ID da empresa é o da Demo
+    if (profile.company_id === '9c6fbe16-858c-492c-8a13-0b6d7a36008a') {
+      setIsDemoUser(true)
+    } else {
+      setIsDemoUser(false)
+    }
+
     const { data, error } = await supabase
       .from('products')
       .select(
@@ -311,6 +324,8 @@ export default function ProdutosPage() {
 
   async function createProduct(event: React.FormEvent) {
     event.preventDefault()
+
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
 
     if (!companyId) {
       alert('Empresa não identificada.')
@@ -387,6 +402,8 @@ export default function ProdutosPage() {
   }
 
   async function updateProduct(productId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!editName.trim()) {
       alert('Digite o nome do produto.')
       return
@@ -432,6 +449,8 @@ export default function ProdutosPage() {
   }
 
   async function toggleProductActive(product: Product) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const { error } = await supabase
       .from('products')
       .update({
@@ -451,6 +470,8 @@ export default function ProdutosPage() {
 
 
   async function registerStockMovement(product: Product) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!companyId) {
       alert('Empresa não identificada.')
       return
@@ -598,7 +619,7 @@ export default function ProdutosPage() {
           </strong>
 
           <span className="mt-2 block text-xs font-bold">
-            {stockFilter === 'zero' ? 'Filtro ativo' : 'Clique para filtrar'}
+            {stockFilter === 'zero' ? 'Filtro active' : 'Clique para filtrar'}
           </span>
         </button>
 

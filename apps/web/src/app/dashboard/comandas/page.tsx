@@ -61,6 +61,7 @@ const statusFilters = [
 ]
 
 export default function ComandasPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
@@ -89,13 +90,18 @@ export default function ComandasPage() {
   const [savingPriority, setSavingPriority] = useState<Record<string, boolean>>({})
   const [, forceClock] = useState(0)
 
-useEffect(() => {
-  const interval = setInterval(() => {
-    forceClock(Date.now())
-  }, 60000)
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
-  return () => clearInterval(interval)
-}, [])
+  useEffect(() => {
+    const interval = setInterval(() => {
+      forceClock(Date.now())
+    }, 60000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -332,6 +338,11 @@ useEffect(() => {
 
     if (!user) return
 
+    // VERIFICA SE É O USUÁRIO DA DEMO
+    if (user.email === 'ugugsun-02@yahoo.com') {
+      setIsDemoUser(true)
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('company_id')
@@ -493,6 +504,8 @@ useEffect(() => {
   }
 
   async function saveNotes(comandaId: string) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const notesValue = editingNotes[comandaId] || ''
 
     setSavingNotes((current) => ({
@@ -521,6 +534,8 @@ useEffect(() => {
   }
 
   async function saveDiscount(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (comanda.status !== 'open') {
       alert('Somente comandas abertas podem receber desconto.')
       return
@@ -580,6 +595,8 @@ useEffect(() => {
 
 
   async function saveSurcharge(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (comanda.status !== 'open') {
       alert('Somente comandas abertas podem receber acréscimo.')
       return
@@ -628,6 +645,8 @@ useEffect(() => {
   }
 
   async function togglePriority(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     setSavingPriority((current) => ({
       ...current,
       [comanda.id]: true,
@@ -655,6 +674,8 @@ useEffect(() => {
 
   async function createComanda(event: React.FormEvent) {
     event.preventDefault()
+
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
 
     if (!companyId) {
       alert('Empresa não encontrada.')
@@ -692,6 +713,8 @@ useEffect(() => {
   }
 
   async function addServiceToComanda(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const serviceId = selectedServices[comanda.id]
     const professionalId = selectedProfessionals[comanda.id]
 
@@ -756,6 +779,8 @@ useEffect(() => {
 
 
   async function addProductToComanda(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const productId = selectedProductIds[comanda.id]
     const quantity = Number(registeredProductQuantities[comanda.id] || 1)
 
@@ -831,6 +856,8 @@ useEffect(() => {
     comanda: Comanda,
     item: ComandaItem
   ) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (comanda.status !== 'open') {
       alert(
         'Somente comandas abertas podem ter itens removidos.'
@@ -861,6 +888,8 @@ useEffect(() => {
   }
 
   async function closeComanda(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const paymentMethod = paymentByComanda[comanda.id]
 
     if (!paymentMethod) {
@@ -1014,6 +1043,8 @@ useEffect(() => {
   }
 
   async function cancelComanda(comanda: Comanda) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const { error } = await supabase
       .from('comandas')
       .update({
@@ -1476,12 +1507,12 @@ useEffect(() => {
               {itemsCount} item(ns)
             </p>
             {comanda.status === 'open' && (
-  <span
-    className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getOpenTimeStyle(comanda)}`}
-  >
-    {getOpenTime(comanda)}
-  </span>
-)}
+              <span
+                className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-bold ${getOpenTimeStyle(comanda)}`}
+              >
+                {getOpenTime(comanda)}
+              </span>
+            )}
             <span
               className={`mt-3 inline-block rounded-full px-3 py-1 text-sm font-medium ${
                 comanda.status === 'open'

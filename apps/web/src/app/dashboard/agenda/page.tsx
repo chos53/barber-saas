@@ -69,6 +69,8 @@ type ProfessionalAvailability = {
 }
 
 export default function AgendaPage() {
+  const [isDemoUser, setIsDemoUser] = useState(false) // ESTADO DA DEMO
+
   const [companyId, setCompanyId] = useState('')
   const [serviceIds, setServiceIds] = useState<string[]>([])
 
@@ -123,6 +125,11 @@ export default function AgendaPage() {
   const [savingReschedule, setSavingReschedule] = useState(false)
   const [rescheduleSequence, setRescheduleSequence] = useState<Appointment[]>([])
   const [rescheduleSequenceLoading, setRescheduleSequenceLoading] = useState(false)
+
+  // FUNÇÃO INTERCEPTADORA DE DEMO
+  const demoAlert = () => {
+    alert('Esta é uma conta de demonstração. Crie uma conta gratuita por 14 dias para alterar e salvar dados!')
+  }
 
   useEffect(() => {
     loadData()
@@ -745,6 +752,11 @@ export default function AgendaPage() {
       return
     }
 
+    // VERIFICA SE É O USUÁRIO DA DEMO
+    if (user.email === 'ugugsun-02@yahoo.com') {
+      setIsDemoUser(true)
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('company_id')
@@ -1058,6 +1070,8 @@ export default function AgendaPage() {
   }
 
   async function saveReschedule() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (
       !rescheduleAppointment ||
       !rescheduleProfessionalId ||
@@ -1209,6 +1223,8 @@ export default function AgendaPage() {
   }
 
   async function createAppointment() {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (
       !clientId ||
       serviceIds.length === 0 ||
@@ -1486,6 +1502,8 @@ export default function AgendaPage() {
     status: string,
     selectedMethod = 'cash'
   ) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     const appointment = appointments.find(
       (item) => item.id === appointmentId
     )
@@ -1549,6 +1567,8 @@ export default function AgendaPage() {
     appointment: Appointment,
     selectedMethod = 'cash'
   ) {
+    if (isDemoUser) { demoAlert(); return } // TRAVA DA DEMO
+
     if (!appointment.client_id || !appointment.professional_id) {
       await updateAppointmentStatus(appointment.id, 'completed', selectedMethod)
       return
