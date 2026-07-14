@@ -41,6 +41,7 @@ export default function MasterPage() {
   const [metrics, setMetrics] = useState<any[]>([])
   const [currentEmail, setCurrentEmail] = useState('')
   const [savingCompanyId, setSavingCompanyId] = useState('')
+  const [deletingCompanyId, setDeletingCompanyId] = useState('') // ESTADO PARA EXCLUSÃO
   const [search, setSearch] = useState('')
   
   const [activeTab, setActiveTab] = useState<'companies' | 'plans' | 'metrics' | 'landing'>('companies')
@@ -287,6 +288,49 @@ export default function MasterPage() {
       alert(`Erro no carregamento: ${err.message || err}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // FUNÇÃO DE EXCLUSÃO COMPLETA E EXAUSTIVA
+  async function deleteCompanyFromMaster(companyId: string, companyName: string) {
+    const protectedIds = [
+      '9c6fbe16-858c-492c-8a13-0b6d7a36008a', // Salonix Demo
+    ]
+
+    if (protectedIds.includes(companyId)) {
+      alert('⚠️ OPERAÇÃO NEGADA: Esta empresa é a conta de demonstração oficial!')
+      return
+    }
+
+    const firstConfirm = window.confirm(`Você tem certeza absoluta de que deseja excluir permanentemente a empresa "${companyName}"?\n\nEsta ação apagará absolutamente TODOS os dados associados e NÃO poderá ser desfeita!`)
+    if (!firstConfirm) return
+
+    const secondConfirm = window.prompt(`Para prosseguir com a exclusão definitiva, digite o nome exato da empresa abaixo:\n"${companyName}"`)
+    if (secondConfirm !== companyName) {
+      alert('Validação incorreta. A exclusão foi cancelada.')
+      return
+    }
+
+    setDeletingCompanyId(companyId)
+
+    try {
+      // Deleta diretamente o registro na tabela principal.
+      // Graças ao ON DELETE CASCADE rodado no banco, todo o resto é limpo de forma automatizada!
+      const { error } = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', companyId)
+
+      if (error) throw error
+
+      alert('Empresa e todos os seus dados associados foram excluídos com sucesso!')
+      await loadMasterData() // Recarrega a lista na tela na hora!
+
+    } catch (err: any) {
+      console.error('Erro na exclusão:', err)
+      alert(`Falha ao excluir empresa: ${err.message || err}`)
+    } finally {
+      setDeletingCompanyId('')
     }
   }
 
@@ -593,7 +637,18 @@ export default function MasterPage() {
                             <button onClick={() => updateCompanyStatus(c, 'active')} className="flex-1 rounded-lg bg-[#0f2e1b] border border-transparent px-2 py-2 text-xs font-bold text-[#4ade80] hover:bg-green-900/50 transition-colors">Ativar</button>
                             <button onClick={() => updateCompanyStatus(c, 'suspended')} className="flex-1 rounded-lg bg-[#3f3114] border border-transparent px-2 py-2 text-xs font-bold text-[#fbbf24] hover:bg-yellow-900/50 transition-colors">Suspender</button>
                         </div>
-                        <button onClick={() => resendInvite(c)} className="w-full rounded-lg bg-[#27272a] px-4 py-2 text-xs font-bold text-white transition hover:bg-zinc-700">Reenviar convite auth</button>
+                        <div className="flex gap-2">
+                          <button onClick={() => resendInvite(c)} className="flex-1 rounded-lg bg-[#27272a] px-2 py-2 text-xs font-bold text-white transition hover:bg-zinc-700">Reenviar convite</button>
+                          
+                          {/* BOTÃO EXCLUIR EMPRESA */}
+                          <button 
+                            disabled={deletingCompanyId === c.id}
+                            onClick={() => deleteCompanyFromMaster(c.id, c.name)} 
+                            className="flex-1 rounded-lg bg-red-950 border border-red-900 px-2 py-2 text-xs font-bold text-red-400 hover:bg-red-900 hover:text-white transition-colors disabled:opacity-50"
+                          >
+                            {deletingCompanyId === c.id ? 'Excluindo...' : 'Excluir'}
+                          </button>
+                        </div>
                       </div>
 
                     </div>
